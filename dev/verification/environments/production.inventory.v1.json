@@ -1,0 +1,283 @@
+{
+  "schemaVersion": "production-inventory.v1",
+  "environmentClass": "production-readonly",
+  "sourceBranch": "main",
+  "environment": {
+    "endpoint": "https://api.salmora.net/v1",
+    "projectId": "69eb4818000afa64a7fa",
+    "siteId": "69eb4a020024c520642e",
+    "publicOrigin": "https://salmora.net"
+  },
+  "credentialVariables": {
+    "readonly": {
+      "credentialClass": "production-readonly",
+      "variableName": "APPWRITE_PRODUCTION_READONLY_API_KEY",
+      "scopes": [
+        "functions.read",
+        "sites.read"
+      ]
+    },
+    "forbiddenReleaseVariableName": "APPWRITE_PRODUCTION_RELEASE_API_KEY",
+    "forbiddenGenericVariableName": "APPWRITE_API_KEY"
+  },
+  "site": {
+    "kind": "site",
+    "logicalId": "production-site",
+    "siteId": "69eb4a020024c520642e",
+    "sourcePath": "src/web",
+    "publicPaths": [
+      "/",
+      "/build-identity.json",
+      "/salmora-mark.svg",
+      "/theme-init.js"
+    ]
+  },
+  "productFunctions": [
+    {
+      "entrypoint": "main.py",
+      "functionId": "api-keys-py",
+      "logicalId": "api-keys-py",
+      "runtime": "python-3.12",
+      "sourcePath": "src/functions/api-keys-py"
+    },
+    {
+      "entrypoint": "main.py",
+      "functionId": "api-router-py",
+      "logicalId": "api-router-py",
+      "runtime": "python-3.12",
+      "sourcePath": "src/functions/api-router-py"
+    },
+    {
+      "entrypoint": "main.py",
+      "functionId": "billing-cron-py",
+      "logicalId": "billing-cron-py",
+      "runtime": "python-3.12",
+      "sourcePath": "src/functions/billing-cron-py"
+    },
+    {
+      "entrypoint": "main.py",
+      "functionId": "billing-py",
+      "logicalId": "billing-py",
+      "runtime": "python-3.12",
+      "sourcePath": "src/functions/billing-py"
+    },
+    {
+      "entrypoint": "main.py",
+      "functionId": "billing-webhook-py",
+      "logicalId": "billing-webhook-py",
+      "runtime": "python-3.12",
+      "sourcePath": "src/functions/billing-webhook-py"
+    },
+    {
+      "entrypoint": "main.py",
+      "functionId": "branch-py",
+      "logicalId": "branch-py",
+      "runtime": "python-3.12",
+      "sourcePath": "src/functions/branch-py"
+    },
+    {
+      "entrypoint": "main.py",
+      "functionId": "cache-cleanup-cron",
+      "logicalId": "cache-cleanup-cron-py",
+      "runtime": "python-3.12",
+      "sourcePath": "src/functions/cache-cleanup-cron-py"
+    },
+    {
+      "entrypoint": "main.py",
+      "functionId": "695bbfce001038f3254e",
+      "logicalId": "catalog-py",
+      "runtime": "python-3.12",
+      "sourcePath": "src/functions/catalog-py"
+    },
+    {
+      "entrypoint": "main.py",
+      "functionId": "695bc0860005950d0cd5",
+      "logicalId": "chat-py",
+      "runtime": "python-3.12",
+      "sourcePath": "src/functions/chat-py"
+    },
+    {
+      "entrypoint": "main.py",
+      "functionId": "69a56b0b88fd964ad51a",
+      "logicalId": "cleanup-cron-py",
+      "runtime": "python-3.12",
+      "sourcePath": "src/functions/cleanup-cron-py"
+    },
+    {
+      "entrypoint": "main.py",
+      "functionId": "connections-py",
+      "logicalId": "connections-py",
+      "runtime": "python-3.12",
+      "sourcePath": "src/functions/connections-py"
+    },
+    {
+      "entrypoint": "main.py",
+      "functionId": "6974f2650016d5b7bbd5",
+      "logicalId": "finance-sync-sec-py",
+      "runtime": "python-3.12",
+      "sourcePath": "src/functions/finance-sync-sec-py"
+    },
+    {
+      "entrypoint": "main.py",
+      "functionId": "6974f280002f27b16519",
+      "logicalId": "finance-sync-wb-py",
+      "runtime": "python-3.12",
+      "sourcePath": "src/functions/finance-sync-wb-py"
+    },
+    {
+      "entrypoint": "main.py",
+      "functionId": "flowise-runner-py",
+      "logicalId": "flowise-runner-py",
+      "runtime": "python-3.12",
+      "sourcePath": "src/functions/flowise-runner-py"
+    },
+    {
+      "entrypoint": "main.py",
+      "functionId": "mcp-cleanup-cron-py",
+      "logicalId": "mcp-cleanup-cron-py",
+      "runtime": "python-3.12",
+      "sourcePath": "src/functions/mcp-cleanup-cron-py"
+    },
+    {
+      "entrypoint": "main.py",
+      "functionId": "mcp-gateway-py",
+      "logicalId": "mcp-gateway-py",
+      "runtime": "python-3.12",
+      "sourcePath": "src/functions/mcp-gateway-py"
+    },
+    {
+      "entrypoint": "main.py",
+      "functionId": "project-public-links-py",
+      "logicalId": "project-public-links-py",
+      "runtime": "python-3.12",
+      "sourcePath": "src/functions/project-public-links-py"
+    },
+    {
+      "entrypoint": "main.py",
+      "functionId": "project-public-read-py",
+      "logicalId": "project-public-read-py",
+      "runtime": "python-3.12",
+      "sourcePath": "src/functions/project-public-read-py"
+    },
+    {
+      "entrypoint": "main.py",
+      "functionId": "project-snapshots-py",
+      "logicalId": "project-snapshots-py",
+      "runtime": "python-3.12",
+      "sourcePath": "src/functions/project-snapshots-py"
+    },
+    {
+      "entrypoint": "main.py",
+      "functionId": "69713cf60028e03df3a6",
+      "logicalId": "runs-cancel-py",
+      "runtime": "python-3.12",
+      "sourcePath": "src/functions/runs-cancel-py"
+    },
+    {
+      "entrypoint": "main.py",
+      "functionId": "695d7d71001c516f6f65",
+      "logicalId": "runs-clear-py",
+      "runtime": "python-3.12",
+      "sourcePath": "src/functions/runs-clear-py"
+    },
+    {
+      "entrypoint": "main.py",
+      "functionId": "695bc02f003bb5474030",
+      "logicalId": "runs-create-py",
+      "runtime": "python-3.12",
+      "sourcePath": "src/functions/runs-create-py"
+    },
+    {
+      "entrypoint": "main.py",
+      "functionId": "69a56b2e073902a85415",
+      "logicalId": "runs-detail-py",
+      "runtime": "python-3.12",
+      "sourcePath": "src/functions/runs-detail-py"
+    },
+    {
+      "entrypoint": "main.py",
+      "functionId": "695d7ced00239fc812b2",
+      "logicalId": "runs-list-py",
+      "runtime": "python-3.12",
+      "sourcePath": "src/functions/runs-list-py"
+    },
+    {
+      "entrypoint": "main.py",
+      "functionId": "695bc059002d8615869a",
+      "logicalId": "runs-status-py",
+      "runtime": "python-3.12",
+      "sourcePath": "src/functions/runs-status-py"
+    },
+    {
+      "entrypoint": "main.py",
+      "functionId": "695bc075002e7ba3bf8d",
+      "logicalId": "runs-steps-py",
+      "runtime": "python-3.12",
+      "sourcePath": "src/functions/runs-steps-py"
+    },
+    {
+      "entrypoint": "main.py",
+      "functionId": "sec-cache-builder",
+      "logicalId": "sec-cache-builder-py",
+      "runtime": "python-3.12",
+      "sourcePath": "src/functions/sec-cache-builder-py"
+    },
+    {
+      "entrypoint": "main.py",
+      "functionId": "sharing-py",
+      "logicalId": "sharing-py",
+      "runtime": "python-3.12",
+      "sourcePath": "src/functions/sharing-py"
+    },
+    {
+      "entrypoint": "main.py",
+      "functionId": "smtp-diagnostic-py",
+      "logicalId": "smtp-diagnostic-py",
+      "runtime": "python-3.12",
+      "sourcePath": "src/functions/smtp-diagnostic-py"
+    },
+    {
+      "entrypoint": "main.py",
+      "functionId": "telemetry-py",
+      "logicalId": "telemetry-py",
+      "runtime": "python-3.12",
+      "sourcePath": "src/functions/telemetry-py"
+    },
+    {
+      "entrypoint": "main.py",
+      "functionId": "usage-cron-py",
+      "logicalId": "usage-cron-py",
+      "runtime": "python-3.12",
+      "sourcePath": "src/functions/usage-cron-py"
+    },
+    {
+      "entrypoint": "main.py",
+      "functionId": "usage-py",
+      "logicalId": "usage-py",
+      "runtime": "python-3.12",
+      "sourcePath": "src/functions/usage-py"
+    },
+    {
+      "entrypoint": "main.py",
+      "functionId": "695bc0000038f6d5fb66",
+      "logicalId": "validate-py",
+      "runtime": "python-3.12",
+      "sourcePath": "src/functions/validate-py"
+    },
+    {
+      "entrypoint": "main.py",
+      "functionId": "verification-email-py",
+      "logicalId": "verification-email-py",
+      "runtime": "python-3.12",
+      "sourcePath": "src/functions/verification-email-py"
+    },
+    {
+      "entrypoint": "main.py",
+      "functionId": "695bc0c2002989714e4e",
+      "logicalId": "worker-cron-py",
+      "runtime": "python-3.12",
+      "sourcePath": "src/functions/worker-cron-py"
+    }
+  ],
+  "testOnlyFunctions": []
+}

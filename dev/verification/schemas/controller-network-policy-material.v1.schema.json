@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "controller-network-policy-material.v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "environmentDigest", "browserRequestPolicyDigest", "timeoutMilliseconds", "rows", "contractDigest"],
+  "properties": {
+    "schemaVersion": { "const": "controller-network-policy-material.v1" },
+    "environmentDigest": { "$ref": "#/$defs/digest" },
+    "browserRequestPolicyDigest": { "$ref": "#/$defs/digest" },
+    "timeoutMilliseconds": { "const": 5000 },
+    "rows": { "type": "array", "minItems": 56, "maxItems": 56, "items": { "$ref": "#/$defs/row" } },
+    "contractDigest": { "$ref": "#/$defs/digest" }
+  },
+  "$defs": {
+    "digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "headerBinding": {
+      "type": "object", "additionalProperties": false,
+      "required": ["name", "valueDigest"],
+      "properties": { "name": { "type": "string" }, "valueDigest": { "$ref": "#/$defs/digest" } }
+    },
+    "opaqueHeaderRule": {
+      "type": "object", "additionalProperties": false,
+      "required": ["name", "kind", "minimumCount", "maximumCount"],
+      "properties": {
+        "name": { "type": "string" }, "kind": { "type": "string" },
+        "minimumCount": { "type": "integer", "minimum": 0 },
+        "maximumCount": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "row": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "credentialCarrier", "exactCount", "expectedResponseStatus", "finalUrl",
+        "lifecyclePhase", "method", "ordinal", "profileId", "requestClass",
+        "requestHeaderBindings", "requestOpaqueHeaderRules", "resourceType",
+        "responseBodyDigest", "responseByteLength", "responseHeaderBindings",
+        "responseMimeEssence", "responseOpaqueHeaderRules", "rowDigest"
+      ],
+      "properties": {
+        "credentialCarrier": { "type": "string" },
+        "exactCount": { "type": "integer", "minimum": 1, "maximum": 256 },
+        "expectedResponseStatus": { "type": "integer", "minimum": 100, "maximum": 599 },
+        "finalUrl": { "type": "string", "pattern": "^https://" },
+        "lifecyclePhase": { "type": "string" },
+        "method": { "type": "string", "pattern": "^[A-Z]+$" },
+        "ordinal": { "type": "integer", "minimum": 0 },
+        "profileId": { "type": "string" },
+        "requestClass": { "type": "string" },
+        "requestHeaderBindings": { "type": "array", "items": { "$ref": "#/$defs/headerBinding" } },
+        "requestOpaqueHeaderRules": { "type": "array", "items": { "$ref": "#/$defs/opaqueHeaderRule" } },
+        "resourceType": { "type": "string" },
+        "responseBodyDigest": { "type": ["string", "null"] },
+        "responseByteLength": { "type": ["integer", "null"] },
+        "responseHeaderBindings": { "type": "array", "items": { "$ref": "#/$defs/headerBinding" } },
+        "responseMimeEssence": { "type": ["string", "null"] },
+        "responseOpaqueHeaderRules": { "type": "array", "items": { "$ref": "#/$defs/opaqueHeaderRule" } },
+        "rowDigest": { "$ref": "#/$defs/digest" }
+      }
+    }
+  }
+}

@@ -1,0 +1,166 @@
+name: Publish Controller Bundle
+
+on:
+  workflow_dispatch:
+    inputs:
+      trusted_controller_sha:
+        description: Exact protected controller commit to qualify and publish.
+        required: true
+        type: string
+      source_repository_revision:
+        description: Exact AppWriteWork source commit bound by the proposal.
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: write
+
+concurrency:
+  group: publish-controller-bundle
+  cancel-in-progress: false
+
+jobs:
+  publish-controller-bundle:
+    runs-on: windows-2025
+    timeout-minutes: 45
+    environment: controller-promotion
+    if: github.repository == 'Krowaccie/AppWriteWork-verification-control'
+    steps:
+      - name: Validate immutable requested tuple
+        shell: pwsh
+        env:
+          REQUESTED_CONTROLLER_SHA: ${{ inputs.trusted_controller_sha }}
+          TRUSTED_CONTROLLER_SHA: ${{ vars.TRUSTED_CONTROLLER_SHA }}
+          WORKFLOW_HEAD_SHA: ${{ github.sha }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          foreach ($value in @($env:REQUESTED_CONTROLLER_SHA, $env:TRUSTED_CONTROLLER_SHA, $env:WORKFLOW_HEAD_SHA)) {
+            if ($value -cnotmatch '^[0-9a-f]{40}$') { throw 'BLOCKED CONTROLLER_REVISION_INVALID' }
+          }
+          if ($env:REQUESTED_CONTROLLER_SHA -cne $env:TRUSTED_CONTROLLER_SHA -or $env:WORKFLOW_HEAD_SHA -cne $env:TRUSTED_CONTROLLER_SHA) {
+            throw 'BLOCKED CONTROLLER_REVISION_MISMATCH'
+          }
+
+      - name: Checkout only the requested controller commit
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          ref: ${{ inputs.trusted_controller_sha }}
+          persist-credentials: false
+
+      - name: Set up Node.js 24
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '24.11.1'
+
+      - name: Qualify runner and create same-run publisher input
+        shell: pwsh
+        env:
+          CONTROLLER_REVISION: ${{ inputs.trusted_controller_sha }}
+          SOURCE_REPOSITORY_REVISION: ${{ inputs.source_repository_revision }}
+          RUNNER_REVISION: ${{ vars.VERIFICATION_RUNNER_REVISION }}
+          TEST_CLOUD_SETUP_READBACK_JSON: ${{ vars.TEST_CLOUD_SETUP_READBACK_JSON }}
+          TEST_CLOUD_SETUP_READBACK_DIGEST: ${{ vars.TEST_CLOUD_SETUP_READBACK_DIGEST }}
+          TEST_CLOUD_SETUP_ATTESTATION_JSON: ${{ vars.TEST_CLOUD_SETUP_ATTESTATION_JSON }}
+          TEST_CLOUD_SETUP_ATTESTATION_DIGEST: ${{ vars.TEST_CLOUD_SETUP_ATTESTATION_DIGEST }}
+          TEST_CLOUD_HOSTED_SETUP_READBACK_JSON: ${{ vars.TEST_CLOUD_HOSTED_SETUP_READBACK_JSON }}
+          TEST_CLOUD_HOSTED_SETUP_READBACK_DIGEST: ${{ vars.TEST_CLOUD_HOSTED_SETUP_READBACK_DIGEST }}
+          TEST_CLOUD_HOSTED_SETUP_ATTESTATION_JSON: ${{ vars.TEST_CLOUD_HOSTED_SETUP_ATTESTATION_JSON }}
+          TEST_CLOUD_HOSTED_SETUP_ATTESTATION_DIGEST: ${{ vars.TEST_CLOUD_HOSTED_SETUP_ATTESTATION_DIGEST }}
+          QUALIFICATION_INPUT: ${{ runner.temp }}\controller-runner-qualification-input.json
+          PUBLISHER_INPUT: ${{ runner.temp }}\controller-bundle-publisher-input.json
+        run: |
+          $ErrorActionPreference = 'Stop'
+          node --input-type=module -e @'
+          import { writeFile } from 'node:fs/promises';
+          import { canonicalJson, sha256Bytes } from './scripts/verification/canonical-json.mjs';
+          import { checkTestCloudSetup, qualifyExecutionObservationReadback } from './scripts/verification/test-cloud-setup-check.mjs';
+          import { validateTestCloudHostedSetupAttestationDocument } from './scripts/verification/test-cloud-hosted-setup-attestation.mjs';
+          import inventory from './dev/verification/environments/test-cloud.inventory.v1.json' with { type: 'json' };
+
+          const encoder = new TextEncoder();
+          const parseBinding = (jsonName, digestName) => {
+            const raw = process.env[jsonName];
+            const digest = process.env[digestName];
+            if (typeof raw !== 'string' || typeof digest !== 'string' || sha256Bytes(encoder.encode(raw)) !== digest) {
+              throw new Error('BLOCKED SETUP_BINDING_DIGEST_MISMATCH');
+            }
+            const value = JSON.parse(raw);
+            if (canonicalJson(value) !== raw) throw new Error('BLOCKED SETUP_BINDING_NONCANONICAL');
+            return { value, digest };
+          };
+          const hostedReadback = parseBinding(
+            'TEST_CLOUD_HOSTED_SETUP_READBACK_JSON',
+            'TEST_CLOUD_HOSTED_SETUP_READBACK_DIGEST',
+          );
+          const hostedAttestation = parseBinding(
+            'TEST_CLOUD_HOSTED_SETUP_ATTESTATION_JSON',
+            'TEST_CLOUD_HOSTED_SETUP_ATTESTATION_DIGEST',
+          );
+          const observationDigest = sha256Bytes(encoder.encode(
+            canonicalJson(hostedReadback.value.executionObservation),
+          ));
+          const observation = qualifyExecutionObservationReadback({
+            inventory,
+            readback: hostedReadback.value.executionObservation,
+            expectedReadbackDigest: observationDigest,
+          });
+          const checked = observation.status === 'PASS' ? checkTestCloudSetup({
+            inventory,
+            readback: hostedReadback.value,
+            expectedProviderSchemaDigest: inventory.providerContractDigest,
+            executionObservationQualification: observation.value,
+          }) : observation;
+          const hostedAttested = checked.status === 'PASS'
+            ? validateTestCloudHostedSetupAttestationDocument({
+              attestation: hostedAttestation.value,
+              attestationDigest: hostedAttestation.digest,
+              clock: Object.freeze({ nowEpochSeconds: () => Math.floor(Date.now() / 1000) }),
+              expectedProviderSetupReadbackDigest: process.env.TEST_CLOUD_SETUP_READBACK_DIGEST,
+              expectedHostedSetupReadbackDigest: hostedReadback.digest,
+              expectedExecutionObservationPolicyDigest: checked.value.executionObservationPolicyDigest,
+              expectedPrimaryExecutionRetentionMaxSeconds: checked.value.primaryExecutionRetentionMaxSeconds,
+            })
+            : checked;
+          if (checked.status !== 'PASS' || hostedAttested.status !== 'PASS') {
+            throw new Error('BLOCKED HOSTED_SETUP_BINDING_INVALID');
+          }
+          const input = {
+            sourceRepositoryRevision: process.env.SOURCE_REPOSITORY_REVISION,
+            controllerRevision: process.env.CONTROLLER_REVISION,
+            runnerRevision: process.env.RUNNER_REVISION,
+            setupReadback: JSON.parse(process.env.TEST_CLOUD_SETUP_READBACK_JSON),
+            setupReadbackDigest: process.env.TEST_CLOUD_SETUP_READBACK_DIGEST,
+            setupAttestation: JSON.parse(process.env.TEST_CLOUD_SETUP_ATTESTATION_JSON),
+            setupAttestationDigest: process.env.TEST_CLOUD_SETUP_ATTESTATION_DIGEST,
+            primaryExecutionRetentionMaxSeconds: checked.value.primaryExecutionRetentionMaxSeconds,
+          };
+          await writeFile(process.env.QUALIFICATION_INPUT, `${canonicalJson(input)}\n`, { flag: 'wx' });
+          '@
+          node packages/verification-controller/src/controller-runner-qualification-cli.mjs --input $env:QUALIFICATION_INPUT --output $env:PUBLISHER_INPUT
+
+      - name: Stage deterministic direct members
+        shell: pwsh
+        env:
+          CONTROLLER_REVISION: ${{ inputs.trusted_controller_sha }}
+          WORKFLOW_HEAD_SHA: ${{ github.sha }}
+          PUBLISHER_INPUT: ${{ runner.temp }}\controller-bundle-publisher-input.json
+          PUBLICATION_ROOT: ${{ runner.temp }}\controller-bundle-publication
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ((git rev-parse HEAD).Trim() -cne $env:CONTROLLER_REVISION -or $env:WORKFLOW_HEAD_SHA -cne $env:CONTROLLER_REVISION) {
+            throw 'BLOCKED CHECKOUT_REVISION_MISMATCH'
+          }
+          node packages/verification-controller/src/controller-bundle-publisher.mjs --input $env:PUBLISHER_INPUT --output $env:PUBLICATION_ROOT --repository-root $env:GITHUB_WORKSPACE
+
+      - name: Upload direct controller bundle members
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: verification-controller-bundle-${{ inputs.trusted_controller_sha }}
+          path: ${{ runner.temp }}\controller-bundle-publication
+          if-no-files-found: error
+          include-hidden-files: false
+          compression-level: 0
+          overwrite: false
+
+# Manual protected B1 template only. Phase A-local never dispatches this workflow.

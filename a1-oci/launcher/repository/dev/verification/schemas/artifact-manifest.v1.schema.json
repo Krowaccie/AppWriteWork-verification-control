@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.salmora.net/verification/artifact-manifest.v1.schema.json",
+  "title": "Artifact Manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "sourceRevision",
+    "sourceTreeDigest",
+    "verifierManifestDigest",
+    "artifacts",
+    "artifactManifestDigest"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "sourceRevision": { "$ref": "#/$defs/fullGitSha" },
+    "sourceTreeDigest": { "$ref": "#/$defs/digest" },
+    "verifierManifestDigest": { "$ref": "#/$defs/digest" },
+    "artifacts": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/artifact" }
+    },
+    "artifactManifestDigest": { "$ref": "#/$defs/digest" }
+  },
+  "$defs": {
+    "fullGitSha": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "logicalTarget": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+    },
+    "repositoryPath": {
+      "type": "string",
+      "minLength": 1,
+      "allOf": [
+        { "pattern": "^[^\\\\\\u0000-\\u001f\\u007f]+$" },
+        { "not": { "pattern": "^/" } },
+        { "not": { "pattern": "^[A-Za-z]:/" } },
+        { "not": { "pattern": "//" } },
+        { "not": { "pattern": "(^|/)\\.{1,2}(/|$)" } }
+      ]
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "logicalTarget",
+        "sourcePath",
+        "relativePath",
+        "canonicalContentDigest",
+        "transportDigest",
+        "sizeBytes"
+      ],
+      "properties": {
+        "kind": { "enum": ["site", "function"] },
+        "logicalTarget": { "$ref": "#/$defs/logicalTarget" },
+        "sourcePath": { "$ref": "#/$defs/repositoryPath" },
+        "relativePath": { "$ref": "#/$defs/repositoryPath" },
+        "canonicalContentDigest": { "$ref": "#/$defs/digest" },
+        "transportDigest": { "$ref": "#/$defs/digest" },
+        "sizeBytes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      }
+    }
+  }
+}

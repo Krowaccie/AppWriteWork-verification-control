@@ -1,0 +1,124 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.salmora.net/verification/verified-production-handoff.v1.schema.json",
+  "title": "Verified Production Handoff v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "controllerRevision",
+    "controllerBundleDigest",
+    "sourceRepositoryId",
+    "sourceWorkflowId",
+    "sourceRunId",
+    "sourceRunAttempt",
+    "sourceArtifactId",
+    "sourceArtifactName",
+    "sourceArchiveDigest",
+    "sourceRevision",
+    "artifactManifestDigest",
+    "verifierManifestDigest",
+    "localEvidenceDigest",
+    "testCloudEvidenceDigest",
+    "qualifyingStatus",
+    "testLeaseStatus",
+    "cleanupDebt",
+    "releaseEligibleArtifacts",
+    "excludedTestOnlyProof"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "verified-production-handoff.v1" },
+    "controllerRevision": { "$ref": "#/$defs/fullGitSha" },
+    "controllerBundleDigest": { "$ref": "#/$defs/digest" },
+    "sourceRepositoryId": { "$ref": "#/$defs/positiveInteger" },
+    "sourceWorkflowId": { "$ref": "#/$defs/positiveInteger" },
+    "sourceRunId": { "$ref": "#/$defs/positiveInteger" },
+    "sourceRunAttempt": { "$ref": "#/$defs/positiveInteger" },
+    "sourceArtifactId": { "$ref": "#/$defs/positiveInteger" },
+    "sourceArtifactName": {
+      "type": "string",
+      "pattern": "^verification-artifacts-[0-9a-f]{40}$"
+    },
+    "sourceArchiveDigest": { "$ref": "#/$defs/digest" },
+    "sourceRevision": { "$ref": "#/$defs/fullGitSha" },
+    "artifactManifestDigest": { "$ref": "#/$defs/digest" },
+    "verifierManifestDigest": { "$ref": "#/$defs/digest" },
+    "localEvidenceDigest": { "$ref": "#/$defs/digest" },
+    "testCloudEvidenceDigest": { "$ref": "#/$defs/digest" },
+    "qualifyingStatus": { "const": "PASS" },
+    "testLeaseStatus": { "const": "idle" },
+    "cleanupDebt": { "const": false },
+    "releaseEligibleArtifacts": {
+      "type": "array",
+      "minItems": 36,
+      "maxItems": 36,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/releaseArtifact" }
+    },
+    "excludedTestOnlyProof": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["count", "classificationDigest"],
+      "properties": {
+        "count": { "const": 1 },
+        "classificationDigest": { "$ref": "#/$defs/digest" }
+      }
+    }
+  },
+  "$defs": {
+    "fullGitSha": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "positiveInteger": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "logicalTarget": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+    },
+    "repositoryPath": {
+      "type": "string",
+      "minLength": 1,
+      "allOf": [
+        { "pattern": "^[^\\\\\\u0000-\\u001f\\u007f]+$" },
+        { "not": { "pattern": "^/" } },
+        { "not": { "pattern": "^[A-Za-z]:/" } },
+        { "not": { "pattern": "//" } },
+        { "not": { "pattern": "(^|/)\\.{1,2}(/|$)" } }
+      ]
+    },
+    "releaseArtifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "artifactLogicalTarget",
+        "deploymentLogicalTarget",
+        "relativePath",
+        "canonicalContentDigest",
+        "transportDigest",
+        "sizeBytes"
+      ],
+      "properties": {
+        "kind": { "enum": ["site", "function"] },
+        "artifactLogicalTarget": { "$ref": "#/$defs/logicalTarget" },
+        "deploymentLogicalTarget": { "$ref": "#/$defs/logicalTarget" },
+        "relativePath": { "$ref": "#/$defs/repositoryPath" },
+        "canonicalContentDigest": { "$ref": "#/$defs/digest" },
+        "transportDigest": { "$ref": "#/$defs/digest" },
+        "sizeBytes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      }
+    }
+  }
+}

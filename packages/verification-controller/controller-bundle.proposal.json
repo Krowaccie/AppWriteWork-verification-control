@@ -1,0 +1,521 @@
+{
+  "schemaVersion": "controller-bundle.proposal.v2",
+  "proposalStatus": "BLOCKED_UNMATERIALIZED",
+  "sourceRepository": "Krowaccie/AppWriteWork",
+  "sourceRepositoryRevision": "UNMATERIALIZED",
+  "controllerRepository": "Krowaccie/AppWriteWork-verification-control",
+  "controllerRevision": "UNMATERIALIZED",
+  "seedSourceSets": {
+    "schemaVersion": "controller-seed-source-sets-reference.v1",
+    "path": "packages/verification-controller/controller-seed-source-sets.v1.json",
+    "schemaPath": "dev/verification/schemas/controller-seed-source-sets.v1.schema.json"
+  },
+  "entrypoints": [
+    {
+      "path": "packages/verification-controller/src/controller-bundle-publisher.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "packages/verification-controller/src/controller-runner-qualification-cli.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "packages/verification-controller/src/create-production-browser-policy.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "packages/verification-controller/src/create-verified-release-record-handoff.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "packages/verification-controller/src/release-production.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "packages/verification-controller/src/run-production-readonly-playwright.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "packages/verification-controller/src/test-cloud-controller.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "packages/verification-controller/workflows/production-readonly.yml",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "packages/verification-controller/workflows/publish-controller-bundle.yml",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "packages/verification-controller/workflows/release-production.yml",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "packages/verification-controller/workflows/verify-test-cloud.yml",
+      "sha256": "UNMATERIALIZED"
+    }
+  ],
+  "files": [
+    {
+      "path": "dev/verification/bootstrap/qualify-runner.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "dev/verification/environments/production.inventory.v1.json",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "dev/verification/environments/test-cloud.inventory.v1.json",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "packages/verification-controller/controller-bundle.proposal.json",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "packages/verification-controller/controller-seed-source-sets.v1.json",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "packages/verification-controller/e2e/production-readonly.spec.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "packages/verification-controller/package-lock.json",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "packages/verification-controller/package.json",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "packages/verification-controller/playwright.config.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "packages/verification-controller/src/controller-archive-verifier.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "packages/verification-controller/src/controller-bundle-publisher.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "packages/verification-controller/src/controller-runner-qualification-cli.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "packages/verification-controller/src/create-production-browser-policy.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "packages/verification-controller/src/create-verified-release-record-handoff.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "packages/verification-controller/src/exact-sha-controller-source.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "packages/verification-controller/src/github-controller-artifact-verifier.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "packages/verification-controller/src/github-deployment-reader.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "packages/verification-controller/src/github-deployment-writer.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "packages/verification-controller/src/github-production-readonly-transport.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "packages/verification-controller/src/production-exact-sha-git-adapter.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "packages/verification-controller/src/production-readonly-adapter.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "packages/verification-controller/src/production-readonly-appwrite.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "packages/verification-controller/src/production-readonly-browser.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "packages/verification-controller/src/production-readonly-environment.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "packages/verification-controller/src/production-readonly-http.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "packages/verification-controller/src/production-readonly-lane.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "packages/verification-controller/src/production-release-appwrite.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "packages/verification-controller/src/production-release-environment.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "packages/verification-controller/src/production-release-executor.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "packages/verification-controller/src/release-production.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "packages/verification-controller/src/release-record-contract.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "packages/verification-controller/src/run-production-readonly-playwright.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "packages/verification-controller/src/source-artifact-reader.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "packages/verification-controller/src/test-cloud-browser-artifact-set.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "packages/verification-controller/src/test-cloud-browser-route-adapter.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "packages/verification-controller/src/test-cloud-contained-browser-scenario-adapter.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "packages/verification-controller/src/test-cloud-contained-scenario-launcher.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "packages/verification-controller/src/test-cloud-controller.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "packages/verification-controller/src/test-cloud-fixture-clock.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "packages/verification-controller/src/test-cloud-playwright-facade.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "packages/verification-controller/src/test-cloud-scenario-driver.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "packages/verification-controller/src/verified-production-handoff.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "packages/verification-controller/src/verified-release-record-handoff.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "packages/verification-controller/src/verify-production-browser-policy.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "packages/verification-controller/workflows/production-readonly.yml",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "packages/verification-controller/workflows/publish-controller-bundle.yml",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "packages/verification-controller/workflows/release-production.yml",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "packages/verification-controller/workflows/verify-test-cloud.yml",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "scripts/verification/a1-supervisor-proposal.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "scripts/verification/artifact-manifest.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "scripts/verification/canonical-json.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "scripts/verification/controller-bundle.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "scripts/verification/controller-seed-materializer-v1.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "scripts/verification/controller-trust-materials.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "scripts/verification/evidence-writer.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "scripts/verification/evidence.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "scripts/verification/hosted-site-build-identity.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "scripts/verification/process-containment-windows.ps1",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "scripts/verification/process-containment.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "scripts/verification/redaction.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "scripts/verification/runner-protocol.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "scripts/verification/test-cloud-appwrite-runtime.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "scripts/verification/test-cloud-appwrite.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "scripts/verification/test-cloud-bootstrap.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "scripts/verification/test-cloud-cleanup-protocol.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "scripts/verification/test-cloud-control-runtime.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "scripts/verification/test-cloud-control-store.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "scripts/verification/test-cloud-deploy.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "scripts/verification/test-cloud-environment.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "scripts/verification/test-cloud-fixtures.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "scripts/verification/test-cloud-hosted-setup-attestation.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "scripts/verification/test-cloud-identity-bindings.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "scripts/verification/test-cloud-lane.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "scripts/verification/test-cloud-preflight.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "scripts/verification/test-cloud-provider-contract.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "scripts/verification/test-cloud-provider-control-runtime.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "scripts/verification/test-cloud-provider-control-store.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "scripts/verification/test-cloud-row-id.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "scripts/verification/test-cloud-setup-attestation.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "scripts/verification/test-cloud-setup-check.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "src/functions/verification-runner-py/provider-contract/test-cloud.provider-contract.v1.json",
+      "sha256": "UNMATERIALIZED"
+    }
+  ],
+  "schemaDigests": [
+    {
+      "path": "dev/verification/schemas/artifact-handoff.v1.schema.json",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "dev/verification/schemas/artifact-manifest.v1.schema.json",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "dev/verification/schemas/bootstrap-successor-proposal.v1.schema.json",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "dev/verification/schemas/controller-bundle-proposal.v2.schema.json",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "dev/verification/schemas/controller-bundle.v2.schema.json",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "dev/verification/schemas/controller-network-policy-material.v1.schema.json",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "dev/verification/schemas/controller-runner-qualification.v1.schema.json",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "dev/verification/schemas/controller-seed-source-sets.v1.schema.json",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "dev/verification/schemas/controller-trust-evaluator.v1.schema.json",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "dev/verification/schemas/controller-trust-provenance.v1.schema.json",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "dev/verification/schemas/hosted-site-build-identity.v1.schema.json",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "dev/verification/schemas/production-browser-policy.v1.schema.json",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "dev/verification/schemas/production-inventory.v1.schema.json",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "dev/verification/schemas/production-release-binding.v1.schema.json",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "dev/verification/schemas/release-record.v1.schema.json",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "dev/verification/schemas/seed-content-manifest.v1.schema.json",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "dev/verification/schemas/seed-provenance-manifest.v1.schema.json",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "dev/verification/schemas/test-cloud-inventory.v1.schema.json",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "dev/verification/schemas/verification-runner-evidence-validator.v1.schema.json",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "dev/verification/schemas/verification-runner-transcript-corpus.v2.schema.json",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "dev/verification/schemas/verified-production-handoff.v1.schema.json",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "dev/verification/schemas/verified-release-record-handoff.v1.schema.json",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "packages/verification-controller/schemas/test-cloud-hosted-setup-attestation.v1.schema.json",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "packages/verification-controller/schemas/test-cloud-hosted-setup-readback.v1.schema.json",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "src/functions/verification-runner-py/protocol/request.v1.schema.json",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "src/functions/verification-runner-py/protocol/response.v1.schema.json",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "src/functions/verification-runner-py/protocol/scenarios.v1.schema.json",
+      "sha256": "UNMATERIALIZED"
+    }
+  ],
+  "trustMaterials": [
+    {
+      "kind": "evaluator",
+      "path": "trust/evaluator.v1.json",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "kind": "evidenceValidator",
+      "path": "trust/evidence-validator.v1.json",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "kind": "networkPolicy",
+      "path": "trust/network-policy.v1.json",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "kind": "transcriptCorpus",
+      "path": "trust/transcript-corpus.v2.json",
+      "sha256": "UNMATERIALIZED"
+    }
+  ],
+  "provenance": {
+    "path": "trust/provenance.v1.json",
+    "sha256": "UNMATERIALIZED"
+  }
+}

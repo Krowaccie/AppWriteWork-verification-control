@@ -1,0 +1,11 @@
+name: Trusted source artifact launcher
+description: Inert template; Phase B1 must bind the reviewed immutable OCI image.
+inputs:
+  request:
+    description: Canonical verification-a1-hosted-request.v1 JSON.
+    required: true
+runs:
+  using: docker
+  image: 'docker://__A1_IMMUTABLE_OCI_IMAGE_REQUIRED__'
+  args:
+    - '${{ inputs.request }}'
