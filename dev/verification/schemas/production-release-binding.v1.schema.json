@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "production-release-binding.v1.schema.json",
+  "title": "Protected production release deployment binding v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "recordArtifactId",
+    "recordArtifactDigest",
+    "recordDigest",
+    "revision",
+    "artifactManifestDigest",
+    "repository",
+    "workflow",
+    "runId",
+    "runAttempt",
+    "environment"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "production-release-binding.v1"
+    },
+    "recordArtifactId": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]*$"
+    },
+    "recordArtifactDigest": {
+      "$ref": "#/$defs/digest"
+    },
+    "recordDigest": {
+      "$ref": "#/$defs/digest"
+    },
+    "revision": {
+      "$ref": "#/$defs/gitSha"
+    },
+    "artifactManifestDigest": {
+      "$ref": "#/$defs/digest"
+    },
+    "repository": {
+      "const": "Krowaccie/AppWriteWork-verification-control"
+    },
+    "workflow": {
+      "const": "Release Production"
+    },
+    "runId": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]*$"
+    },
+    "runAttempt": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "environment": {
+      "const": "production-release"
+    }
+  },
+  "$defs": {
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "gitSha": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    }
+  }
+}

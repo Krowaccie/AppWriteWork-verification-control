@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "source-artifact-launcher-request.v1.schema.json",
+  "title": "Source artifact launcher command request v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "commandId",
+    "protocolVersion"
+  ],
+  "properties": {
+    "commandId": {
+      "type": "string",
+      "enum": [
+        "root-npm-ci",
+        "web-npm-ci",
+        "bundle-catalog",
+        "typecheck",
+        "vite-build"
+      ]
+    },
+    "protocolVersion": {
+      "const": "source-artifact-launcher.v1"
+    }
+  }
+}

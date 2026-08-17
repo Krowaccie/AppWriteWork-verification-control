@@ -1,0 +1,158 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "verification-runner-response.v1",
+  "x-cleanupProtocolDigest": "sha256:358e456b64b7292e7c311f6451a10cd4038ed53d3a5f39ba9054ca37a72b3967",
+  "oneOf": [
+    { "$ref": "#/$defs/success" },
+    { "$ref": "#/$defs/failure" }
+  ],
+  "$defs": {
+    "runId": { "type": "string", "pattern": "^verify-[0-9a-f]{12}-[1-9][0-9]*-[1-9][0-9]*$" },
+    "digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "nullableDigest": { "oneOf": [{ "$ref": "#/$defs/digest" }, { "type": "null" }] },
+    "revision": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "duration": { "type": "integer", "minimum": 0, "maximum": 25000 },
+    "cleanupLogicalResource": { "enum": ["primary-share", "primary-graph", "primary-project"] },
+    "health": {
+      "type": "object", "additionalProperties": false, "required": ["ready", "runnerRevision"],
+      "properties": { "ready": { "const": true }, "runnerRevision": { "$ref": "#/$defs/revision" } }
+    },
+    "environment.readback": {
+      "type": "object", "additionalProperties": false,
+      "required": ["environmentDigest", "projectIdHash", "endpointOriginHash", "runnerRevision"],
+      "properties": {
+        "environmentDigest": { "$ref": "#/$defs/digest" }, "projectIdHash": { "$ref": "#/$defs/digest" },
+        "endpointOriginHash": { "$ref": "#/$defs/digest" }, "runnerRevision": { "$ref": "#/$defs/revision" }
+      }
+    },
+    "resource.read": {
+      "oneOf": [
+        {
+          "type": "object", "additionalProperties": false, "required": ["logicalResource", "exists", "ownership", "stateDigest"],
+          "properties": {
+            "logicalResource": { "enum": ["primary-project", "primary-graph", "primary-share", "primary-execution"] },
+            "exists": { "const": true }, "ownership": { "const": "run-owned" }, "stateDigest": { "$ref": "#/$defs/digest" }
+          }
+        },
+        {
+          "type": "object", "additionalProperties": false, "required": ["logicalResource", "exists", "ownership", "stateDigest"],
+          "properties": {
+            "logicalResource": { "enum": ["primary-project", "primary-graph", "primary-share", "primary-execution"] },
+            "exists": { "const": false }, "ownership": { "const": "absent" }, "stateDigest": { "type": "null" }
+          }
+        }
+      ]
+    },
+    "resource.cleanup_preflight_step": {
+      "type": "object", "additionalProperties": false,
+      "required": ["logicalResource", "nextPhaseCursor", "phaseProgressDigest"],
+      "properties": {
+        "logicalResource": { "$ref": "#/$defs/cleanupLogicalResource" },
+        "nextPhaseCursor": { "type": "integer", "minimum": 1, "maximum": 19 },
+        "phaseProgressDigest": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "resource.cleanup_step": {
+      "type": "object", "additionalProperties": false,
+      "required": ["logicalResource", "nextCleanupCursor", "cleanupProgressDigest"],
+      "properties": {
+        "logicalResource": { "$ref": "#/$defs/cleanupLogicalResource" },
+        "nextCleanupCursor": { "type": "integer", "minimum": 1, "maximum": 16 },
+        "cleanupProgressDigest": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "resource.cleanup_proof_step": {
+      "type": "object", "additionalProperties": false,
+      "required": ["logicalResource", "nextPhaseCursor", "phaseProgressDigest", "cleanupProofDigest"],
+      "properties": {
+        "logicalResource": { "$ref": "#/$defs/cleanupLogicalResource" },
+        "nextPhaseCursor": { "type": "integer", "minimum": 1, "maximum": 19 },
+        "phaseProgressDigest": { "$ref": "#/$defs/digest" },
+        "cleanupProofDigest": { "$ref": "#/$defs/nullableDigest" }
+      }
+    },
+    "resource.cleanup": {
+      "type": "object", "additionalProperties": false,
+      "required": ["logicalResource", "deleted", "absenceProven", "cleanupProofDigest"],
+      "properties": {
+        "logicalResource": { "$ref": "#/$defs/cleanupLogicalResource" },
+        "deleted": { "const": true }, "absenceProven": { "const": true },
+        "cleanupProofDigest": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "worker.invoke_no_cost": {
+      "type": "object", "additionalProperties": false,
+      "required": ["logicalWorkflow", "inputProfile", "outcome", "outputDigest"],
+      "properties": {
+        "logicalWorkflow": { "const": "hello-world-no-cost" }, "inputProfile": { "const": "verification-minimal" },
+        "outcome": { "const": "completed-no-cost" }, "outputDigest": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "success": {
+      "type": "object", "additionalProperties": false,
+      "required": ["protocolVersion", "scenarioId", "runId", "status", "durationMs", "data"],
+      "properties": {
+        "protocolVersion": { "const": "verification-runner.v1" },
+        "scenarioId": { "enum": ["health", "environment.readback", "resource.read", "resource.cleanup_preflight_step", "resource.cleanup_step", "resource.cleanup_proof_step", "resource.cleanup", "worker.invoke_no_cost"] },
+        "runId": { "$ref": "#/$defs/runId" }, "status": { "const": "passed" },
+        "durationMs": { "$ref": "#/$defs/duration" }, "data": {}
+      },
+      "allOf": [
+        { "if": { "properties": { "scenarioId": { "const": "health" } } }, "then": { "properties": { "data": { "$ref": "#/$defs/health" } } } },
+        { "if": { "properties": { "scenarioId": { "const": "environment.readback" } } }, "then": { "properties": { "data": { "$ref": "#/$defs/environment.readback" } } } },
+        { "if": { "properties": { "scenarioId": { "const": "resource.read" } } }, "then": { "properties": { "data": { "$ref": "#/$defs/resource.read" } } } },
+        { "if": { "properties": { "scenarioId": { "const": "resource.cleanup_preflight_step" } } }, "then": { "properties": { "data": { "$ref": "#/$defs/resource.cleanup_preflight_step" } } } },
+        { "if": { "properties": { "scenarioId": { "const": "resource.cleanup_step" } } }, "then": { "properties": { "data": { "$ref": "#/$defs/resource.cleanup_step" } } } },
+        { "if": { "properties": { "scenarioId": { "const": "resource.cleanup_proof_step" } } }, "then": { "properties": { "data": { "$ref": "#/$defs/resource.cleanup_proof_step" } } } },
+        { "if": { "properties": { "scenarioId": { "const": "resource.cleanup" } } }, "then": { "properties": { "data": { "$ref": "#/$defs/resource.cleanup" } } } },
+        { "if": { "properties": { "scenarioId": { "const": "worker.invoke_no_cost" } } }, "then": { "properties": { "data": { "$ref": "#/$defs/worker.invoke_no_cost" } } } }
+      ]
+    },
+    "error": {
+      "type": "object", "additionalProperties": false, "required": ["code", "retryable", "safeMessage"],
+      "properties": {
+        "code": { "enum": ["invalid_request", "unknown_scenario", "environment_mismatch", "lease_invalid", "ownership_mismatch", "timeout", "provider_failure", "cleanup_incomplete"] },
+        "retryable": { "const": false },
+        "safeMessage": { "enum": [
+          "Scenario is outside the closed runner protocol.",
+          "Request did not match the closed runner protocol.",
+          "Runner environment attestation did not match.",
+          "Runner lease capability was invalid.",
+          "Ledger ownership could not be proven.",
+          "Runner scenario exceeded its fixed timeout.",
+          "Provider operation failed safely.",
+          "Owned resource absence could not be proven."
+        ] }
+      }
+    },
+    "failure": {
+      "type": "object", "additionalProperties": false,
+      "required": ["protocolVersion", "scenarioId", "runId", "status", "durationMs", "error"],
+      "properties": {
+        "protocolVersion": { "const": "verification-runner.v1" },
+        "scenarioId": { "enum": ["invalid", "health", "environment.readback", "resource.read", "resource.cleanup_preflight_step", "resource.cleanup_step", "resource.cleanup_proof_step", "resource.cleanup", "worker.invoke_no_cost"] },
+        "runId": { "oneOf": [{ "$ref": "#/$defs/runId" }, { "type": "null" }] },
+        "status": { "enum": ["failed", "blocked"] }, "durationMs": { "$ref": "#/$defs/duration" },
+        "error": { "$ref": "#/$defs/error" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "runId": { "type": "null" } } },
+          "then": { "properties": { "scenarioId": { "const": "invalid" }, "error": { "properties": { "code": { "const": "invalid_request" } } } } }
+        },
+        {
+          "if": { "properties": { "scenarioId": { "const": "invalid" } } },
+          "then": { "properties": { "error": { "properties": { "code": { "enum": ["invalid_request", "unknown_scenario"] } } } } }
+        },
+        {
+          "if": { "properties": { "error": { "properties": { "code": { "enum": ["environment_mismatch", "lease_invalid", "ownership_mismatch", "cleanup_incomplete"] } } } } },
+          "then": { "properties": { "status": { "const": "blocked" } } }
+        },
+        {
+          "if": { "properties": { "error": { "properties": { "code": { "enum": ["invalid_request", "unknown_scenario", "timeout", "provider_failure"] } } } } },
+          "then": { "properties": { "status": { "const": "failed" } } }
+        }
+      ]
+    }
+  }
+}

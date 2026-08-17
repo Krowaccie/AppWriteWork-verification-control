@@ -1,0 +1,22 @@
+{
+  "name": "@appwritework/verification-controller",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "npm@11.6.2",
+  "engines": {
+    "node": "24.11.1",
+    "npm": "11.6.2"
+  },
+  "scripts": {
+    "release:production": "node src/release-production.mjs",
+    "test:production-readonly:e2e:list": "node src/run-production-readonly-playwright.mjs --list",
+    "test:production-readonly:e2e": "node src/run-production-readonly-playwright.mjs --run"
+  },
+  "dependencies": {
+    "playwright": "1.61.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.61.1"
+  }
+}

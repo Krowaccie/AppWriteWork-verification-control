@@ -1,0 +1,11 @@
+name: Trusted source artifact launcher
+description: Inert template; Phase B1 must bind the reviewed immutable OCI image.
+inputs:
+  request:
+    description: Canonical verification-a1-hosted-request.v1 JSON.
+    required: true
+runs:
+  using: docker
+  image: 'docker://ghcr.io/krowaccie/appwritework-verification-a1@sha256:cf6e1c689aa57125d56a8604640f3cd3cfdba92f29371504a047f8ae4f273dc8'
+  args:
+    - '${{ inputs.request }}'
