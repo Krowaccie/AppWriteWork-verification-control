@@ -1,0 +1,58 @@
+name: Controller validation
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: controller-validation-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Controller validation
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout reviewed revision
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+
+      - name: Validate public secret-free governance
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git diff --check
+          test -f README.md
+          grep -Fq 'PUBLIC_SECRET_FREE' README.md
+
+          if git ls-files | grep -Eiq '(^|/)([.]env($|[.])|.*[.](pem|p12|pfx|key)$|id_rsa($|[.]))'; then
+            echo 'Forbidden secret-like tracked file name.' >&2
+            exit 1
+          fi
+
+          while IFS= read -r workflow; do
+            unpinned="$(grep -E '^[[:space:]]*uses:' "$workflow" | grep -Ev 'uses:[[:space:]]*(./|docker://|[^[:space:]@]+@[0-9a-f]{40}([[:space:]]|$))' || true)"
+            if [[ -n "$unpinned" ]]; then
+              echo "Unpinned external action in $workflow" >&2
+              echo "$unpinned" >&2
+              exit 1
+            fi
+
+            if grep -Eq 'environment:[[:space:]]*(appwrite-test|controller-promotion)' "$workflow"; then
+              grep -Eq '^[[:space:]]+workflow_dispatch:' "$workflow"
+              if grep -Eq '^[[:space:]]+(pull_request|pull_request_target|push):' "$workflow"; then
+                echo "Credential-bearing workflow is not manual-only: $workflow" >&2
+                exit 1
+              fi
+            fi
+          done < <(find .github/workflows -maxdepth 1 -type f -name '*.yml' -print | sort)
