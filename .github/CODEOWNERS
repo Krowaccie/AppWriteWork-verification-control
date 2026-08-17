@@ -1,0 +1,11 @@
+# Single-maintainer ownership policy.
+# Independent review is currently unavailable; @Krowaccie is the sole maintainer.
+
+* @Krowaccie
+/.github/actions/ @Krowaccie
+/.github/workflows/ @Krowaccie
+/packages/verification-controller/ @Krowaccie
+/dev/verification/schemas/ @Krowaccie
+/policy/ @Krowaccie
+/**/*.json @Krowaccie
+/**/package-lock.json @Krowaccie
