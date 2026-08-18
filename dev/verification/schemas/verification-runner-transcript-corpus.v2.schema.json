@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "verification-runner-transcript-corpus.v2",
+  "type": "object", "additionalProperties": false, "required": ["schemaVersion", "binding", "matchers"],
+  "properties": {
+    "schemaVersion": { "const": "verification-runner-transcript-corpus.v2" },
+    "binding": { "type": "object", "additionalProperties": false, "required": ["environmentDigest", "runnerRevision", "primaryExecutionRetentionMaxSeconds"], "properties": { "environmentDigest": { "$ref": "#/$defs/digest" }, "runnerRevision": { "$ref": "#/$defs/revision" }, "primaryExecutionRetentionMaxSeconds": { "type": "integer", "minimum": 1, "maximum": 86400 } } },
+    "matchers": {
+      "type": "array", "minItems": 3, "maxItems": 3,
+      "prefixItems": [
+        { "$ref": "#/$defs/healthMatcher" },
+        { "$ref": "#/$defs/futureMatcher" },
+        { "$ref": "#/$defs/unknownMatcher" }
+      ],
+      "items": false
+    }
+  },
+  "$defs": {
+    "digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "revision": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "healthMatcher": {
+      "type": "object", "additionalProperties": false, "required": ["id", "requestedScenario", "response"],
+      "properties": {
+        "id": { "const": "health-positive" }, "requestedScenario": { "const": "health" },
+        "response": {
+          "type": "object", "additionalProperties": false, "required": ["protocolVersion", "scenarioId", "status", "data"],
+          "properties": {
+            "protocolVersion": { "const": "verification-runner.v1" }, "scenarioId": { "const": "health" }, "status": { "const": "passed" },
+            "data": { "type": "object", "additionalProperties": false, "required": ["ready", "runnerRevision"], "properties": { "ready": { "const": true }, "runnerRevision": { "$ref": "#/$defs/revision" } } }
+          }
+        }
+      }
+    },
+    "negativeResponse": {
+      "type": "object", "additionalProperties": false, "required": ["protocolVersion", "scenarioId", "status", "error"],
+      "properties": {
+        "protocolVersion": { "const": "verification-runner.v1" }, "scenarioId": { "const": "invalid" }, "status": { "const": "failed" },
+        "error": { "type": "object", "additionalProperties": false, "required": ["code", "retryable", "safeMessage"], "properties": { "code": { "const": "unknown_scenario" }, "retryable": { "const": false }, "safeMessage": { "const": "Scenario is outside the closed runner protocol." } } }
+      }
+    },
+    "futureMatcher": { "type": "object", "additionalProperties": false, "required": ["id", "requestedScenario", "response"], "properties": { "id": { "const": "future-negative" }, "requestedScenario": { "const": "future" }, "response": { "$ref": "#/$defs/negativeResponse" } } },
+    "unknownMatcher": { "type": "object", "additionalProperties": false, "required": ["id", "requestedScenario", "response"], "properties": { "id": { "const": "unknown_scenario-negative" }, "requestedScenario": { "const": "unknown_scenario" }, "response": { "$ref": "#/$defs/negativeResponse" } } }
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "controller-trust-provenance.v1",
+  "type": "object", "additionalProperties": false,
+  "required": ["schemaVersion", "workflowRunId", "workflowHeadSha", "controllerRepository", "sourceRepository", "sourceRepositoryRevision", "controllerRevision", "qualificationDigest", "setupBindings", "materials"],
+  "properties": {
+    "schemaVersion": { "const": "controller-trust-provenance.v1" },
+    "workflowRunId": { "type": "string", "pattern": "^[1-9][0-9]{0,19}$" },
+    "workflowHeadSha": { "$ref": "#/$defs/revision" },
+    "controllerRepository": { "const": "Krowaccie/AppWriteWork-verification-control" },
+    "sourceRepository": { "const": "Krowaccie/AppWriteWork" },
+    "sourceRepositoryRevision": { "$ref": "#/$defs/revision" },
+    "controllerRevision": { "$ref": "#/$defs/revision" },
+    "qualificationDigest": { "$ref": "#/$defs/digest" },
+    "setupBindings": { "$ref": "#/$defs/setupBindings" },
+    "materials": {
+      "type": "array", "minItems": 4, "maxItems": 4,
+      "prefixItems": [
+        { "$ref": "#/$defs/evaluator" },
+        { "$ref": "#/$defs/evidenceValidator" },
+        { "$ref": "#/$defs/networkPolicy" },
+        { "$ref": "#/$defs/transcriptCorpus" }
+      ],
+      "items": false
+    }
+  },
+  "$defs": {
+    "revision": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "setupBindings": {
+      "type": "object", "additionalProperties": false,
+      "required": ["testCloudSetupReadbackJsonDigest", "testCloudSetupReadbackDigest", "testCloudSetupAttestationJsonDigest", "testCloudSetupAttestationDigest"],
+      "properties": {
+        "testCloudSetupReadbackJsonDigest": { "$ref": "#/$defs/digest" },
+        "testCloudSetupReadbackDigest": { "$ref": "#/$defs/digest" },
+        "testCloudSetupAttestationJsonDigest": { "$ref": "#/$defs/digest" },
+        "testCloudSetupAttestationDigest": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "material": {
+      "type": "object", "additionalProperties": false, "required": ["kind", "path", "sha256"],
+      "properties": { "kind": { "type": "string" }, "path": { "type": "string" }, "sha256": { "$ref": "#/$defs/digest" } }
+    },
+    "evaluator": { "allOf": [{ "$ref": "#/$defs/material" }, { "properties": { "kind": { "const": "evaluator" }, "path": { "const": "controller-trust-evaluator.v1.json" } } }] },
+    "evidenceValidator": { "allOf": [{ "$ref": "#/$defs/material" }, { "properties": { "kind": { "const": "evidenceValidator" }, "path": { "const": "verification-runner-evidence-validator.v1.json" } } }] },
+    "networkPolicy": { "allOf": [{ "$ref": "#/$defs/material" }, { "properties": { "kind": { "const": "networkPolicy" }, "path": { "const": "controller-network-policy-material.v1.json" } } }] },
+    "transcriptCorpus": { "allOf": [{ "$ref": "#/$defs/material" }, { "properties": { "kind": { "const": "transcriptCorpus" }, "path": { "const": "verification-runner-transcript-corpus.v2.json" } } }] }
+  }
+}

@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "controller-seed-source-sets.v1.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "sets"],
+  "properties": {
+    "schemaVersion": { "const": "controller-seed-source-sets.v1" },
+    "sets": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "prefixItems": [
+        { "$ref": "#/$defs/overlay" },
+        { "$ref": "#/$defs/controller" },
+        { "$ref": "#/$defs/tooling" }
+      ],
+      "items": false
+    }
+  },
+  "$defs": {
+    "path": {
+      "type": "string",
+      "pattern": "^(?!/)(?!.*//)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*\\\\)[\\x21-\\x7e]+$"
+    },
+    "files": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/path" }
+    },
+    "set": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "sourceRoot", "files", "relocations"],
+      "properties": {
+        "name": { "type": "string" },
+        "sourceRoot": { "type": "string" },
+        "files": { "$ref": "#/$defs/files" },
+        "relocations": { "type": "array" }
+      }
+    },
+    "overlay": {
+      "allOf": [
+        { "$ref": "#/$defs/set" },
+        {
+          "properties": {
+            "name": { "const": "overlay" },
+            "sourceRoot": { "const": "packages/verification-controller/controller-repository-seed" },
+            "relocations": { "const": [] }
+          }
+        }
+      ]
+    },
+    "controller": {
+      "allOf": [
+        { "$ref": "#/$defs/set" },
+        {
+          "properties": {
+            "name": { "const": "controller" },
+            "sourceRoot": { "const": "" },
+            "relocations": {
+              "const": [
+                {
+                  "source": "packages/verification-controller/workflows/publish-controller-bundle.yml",
+                  "destination": ".github/workflows/publish-controller-bundle.yml"
+                },
+                {
+                  "source": "packages/verification-controller/workflows/verify-test-cloud.yml",
+                  "destination": ".github/workflows/verify-test-cloud.yml"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "tooling": {
+      "allOf": [
+        { "$ref": "#/$defs/set" },
+        {
+          "properties": {
+            "name": { "const": "tooling" },
+            "sourceRoot": { "const": "" },
+            "relocations": { "const": [] }
+          }
+        }
+      ]
+    }
+  }
+}

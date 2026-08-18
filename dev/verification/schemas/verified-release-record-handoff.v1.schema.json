@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "verified-release-record-handoff.v1.schema.json",
+  "title": "Verified production release-record handoff v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "handoffDigest",
+    "controller",
+    "producer",
+    "releaseBinding",
+    "releaseRecord"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "verified-release-record-handoff.v1"
+    },
+    "handoffDigest": {
+      "$ref": "#/$defs/digest"
+    },
+    "controller": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repository",
+        "revision",
+        "artifactId",
+        "bundleDigest"
+      ],
+      "properties": {
+        "repository": {
+          "const": "Krowaccie/AppWriteWork-verification-control"
+        },
+        "revision": {
+          "$ref": "#/$defs/gitSha"
+        },
+        "artifactId": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]*$"
+        },
+        "bundleDigest": {
+          "$ref": "#/$defs/digest"
+        }
+      }
+    },
+    "producer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repository",
+        "workflow",
+        "runId",
+        "runAttempt"
+      ],
+      "properties": {
+        "repository": {
+          "const": "Krowaccie/AppWriteWork-verification-control"
+        },
+        "workflow": {
+          "const": "Production Readonly"
+        },
+        "runId": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]*$"
+        },
+        "runAttempt": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "releaseBinding": {
+      "$ref": "production-release-binding.v1.schema.json"
+    },
+    "releaseRecord": {
+      "$ref": "release-record.v1.schema.json"
+    }
+  },
+  "$defs": {
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "gitSha": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    }
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "controller-trust-evaluator.v1",
+  "type": "object", "additionalProperties": false, "required": ["schemaVersion", "entrypoint", "runtime", "files", "closureDigest"],
+  "properties": {
+    "schemaVersion": { "const": "controller-trust-evaluator.v1" },
+    "entrypoint": { "const": "scripts/verification/controller-trust-materials.mjs" },
+    "runtime": {
+      "type": "object", "additionalProperties": false, "required": ["name", "version", "platform"],
+      "properties": { "name": { "const": "node" }, "version": { "const": "24.11.1" }, "platform": { "const": "windows-2025" } }
+    },
+    "files": {
+      "type": "array", "minItems": 7, "maxItems": 7,
+      "prefixItems": [
+        { "$ref": "#/$defs/qualificationFile" },
+        { "$ref": "#/$defs/canonicalJsonFile" },
+        { "$ref": "#/$defs/bundleFile" },
+        { "$ref": "#/$defs/trustMaterialsFile" },
+        { "$ref": "#/$defs/bootstrapFile" },
+        { "$ref": "#/$defs/providerContractFile" },
+        { "$ref": "#/$defs/setupAttestationFile" }
+      ],
+      "items": false
+    },
+    "closureDigest": { "$ref": "#/$defs/digest" }
+  },
+  "$defs": {
+    "digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "file": { "type": "object", "additionalProperties": false, "required": ["path", "mode", "sha256"], "properties": { "path": { "type": "string" }, "mode": { "const": "100644" }, "sha256": { "$ref": "#/$defs/digest" } } },
+    "qualificationFile": { "allOf": [{ "$ref": "#/$defs/file" }, { "properties": { "path": { "const": "dev/verification/bootstrap/qualify-runner.mjs" } } }] },
+    "canonicalJsonFile": { "allOf": [{ "$ref": "#/$defs/file" }, { "properties": { "path": { "const": "scripts/verification/canonical-json.mjs" } } }] },
+    "bundleFile": { "allOf": [{ "$ref": "#/$defs/file" }, { "properties": { "path": { "const": "scripts/verification/controller-bundle.mjs" } } }] },
+    "trustMaterialsFile": { "allOf": [{ "$ref": "#/$defs/file" }, { "properties": { "path": { "const": "scripts/verification/controller-trust-materials.mjs" } } }] },
+    "bootstrapFile": { "allOf": [{ "$ref": "#/$defs/file" }, { "properties": { "path": { "const": "scripts/verification/test-cloud-bootstrap.mjs" } } }] },
+    "providerContractFile": { "allOf": [{ "$ref": "#/$defs/file" }, { "properties": { "path": { "const": "scripts/verification/test-cloud-provider-contract.mjs" } } }] },
+    "setupAttestationFile": { "allOf": [{ "$ref": "#/$defs/file" }, { "properties": { "path": { "const": "scripts/verification/test-cloud-setup-attestation.mjs" } } }] }
+  }
+}

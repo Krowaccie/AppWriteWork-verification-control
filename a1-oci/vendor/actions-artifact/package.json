@@ -1,0 +1,9 @@
+{
+  "name": "verification-a1-actions-artifact-runtime",
+  "version": "1.0.0",
+  "type": "module",
+  "dependencies": {
+    "@actions/artifact": "6.2.0"
+  },
+  "private": true
+}

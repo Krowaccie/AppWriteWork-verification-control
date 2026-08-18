@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.salmora.net/verification/artifact-handoff.v1.schema.json",
+  "title": "Hosted Artifact Handoff v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "sourceRepository",
+    "sourceWorkflow",
+    "sourceWorkflowRunId",
+    "sourceWorkflowRunAttempt",
+    "sourceRef",
+    "sourceRevision",
+    "artifactName",
+    "artifactManifestDigest",
+    "verifierManifestDigest"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "artifact-handoff.v1" },
+    "sourceRepository": { "const": "Krowaccie/AppWriteWork" },
+    "sourceWorkflow": { "const": "Verify Main" },
+    "sourceWorkflowRunId": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]*$"
+    },
+    "sourceWorkflowRunAttempt": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "sourceRef": { "const": "refs/heads/main" },
+    "sourceRevision": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "artifactName": {
+      "type": "string",
+      "pattern": "^verification-artifacts-[0-9a-f]{40}$"
+    },
+    "artifactManifestDigest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "verifierManifestDigest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    }
+  }
+}

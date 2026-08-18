@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "seed-provenance-manifest.v1",
+  "type": "object", "additionalProperties": false,
+  "required": ["schemaVersion", "sourceRepository", "sourceRepositoryRevision", "sourceRootDigest", "gitTreeOid", "seedTreeDigest", "controllerSeedSha", "internalManifestDigest", "archiveDigest", "commitContract"],
+  "properties": {
+    "schemaVersion": { "const": "seed-provenance-manifest.v1" }, "sourceRepository": { "const": "Krowaccie/AppWriteWork" }, "sourceRepositoryRevision": { "$ref": "#/$defs/revision" }, "sourceRootDigest": { "$ref": "#/$defs/digest" }, "gitTreeOid": { "$ref": "#/$defs/revision" }, "seedTreeDigest": { "$ref": "#/$defs/digest" }, "controllerSeedSha": { "$ref": "#/$defs/revision" }, "internalManifestDigest": { "$ref": "#/$defs/digest" }, "archiveDigest": { "$ref": "#/$defs/digest" },
+    "commitContract": { "type": "object", "additionalProperties": false, "required": ["schemaVersion", "author", "committer", "timestamp", "message"], "properties": { "schemaVersion": { "const": "controller-seed-commit.v1" }, "author": { "const": "AppWriteWork Verification Controller <verification-controller@appwritework.invalid>" }, "committer": { "const": "AppWriteWork Verification Controller <verification-controller@appwritework.invalid>" }, "timestamp": { "const": "0 +0000" }, "message": { "const": "AppWriteWork verification controller seed v1\n" } } }
+  },
+  "$defs": { "revision": { "type": "string", "pattern": "^[0-9a-f]{40}$" }, "digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" } }
+}
