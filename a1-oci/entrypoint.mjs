@@ -5,5 +5,8 @@ const result = await runHostedRuntime({
   requestText: process.argv[2] ?? '',
 });
 const code = result.diagnostics[0]?.code ?? result.status;
-process.stdout.write(`${result.status} ${code}\n`);
-process.exitCode = result.status === 'PASS' ? 0 : 1;
+const exitCode = result.status === 'PASS' ? 0 : 1;
+await new Promise((resolve, reject) => {
+  process.stdout.write(`${result.status} ${code}\n`, (error) => error ? reject(error) : resolve());
+});
+process.exit(exitCode);

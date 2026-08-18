@@ -472,6 +472,10 @@
       "sha256": "UNMATERIALIZED"
     },
     {
+      "path": "packages/verification-controller/schemas/test-cloud-hosted-prepublication-readback.v1.schema.json",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
       "path": "packages/verification-controller/schemas/test-cloud-hosted-setup-attestation.v1.schema.json",
       "sha256": "UNMATERIALIZED"
     },

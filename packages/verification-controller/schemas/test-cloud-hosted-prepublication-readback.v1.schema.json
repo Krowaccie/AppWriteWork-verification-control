@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "test-cloud-hosted-prepublication-readback.v1.schema.json",
+  "title": "Closed hosted test-cloud prepublication readback v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "resources",
+    "providerSchema",
+    "executionObservation",
+    "productFunctions",
+    "credentialScopes",
+    "runner",
+    "controller",
+    "githubApp",
+    "identities",
+    "initialSeed"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "test-cloud.hosted-prepublication-readback.v1" },
+    "resources": {
+      "$ref": "test-cloud-hosted-setup-readback.v1.schema.json#/properties/resources"
+    },
+    "providerSchema": {
+      "$ref": "test-cloud-hosted-setup-readback.v1.schema.json#/properties/providerSchema"
+    },
+    "executionObservation": {
+      "$ref": "test-cloud-hosted-setup-readback.v1.schema.json#/properties/executionObservation"
+    },
+    "productFunctions": {
+      "$ref": "test-cloud-hosted-setup-readback.v1.schema.json#/properties/productFunctions"
+    },
+    "credentialScopes": {
+      "$ref": "test-cloud-hosted-setup-readback.v1.schema.json#/properties/credentialScopes"
+    },
+    "runner": {
+      "$ref": "test-cloud-hosted-setup-readback.v1.schema.json#/properties/runner"
+    },
+    "controller": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repository",
+        "rulesetProtected",
+        "codeownersProtected",
+        "environments"
+      ],
+      "properties": {
+        "repository": { "const": "Krowaccie/AppWriteWork-verification-control" },
+        "rulesetProtected": { "const": true },
+        "codeownersProtected": { "const": true },
+        "environments": { "const": ["appwrite-test", "controller-promotion"] }
+      }
+    },
+    "githubApp": {
+      "$ref": "test-cloud-hosted-setup-readback.v1.schema.json#/properties/githubApp"
+    },
+    "identities": {
+      "$ref": "test-cloud-hosted-setup-readback.v1.schema.json#/properties/identities"
+    },
+    "initialSeed": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sourceRepositoryRevision",
+        "controllerRevision",
+        "approvalMode"
+      ],
+      "properties": {
+        "sourceRepositoryRevision": { "$ref": "#/$defs/fullSha" },
+        "controllerRevision": { "$ref": "#/$defs/fullSha" },
+        "approvalMode": { "const": "single-maintainer" }
+      }
+    }
+  },
+  "$defs": {
+    "fullSha": { "type": "string", "pattern": "^[0-9a-f]{40}$" }
+  }
+}

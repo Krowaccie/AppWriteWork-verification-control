@@ -212,13 +212,17 @@ function sameEnvironment(candidate, expected) {
   return cloned;
 }
 
-function sourceGitArgv(args) {
+function sourceGitArgv(args, sourceCheckoutRoot) {
   const candidate = readDenseArgv(args);
-  if (candidate === null || candidate.length < GIT_PREFIX.length + 2) return null;
+  if (candidate === null || candidate.length < GIT_PREFIX.length + 4) return null;
   for (let index = 0; index < GIT_PREFIX.length; index += 1) {
     if (candidate[index] !== GIT_PREFIX[index]) return null;
   }
-  const offset = GIT_PREFIX.length;
+  if (
+    candidate[GIT_PREFIX.length] !== '-c'
+    || candidate[GIT_PREFIX.length + 1] !== `safe.directory=${sourceCheckoutRoot}`
+  ) return null;
+  const offset = GIT_PREFIX.length + 2;
   const command = candidate[offset];
   const tailLength = candidate.length - offset;
   if (command === 'cat-file') {
@@ -389,7 +393,7 @@ function normalizeProcessSpec(value, configuration) {
   if (fields === null) return null;
   const args = fixed
     ? sameArgv(fields.args, configuration.expectedArgs)
-    : sourceGitArgv(fields.args);
+    : sourceGitArgv(fields.args, configuration.sourceCheckoutRoot);
   const env = sameEnvironment(fields.env, configuration.expectedEnvironment);
   if (
     fields.executable !== configuration.executable ||
@@ -410,7 +414,7 @@ function normalizeProcessSpec(value, configuration) {
   if (!fixed) {
     stdin = cloneInput(fields.stdin, MAX_OUTPUT_BYTES);
     if (stdin === undefined) return null;
-    const offset = GIT_PREFIX.length;
+    const offset = GIT_PREFIX.length + 2;
     const isBatch = args[offset] === 'cat-file';
     if ((isBatch && !(stdin instanceof Uint8Array)) || (!isBatch && stdin !== null)) {
       return null;

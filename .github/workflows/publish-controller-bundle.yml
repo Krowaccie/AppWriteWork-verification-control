@@ -11,6 +11,10 @@ on:
         description: Exact AppWriteWork source commit bound by the proposal.
         required: true
         type: string
+      initial_seed:
+        description: Use only for the first controller bundle before provider artifact outputs exist.
+        required: true
+        type: boolean
 
 permissions:
   contents: read
@@ -58,6 +62,7 @@ jobs:
         env:
           CONTROLLER_REVISION: ${{ inputs.trusted_controller_sha }}
           SOURCE_REPOSITORY_REVISION: ${{ inputs.source_repository_revision }}
+          INITIAL_SEED: ${{ inputs.initial_seed }}
           RUNNER_REVISION: ${{ vars.VERIFICATION_RUNNER_REVISION }}
           TEST_CLOUD_SETUP_READBACK_JSON: ${{ vars.TEST_CLOUD_SETUP_READBACK_JSON }}
           TEST_CLOUD_SETUP_READBACK_DIGEST: ${{ vars.TEST_CLOUD_SETUP_READBACK_DIGEST }}
@@ -74,11 +79,14 @@ jobs:
           node --input-type=module -e @'
           import { writeFile } from 'node:fs/promises';
           import { canonicalJson, sha256Bytes } from './scripts/verification/canonical-json.mjs';
-          import { checkTestCloudSetup, qualifyExecutionObservationReadback } from './scripts/verification/test-cloud-setup-check.mjs';
+          import { checkInitialTestCloudSetup, checkTestCloudSetup, qualifyExecutionObservationReadback } from './scripts/verification/test-cloud-setup-check.mjs';
           import { validateTestCloudHostedSetupAttestationDocument } from './scripts/verification/test-cloud-hosted-setup-attestation.mjs';
           import inventory from './dev/verification/environments/test-cloud.inventory.v1.json' with { type: 'json' };
 
           const encoder = new TextEncoder();
+          if (!['true', 'false'].includes(process.env.INITIAL_SEED)) {
+            throw new Error('BLOCKED INITIAL_SEED_MODE_INVALID');
+          }
           const parseBinding = (jsonName, digestName) => {
             const raw = process.env[jsonName];
             const digest = process.env[digestName];
@@ -105,12 +113,21 @@ jobs:
             readback: hostedReadback.value.executionObservation,
             expectedReadbackDigest: observationDigest,
           });
-          const checked = observation.status === 'PASS' ? checkTestCloudSetup({
-            inventory,
-            readback: hostedReadback.value,
-            expectedProviderSchemaDigest: inventory.providerContractDigest,
-            executionObservationQualification: observation.value,
-          }) : observation;
+          const checked = observation.status === 'PASS'
+            ? (process.env.INITIAL_SEED === 'true'
+              ? checkInitialTestCloudSetup({
+                inventory,
+                readback: hostedReadback.value,
+                expectedProviderSchemaDigest: inventory.providerContractDigest,
+                executionObservationQualification: observation.value,
+              })
+              : checkTestCloudSetup({
+                inventory,
+                readback: hostedReadback.value,
+                expectedProviderSchemaDigest: inventory.providerContractDigest,
+                executionObservationQualification: observation.value,
+              }))
+            : observation;
           const hostedAttested = checked.status === 'PASS'
             ? validateTestCloudHostedSetupAttestationDocument({
               attestation: hostedAttestation.value,
@@ -122,7 +139,12 @@ jobs:
               expectedPrimaryExecutionRetentionMaxSeconds: checked.value.primaryExecutionRetentionMaxSeconds,
             })
             : checked;
-          if (checked.status !== 'PASS' || hostedAttested.status !== 'PASS') {
+          if (
+            checked.status !== 'PASS'
+            || hostedAttested.status !== 'PASS'
+            || checked.value.controllerBundleSha !== process.env.CONTROLLER_REVISION
+            || checked.value.sourceRepositoryRevision !== process.env.SOURCE_REPOSITORY_REVISION
+          ) {
             throw new Error('BLOCKED HOSTED_SETUP_BINDING_INVALID');
           }
           const input = {

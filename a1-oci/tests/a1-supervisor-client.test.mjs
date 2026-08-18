@@ -10,6 +10,7 @@ const REVISION = '0123456789abcdef0123456789abcdef01234567';
 const PREFIX = Object.freeze([
   '--no-replace-objects', '-c', 'core.fsmonitor=false', '-c',
   'protocol.allow=never', '-c', 'submodule.recurse=false',
+  '-c', 'safe.directory=/work/source',
 ]);
 
 function closed(fields) {
@@ -302,7 +303,15 @@ test('process adapter accepts one exact fixed path tuple for the candidate check
   const request = processRequest();
   const relocated = closed({
     ...request,
-    process: closed({ ...request.process, cwd: paths.exportRoot }),
+    process: closed({
+      ...request.process,
+      args: Object.freeze([
+        ...request.process.args.slice(0, PREFIX.length - 1),
+        `safe.directory=${paths.exportRoot}`,
+        ...request.process.args.slice(PREFIX.length),
+      ]),
+      cwd: paths.exportRoot,
+    }),
   });
   assert.equal((await client.run(relocated, new AbortController().signal)).status, 'PASS');
   assert.equal(spawns[0].args[5], '/github/workspace');

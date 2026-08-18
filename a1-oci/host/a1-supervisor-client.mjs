@@ -474,8 +474,10 @@ function parseGit(process, paths) {
       GIT_NO_REPLACE_OBJECTS: '1', GIT_OPTIONAL_LOCKS: '0', GIT_TERMINAL_PROMPT: '0',
     })
     || !Array.isArray(fields.args) || !exactArray(fields.args.slice(0, GIT_PREFIX.length), GIT_PREFIX)
+    || fields.args[GIT_PREFIX.length] !== '-c'
+    || fields.args[GIT_PREFIX.length + 1] !== `safe.directory=${paths.exportRoot}`
   ) return null;
-  const tail = fields.args.slice(GIT_PREFIX.length);
+  const tail = fields.args.slice(GIT_PREFIX.length + 2);
   let opcode;
   let body;
   if (tail.length === 4 && tail[0] === 'rev-parse' && tail[1] === '--verify' && tail[2] === '--quiet' && tail[3].endsWith('^{commit}')) {
@@ -501,7 +503,8 @@ function parseFixed(process, profiles) {
   ]);
   const profile = fields === null ? null : profiles[fields.commandId];
   if (
-    profile === undefined || fields.executable !== profile.executable || fields.cwd !== profile.cwd
+    fields === null || profile === undefined
+    || fields.executable !== profile.executable || fields.cwd !== profile.cwd
     || fields.network !== profile.network || fields.retry !== false || fields.shell !== false
     || fields.timeoutMs !== 600_000 || !exactArray(fields.args, profile.args)
     || !sameEnvironment(fields.env, profile.env)

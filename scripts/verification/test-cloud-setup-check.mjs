@@ -42,6 +42,19 @@ const READBACK_KEYS = Object.freeze([
   'identities',
   'bootstrap',
 ].sort());
+const INITIAL_READBACK_KEYS = Object.freeze([
+  'schemaVersion',
+  'resources',
+  'providerSchema',
+  'executionObservation',
+  'productFunctions',
+  'credentialScopes',
+  'runner',
+  'controller',
+  'githubApp',
+  'identities',
+  'initialSeed',
+].sort());
 
 function deepFreeze(value, seen = new WeakSet()) {
   if (
@@ -361,6 +374,19 @@ function validController(value) {
     && DIGEST.test(value.bundle.digest);
 }
 
+function validInitialController(value) {
+  return exactDataObject(value, [
+    'codeownersProtected',
+    'environments',
+    'repository',
+    'rulesetProtected',
+  ])
+    && value.repository === 'Krowaccie/AppWriteWork-verification-control'
+    && value.rulesetProtected === true
+    && value.codeownersProtected === true
+    && exactArray(value.environments, ['appwrite-test', 'controller-promotion']);
+}
+
 function validGitHubApp(value) {
   return exactDataObject(value, [
     'installationScoped',
@@ -392,6 +418,82 @@ function validBootstrap(value, controller) {
     && value.seeded === true
     && value.sourceRevision === controller.bundle.sourceRepositoryRevision
     && value.bundleDigest === controller.bundle.digest;
+}
+
+function validInitialSeed(value) {
+  return exactDataObject(value, [
+    'approvalMode',
+    'controllerRevision',
+    'sourceRepositoryRevision',
+  ])
+    && value.approvalMode === 'single-maintainer'
+    && FULL_SHA.test(value.sourceRepositoryRevision)
+    && FULL_SHA.test(value.controllerRevision)
+    && value.sourceRepositoryRevision !== value.controllerRevision;
+}
+
+export function checkInitialTestCloudSetup({
+  inventory,
+  readback,
+  expectedProviderSchemaDigest,
+  executionObservationQualification,
+} = {}, _dependencies = {}) {
+  if (!validInventory(inventory)) {
+    return result('BLOCKED', null, 'TEST_SETUP_INVENTORY_INVALID');
+  }
+  if (typeof expectedProviderSchemaDigest !== 'string' || !DIGEST.test(expectedProviderSchemaDigest)) {
+    return result('BLOCKED', null, 'TEST_SETUP_PROVIDER_SCHEMA_READBACK_REQUIRED');
+  }
+  if (
+    readback === null
+    || typeof readback !== 'object'
+    || !exactDataObject(readback, INITIAL_READBACK_KEYS)
+    || !validProviderSchema(readback.providerSchema, inventory, expectedProviderSchemaDigest)
+  ) {
+    return result('BLOCKED', null, 'TEST_SETUP_PROVIDER_SCHEMA_MISMATCH');
+  }
+  const observationBinding = EXECUTION_OBSERVATION_QUALIFICATIONS.get(
+    executionObservationQualification,
+  );
+  if (observationBinding === undefined) {
+    return result('BLOCKED', null, 'TEST_SETUP_EXECUTION_OBSERVATION_READBACK_REQUIRED');
+  }
+  let observedExecutionObservationPolicyDigest;
+  try {
+    observedExecutionObservationPolicyDigest = sha256Bytes(
+      new TextEncoder().encode(canonicalJson(readback.executionObservation)),
+    );
+  } catch {
+    return result('BLOCKED', null, 'TEST_SETUP_EXECUTION_OBSERVATION_MISMATCH');
+  }
+  if (
+    !validExecutionObservation(readback.executionObservation, inventory)
+    || observedExecutionObservationPolicyDigest !== observationBinding.readbackDigest
+    || readback.executionObservation.retentionMaxSeconds
+      !== observationBinding.maximumRetentionSeconds
+  ) {
+    return result('BLOCKED', null, 'TEST_SETUP_EXECUTION_OBSERVATION_MISMATCH');
+  }
+  if (
+    readback.schemaVersion !== 'test-cloud.hosted-prepublication-readback.v1'
+    || !validResources(readback.resources, inventory)
+    || !validProductFunctions(readback.productFunctions, inventory)
+    || !validCredentialScopes(readback.credentialScopes, inventory)
+    || !validRunner(readback.runner, inventory)
+    || !validInitialController(readback.controller)
+    || !validGitHubApp(readback.githubApp)
+    || !validIdentities(readback.identities)
+    || !validInitialSeed(readback.initialSeed)
+  ) return result('BLOCKED', null, 'TEST_SETUP_READBACK_MISMATCH');
+
+  return result('PASS', {
+    ready: true,
+    controllerBundleSha: readback.initialSeed.controllerRevision,
+    sourceRepositoryRevision: readback.initialSeed.sourceRepositoryRevision,
+    providerSchemaDigest: expectedProviderSchemaDigest,
+    executionObservationPolicyDigest: observedExecutionObservationPolicyDigest,
+    primaryExecutionRetentionMaxSeconds: observationBinding.maximumRetentionSeconds,
+  });
 }
 
 export function checkTestCloudSetup({
