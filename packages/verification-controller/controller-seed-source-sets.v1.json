@@ -97,6 +97,7 @@
         "packages/verification-controller/package-lock.json",
         "packages/verification-controller/package.json",
         "packages/verification-controller/playwright.config.mjs",
+        "packages/verification-controller/schemas/test-cloud-hosted-prepublication-readback.v1.schema.json",
         "packages/verification-controller/schemas/test-cloud-hosted-setup-attestation.v1.schema.json",
         "packages/verification-controller/schemas/test-cloud-hosted-setup-readback.v1.schema.json",
         "packages/verification-controller/src/controller-archive-verifier.mjs",

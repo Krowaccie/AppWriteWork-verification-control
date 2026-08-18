@@ -141,6 +141,18 @@ function frozenPrototypeFreeArgv(prefix, suffix) {
   return freeze(argv);
 }
 
+function frozenPrototypeFreeGitArgv(prefix, safeDirectory, suffix) {
+  const prefixLength = ownArrayLength(prefix);
+  const suffixLength = ownArrayLength(suffix);
+  const argv = new NativeArray(prefixLength + 2 + suffixLength);
+  copyOwnArrayData(prefix, argv, 0);
+  argv[prefixLength] = '-c';
+  argv[prefixLength + 1] = safeDirectory;
+  copyOwnArrayData(suffix, argv, prefixLength + 2);
+  apply(objectSetPrototypeOf, undefined, [argv, null]);
+  return freeze(argv);
+}
+
 function pushOwn(target, value) {
   apply(arrayPush, target, [value]);
 }
@@ -1642,7 +1654,11 @@ async function invokeBounded(lifecycle, operation) {
 function createProcessSpec({ gitExecutable, sourceCheckoutRoot, args, stdin, stdoutLimitBytes, stderrLimitBytes }) {
   return closedRecord({
     executable: gitExecutable,
-    args: frozenPrototypeFreeArgv(FIXED_PREFIX, args),
+    args: frozenPrototypeFreeGitArgv(
+      FIXED_PREFIX,
+      `safe.directory=${sourceCheckoutRoot}`,
+      args,
+    ),
     cwd: sourceCheckoutRoot,
     env: GIT_ENVIRONMENT,
     shell: false,
