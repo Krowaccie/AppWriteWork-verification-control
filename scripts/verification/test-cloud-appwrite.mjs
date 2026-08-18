@@ -153,6 +153,8 @@ const SHA256_PATTERN = /^sha256:[0-9a-f]{64}$/;
 const VARIABLE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,35}$/;
 const VARIABLE_TIMESTAMP_PATTERN =
   /^(?!0000)[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}(?:Z|\+00:00)$/;
+const INTENT_LOGICAL_RETENTION_KEY = 'cleanupRunnerExecutionRetentionExpiresAt';
+const INTENT_STORAGE_RETENTION_KEY = 'cleanupRunnerExecutionRetentionAt';
 const RUNNER_VARIABLE_QUERY_PATH =
   '/functions/verification-runner-py/variables?queries%5B%5D=%7B%22method%22%3A%22limit%22%2C%22values%22%3A%5B17%5D%7D&total=true';
 const RUNNER_VARIABLE_AUTHORITY_PROPERTY = '__registerTestCloudRunnerVariableAuthorityV1__';
@@ -370,6 +372,34 @@ function safeCanonical(value) {
   }
 }
 
+function remapIntentRowData(tableId, data, sourceKey, targetKey) {
+  if (tableId !== INTENT_TABLE_ID) return data;
+  if (!isPlainObject(data) || Object.hasOwn(data, targetKey)) return null;
+  if (!Object.hasOwn(data, sourceKey)) return data;
+  return Object.fromEntries(Object.entries(data).map(([key, value]) => [
+    key === sourceKey ? targetKey : key,
+    value,
+  ]));
+}
+
+function storageRowData(tableId, data) {
+  return remapIntentRowData(
+    tableId,
+    data,
+    INTENT_LOGICAL_RETENTION_KEY,
+    INTENT_STORAGE_RETENTION_KEY,
+  );
+}
+
+function logicalRowData(tableId, data) {
+  return remapIntentRowData(
+    tableId,
+    data,
+    INTENT_STORAGE_RETENTION_KEY,
+    INTENT_LOGICAL_RETENTION_KEY,
+  );
+}
+
 async function readBoundedBytes(response) {
   const rawLength = response.headers.get('content-length');
   if (rawLength !== null) {
@@ -562,13 +592,13 @@ function transactionProjection(value, expectedId = null) {
   return { status: object.status, transactionId: object.$id };
 }
 
-function rowProjection(value, expectedRowId) {
+function rowProjection(value, expectedRowId, tableId) {
   const object = responseObject(value);
   if (object.$id !== expectedRowId) throw new TypeError('invalid row id');
-  const data = Object.fromEntries(
+  const data = logicalRowData(tableId, Object.fromEntries(
     Object.entries(object).filter(([key]) => !key.startsWith('$')),
-  );
-  if (safeCanonical(data) === null) throw new TypeError('invalid row data');
+  ));
+  if (data === null || safeCanonical(data) === null) throw new TypeError('invalid row data');
   return { data, rowId: expectedRowId };
 }
 
@@ -996,7 +1026,7 @@ function makeControlSurface(handle, context, fetchDependency) {
         project(value, status) {
           if (status === 404) return { data: null, rowId: fields.rowId };
           if (status !== 200) throw new TypeError('invalid row response status');
-          const projected = rowProjection(value, fields.rowId);
+          const projected = rowProjection(value, fields.rowId, fields.tableId);
           rows.add(rowKey(fields.tableId, fields.rowId));
           if (
             fields.tableId === LEASE_TABLE_ID
@@ -1011,16 +1041,18 @@ function makeControlSurface(handle, context, fetchDependency) {
     upsertRow: operation(async (args) => {
       const fields = readExactDataObject(args, ['data', 'rowId', 'tableId']);
       const dataText = fields === null ? null : safeCanonical(fields.data);
-      if (fields === null || !rowLocationAllowed(fields.tableId, fields.rowId) || dataText === null) {
+      const storageData = fields === null ? null : storageRowData(fields.tableId, fields.data);
+      if (fields === null || !rowLocationAllowed(fields.tableId, fields.rowId)
+        || dataText === null || storageData === null) {
         return blocked('TEST_CLIENT_OPERATION_FORBIDDEN');
       }
       return request({
         method: 'PUT',
         path: `/tablesdb/${DATABASE_ID}/tables/${encodePath(fields.tableId)}/rows/${encodePath(fields.rowId)}`,
         expectedStatus: 201,
-        bodyText: canonicalJson({ data: fields.data }),
+        bodyText: canonicalJson({ data: storageData }),
         project(value) {
-          const projected = rowProjection(value, fields.rowId);
+          const projected = rowProjection(value, fields.rowId, fields.tableId);
           rows.add(rowKey(fields.tableId, fields.rowId));
           return projected;
         },
@@ -1029,17 +1061,19 @@ function makeControlSurface(handle, context, fetchDependency) {
 
     updateRow: operation(async (args) => {
       const fields = readExactDataObject(args, ['data', 'rowId', 'tableId']);
+      const storageData = fields === null ? null : storageRowData(fields.tableId, fields.data);
       if (
         fields === null
         || !rows.has(rowKey(fields.tableId, fields.rowId))
         || safeCanonical(fields.data) === null
+        || storageData === null
       ) return blocked('TEST_CLIENT_OPERATION_FORBIDDEN');
       return request({
         method: 'PATCH',
         path: `/tablesdb/${DATABASE_ID}/tables/${encodePath(fields.tableId)}/rows/${encodePath(fields.rowId)}`,
         expectedStatus: 200,
-        bodyText: canonicalJson({ data: fields.data }),
-        project: (value) => rowProjection(value, fields.rowId),
+        bodyText: canonicalJson({ data: storageData }),
+        project: (value) => rowProjection(value, fields.rowId, fields.tableId),
       });
     }),
 
@@ -1075,7 +1109,7 @@ function makeControlSurface(handle, context, fetchDependency) {
         expectedStatus: 200,
         bodyText: canonicalJson({ max: fields.max, value: fields.value }),
         project(value) {
-          const projected = rowProjection(value, LEASE_ROW_ID);
+          const projected = rowProjection(value, LEASE_ROW_ID, LEASE_TABLE_ID);
           rows.add(rowKey(LEASE_TABLE_ID, LEASE_ROW_ID));
           return projected;
         },
@@ -1127,7 +1161,9 @@ function makeControlSurface(handle, context, fetchDependency) {
         if (!isPlainObject(operationValue)) return blocked('TEST_CLIENT_OPERATION_FORBIDDEN');
         if (operationValue.action === 'createRow') {
           const item = readExactDataObject(operationValue, ['action', 'data', 'rowId', 'tableId']);
-          if (item === null || !rowLocationAllowed(item.tableId, item.rowId) || safeCanonical(item.data) === null) {
+          const storageData = item === null ? null : storageRowData(item.tableId, item.data);
+          if (item === null || !rowLocationAllowed(item.tableId, item.rowId)
+            || safeCanonical(item.data) === null || storageData === null) {
             return blocked('TEST_CLIENT_OPERATION_FORBIDDEN');
           }
           wire.push({
@@ -1135,12 +1171,14 @@ function makeControlSurface(handle, context, fetchDependency) {
             databaseId: DATABASE_ID,
             tableId: item.tableId,
             rowId: item.rowId,
-            data: item.data,
+            data: storageData,
           });
           createdRows.push(rowKey(item.tableId, item.rowId));
         } else if (operationValue.action === 'upsertRow') {
           const item = readExactDataObject(operationValue, ['action', 'data', 'rowId', 'tableId']);
-          if (item === null || !rowLocationAllowed(item.tableId, item.rowId) || safeCanonical(item.data) === null) {
+          const storageData = item === null ? null : storageRowData(item.tableId, item.data);
+          if (item === null || !rowLocationAllowed(item.tableId, item.rowId)
+            || safeCanonical(item.data) === null || storageData === null) {
             return blocked('TEST_CLIENT_OPERATION_FORBIDDEN');
           }
           wire.push({
@@ -1148,22 +1186,24 @@ function makeControlSurface(handle, context, fetchDependency) {
             databaseId: DATABASE_ID,
             tableId: item.tableId,
             rowId: item.rowId,
-            data: item.data,
+            data: storageData,
           });
           createdRows.push(rowKey(item.tableId, item.rowId));
         } else if (operationValue.action === 'updateRow') {
           const item = readExactDataObject(operationValue, ['action', 'data', 'rowId', 'tableId']);
+          const storageData = item === null ? null : storageRowData(item.tableId, item.data);
           if (
             item === null
             || !rows.has(rowKey(item.tableId, item.rowId))
             || safeCanonical(item.data) === null
+            || storageData === null
           ) return blocked('TEST_CLIENT_OPERATION_FORBIDDEN');
           wire.push({
             action: 'update',
             databaseId: DATABASE_ID,
             tableId: item.tableId,
             rowId: item.rowId,
-            data: item.data,
+            data: storageData,
           });
         } else if (operationValue.action === 'incrementRowColumn') {
           const item = readExactDataObject(
