@@ -1264,11 +1264,17 @@ function decodeTarText(bytes) {
 
 function parseTarOctal(bytes, checksum = false) {
   const byteLength = typedArrayByteLength(bytes);
-  const digitLength = checksum ? byteLength - 2 : byteLength - 1;
+  const digitLength = checksum
+    ? (bytes[byteLength - 1] === 0
+      ? byteLength - 1
+      : (bytes[byteLength - 2] === 0 && bytes[byteLength - 1] === 0x20
+        ? byteLength - 2
+        : -1))
+    : byteLength - 1;
   if (
     digitLength < 1
     || bytes[digitLength] !== 0
-    || (checksum && bytes[digitLength + 1] !== 0x20)
+    || (checksum && digitLength === byteLength - 2 && bytes[digitLength + 1] !== 0x20)
   ) return null;
   for (let index = 0; index < digitLength; index += 1) {
     if (bytes[index] < 0x30 || bytes[index] > 0x37) return null;

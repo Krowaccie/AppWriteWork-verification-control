@@ -41,9 +41,12 @@ const PROCESS_PATH_KEYS = Object.freeze([
   'commandTemp', 'configHome', 'exportRoot', 'git', 'node', 'npm', 'npmCache', 'siteOutput',
 ]);
 const EMPTY_DIAGNOSTICS = Object.freeze([]);
+const WORKSPACE_UID = 1000;
+const WORKSPACE_GID = 1000;
 const abortGetter = Object.getOwnPropertyDescriptor(AbortSignal.prototype, 'aborted').get;
 const addEventListener = EventTarget.prototype.addEventListener;
 const removeEventListener = EventTarget.prototype.removeEventListener;
+const arraySlice = Array.prototype.slice;
 
 function closed(fields) {
   return Object.freeze(Object.assign(Object.create(null), fields));
@@ -125,10 +128,11 @@ function encodeFrame(mode, kind, sequence, payload = Buffer.alloc(0)) {
   return Buffer.concat([header, payload]);
 }
 
-function spawnOptions() {
+function spawnOptions(mode) {
   return {
     cwd: '/',
     env: { LANG: CHILD_ENVIRONMENT.LANG, LC_ALL: CHILD_ENVIRONMENT.LC_ALL, TZ: CHILD_ENVIRONMENT.TZ },
+    ...(mode === MODE_WORKSPACE ? { gid: WORKSPACE_GID, uid: WORKSPACE_UID } : {}),
     shell: false,
     stdio: ['pipe', 'pipe', 'pipe'],
     windowsHide: true,
@@ -158,7 +162,7 @@ export function createA1SupervisorSession({
     || maxResponseBytes > MAX_PROCESS_BYTES + 4_096 || typeof spawnProcess !== 'function'
   ) throw new TypeError('A1 supervisor session configuration is invalid.');
 
-  const child = spawnProcess(SUPERVISOR_PATH, [...args], spawnOptions());
+  const child = spawnProcess(SUPERVISOR_PATH, [...args], spawnOptions(mode));
   validateChild(child);
   let inputSequence = 1n;
   let outputSequence = 1n;
@@ -441,13 +445,20 @@ function fixedProfiles(paths) {
       env: installEnvironment(paths), executable: paths.npm, network: 'registry-only',
     }),
     typecheck: Object.freeze({
-      args: ['exec', '--', 'tsc', '-b', '--pretty', 'false'], cwd: `${paths.exportRoot}/src/web`,
-      env: baseEnvironment(paths), executable: paths.npm, network: 'deny',
+      args: [
+        '/opt/appwritework/verification-a1/host/typecheck-driver.mjs',
+        `${paths.exportRoot}/src/web`,
+      ],
+      cwd: `${paths.exportRoot}/src/web`,
+      env: baseEnvironment(paths), executable: paths.node, network: 'deny',
     }),
     'vite-build': Object.freeze({
-      args: ['exec', '--', 'vite', 'build', '--outDir', paths.siteOutput, '--emptyOutDir'],
+      args: [
+        `${paths.exportRoot}/src/web/node_modules/vite/bin/vite.js`,
+        'build', '--configLoader', 'runner', '--outDir', paths.siteOutput, '--emptyOutDir',
+      ],
       cwd: `${paths.exportRoot}/src/web`, env: baseEnvironment(paths),
-      executable: paths.npm, network: 'deny',
+      executable: paths.node, network: 'deny',
     }),
     'web-npm-ci': Object.freeze({
       args: ['ci', '--ignore-scripts', '--no-audit', '--no-fund'], cwd: `${paths.exportRoot}/src/web`,
@@ -473,11 +484,12 @@ function parseGit(process, paths) {
       GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1', GIT_NO_LAZY_FETCH: '1',
       GIT_NO_REPLACE_OBJECTS: '1', GIT_OPTIONAL_LOCKS: '0', GIT_TERMINAL_PROMPT: '0',
     })
-    || !Array.isArray(fields.args) || !exactArray(fields.args.slice(0, GIT_PREFIX.length), GIT_PREFIX)
+    || !Array.isArray(fields.args)
+    || !exactArray(Reflect.apply(arraySlice, fields.args, [0, GIT_PREFIX.length]), GIT_PREFIX)
     || fields.args[GIT_PREFIX.length] !== '-c'
     || fields.args[GIT_PREFIX.length + 1] !== `safe.directory=${paths.exportRoot}`
   ) return null;
-  const tail = fields.args.slice(GIT_PREFIX.length + 2);
+  const tail = Reflect.apply(arraySlice, fields.args, [GIT_PREFIX.length + 2]);
   let opcode;
   let body;
   if (tail.length === 4 && tail[0] === 'rev-parse' && tail[1] === '--verify' && tail[2] === '--quiet' && tail[3].endsWith('^{commit}')) {

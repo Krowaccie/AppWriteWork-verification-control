@@ -49,14 +49,14 @@ jobs:
         run: |
           set -euo pipefail
           action_root='.github/actions/a1-source-artifact-launcher'
-          image='ghcr.io/krowaccie/appwritework-verification-a1@sha256:ff23ed8834201d90e4c6e67b6f4c6ed66626c2b4bea897147b407647197f15e8'
+          image='ghcr.io/krowaccie/appwritework-verification-a1@sha256:e846b592b9a745aa48d2415dbc3066d4fccddba26a16002ef8eac6d94bdb791d'
 
           cmp "$action_root/action.yml.template" "$action_root/action.yml"
           sed "s|__A1_IMMUTABLE_OCI_IMAGE_REQUIRED__|$image|" \
             "$action_root/run-a1.sh.template" | cmp - "$action_root/run-a1.sh"
           grep -Fq 'using: composite' "$action_root/action.yml"
-          test "$(grep -Fc -- '--cap-add ' "$action_root/run-a1.sh")" = '4'
-          for capability in SYS_ADMIN SYS_PTRACE SETUID SETGID; do
+          test "$(grep -Fc -- '--cap-add ' "$action_root/run-a1.sh")" = '7'
+          for capability in CHOWN DAC_OVERRIDE FOWNER SYS_ADMIN SYS_PTRACE SETUID SETGID; do
             grep -Fq -- "--cap-add $capability" "$action_root/run-a1.sh"
           done
           grep -Fq -- '--cap-drop ALL' "$action_root/run-a1.sh"

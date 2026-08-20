@@ -57,6 +57,9 @@ printf 'artifact-name=%s\nartifact-path=%s\n' "$artifact_name" "$artifact_path" 
 docker run --rm \
   --user 0 \
   --cap-drop ALL \
+  --cap-add CHOWN \
+  --cap-add DAC_OVERRIDE \
+  --cap-add FOWNER \
   --cap-add SYS_ADMIN \
   --cap-add SYS_PTRACE \
   --cap-add SETUID \

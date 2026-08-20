@@ -183,19 +183,22 @@ function buildTransports(configuration) {
     network: 'deny',
   }));
   transports.typecheck = fixedTransport(configuration, closed({
-    args: frozenArgv(['exec', '--', 'tsc', '-b', '--pretty', 'false']),
+    args: frozenArgv([
+      '/opt/appwritework/verification-a1/host/typecheck-driver.mjs',
+      webRoot,
+    ]),
     commandId: 'typecheck',
     cwd: webRoot,
     env: baseEnvironment,
-    executable: configuration.npmExecutable,
+    executable: configuration.nodeExecutable,
     network: 'deny',
   }));
   transports['vite-build'] = fixedTransport(configuration, closed({
     args: frozenArgv([
-      'exec',
-      '--',
-      'vite',
+      path.posix.join(webRoot, 'node_modules', 'vite', 'bin', 'vite.js'),
       'build',
+      '--configLoader',
+      'runner',
       '--outDir',
       configuration.workspace.siteOutput,
       '--emptyOutDir',
@@ -203,7 +206,7 @@ function buildTransports(configuration) {
     commandId: 'vite-build',
     cwd: webRoot,
     env: baseEnvironment,
-    executable: configuration.npmExecutable,
+    executable: configuration.nodeExecutable,
     network: 'deny',
   }));
   return Object.freeze(transports);
