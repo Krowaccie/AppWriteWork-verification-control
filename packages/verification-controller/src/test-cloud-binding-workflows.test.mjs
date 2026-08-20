@@ -27,3 +27,20 @@ test('hosted workflow passes the exact verified directory to the controller CLI'
   const workflow = await readFile('.github/workflows/verify-test-cloud.yml', 'utf8');
   assert.match(workflow, /--binding-directory "\$BINDING_DIRECTORY"/u);
 });
+
+test('hosted workflow validates environment-scoped controller trust after job admission', async () => {
+  for (const workflowPath of [
+    '.github/workflows/verify-test-cloud.yml',
+    'packages/verification-controller/workflows/verify-test-cloud.yml',
+  ]) {
+    const workflow = await readFile(workflowPath, 'utf8');
+    assert.match(
+      workflow,
+      /^    if: github\.repository == 'Krowaccie\/AppWriteWork-verification-control'\r?$/mu,
+    );
+    assert.doesNotMatch(workflow, /^    if:.*vars\.TRUSTED_CONTROLLER_SHA.*$/mu);
+    assert.match(workflow, /TRUSTED_CONTROLLER_SHA: \$\{\{ vars\.TRUSTED_CONTROLLER_SHA \}\}/u);
+    assert.match(workflow, /WORKFLOW_HEAD_SHA: \$\{\{ github\.sha \}\}/u);
+    assert.match(workflow, /BLOCKED CONTROLLER_REVISION_MISMATCH/u);
+  }
+});

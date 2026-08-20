@@ -14,7 +14,14 @@ test('protected readback workflow is manual, fixed-target, pinned, and secret-mi
     assert.doesNotMatch(text, /^  (?:push|pull_request|pull_request_target|schedule):/mu);
     assert.match(text, /runs-on: windows-2025/u);
     assert.match(text, /environment: appwrite-test/u);
-    assert.match(text, /github\.sha == vars\.TRUSTED_CONTROLLER_SHA/u);
+    assert.match(
+      text,
+      /^    if: github\.repository == 'Krowaccie\/AppWriteWork-verification-control'\r?$/mu,
+    );
+    assert.doesNotMatch(text, /^    if:.*vars\.TRUSTED_CONTROLLER_SHA.*$/mu);
+    assert.match(text, /TRUSTED_CONTROLLER_SHA: \$\{\{ vars\.TRUSTED_CONTROLLER_SHA \}\}/u);
+    assert.match(text, /WORKFLOW_HEAD_SHA: \$\{\{ github\.sha \}\}/u);
+    assert.match(text, /WORKFLOW_HEAD_SHA -cne \$env:TRUSTED_CONTROLLER_SHA/u);
     assert.match(text, /node-version: '24\.11\.1'/u);
     assert.match(text, /retention-days: 7/u);
     assert.match(text, /actions\/checkout@[0-9a-f]{40}/u);

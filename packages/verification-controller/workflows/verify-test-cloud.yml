@@ -29,8 +29,22 @@ jobs:
     runs-on: windows-2025
     timeout-minutes: 45
     environment: appwrite-test
-    if: github.repository == 'Krowaccie/AppWriteWork-verification-control' && github.sha == vars.TRUSTED_CONTROLLER_SHA
+    if: github.repository == 'Krowaccie/AppWriteWork-verification-control'
     steps:
+      - name: Validate immutable controller revision
+        shell: pwsh
+        env:
+          TRUSTED_CONTROLLER_SHA: ${{ vars.TRUSTED_CONTROLLER_SHA }}
+          WORKFLOW_HEAD_SHA: ${{ github.sha }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          foreach ($value in @($env:TRUSTED_CONTROLLER_SHA, $env:WORKFLOW_HEAD_SHA)) {
+            if ($value -cnotmatch '^[0-9a-f]{40}$') { throw 'BLOCKED CONTROLLER_REVISION_INVALID' }
+          }
+          if ($env:WORKFLOW_HEAD_SHA -cne $env:TRUSTED_CONTROLLER_SHA) {
+            throw 'BLOCKED CONTROLLER_REVISION_MISMATCH'
+          }
+
       - name: Checkout only the trusted controller
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
         with:
