@@ -101,3 +101,38 @@ jobs:
               fi
             fi
           done < <(find .github/workflows -maxdepth 1 -type f -name '*.yml' -print | sort)
+
+      - name: Diagnose exact A1 network policy primitives
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        run: |
+          set -euo pipefail
+          image='ghcr.io/krowaccie/appwritework-verification-a1@sha256:ff23ed8834201d90e4c6e67b6f4c6ed66626c2b4bea897147b407647197f15e8'
+          diagnostic="$RUNNER_TEMP/a1-network-policy-primitives"
+
+          cc -O2 -Wall -Wextra -std=c11 \
+            .github/diagnostics/a1-network-policy-primitives.c \
+            -o "$diagnostic"
+
+          docker run --rm \
+            --user 0 \
+            --cap-drop ALL \
+            --cap-add SYS_ADMIN \
+            --cap-add SYS_PTRACE \
+            --cap-add SETUID \
+            --cap-add SETGID \
+            --mount "type=bind,src=$diagnostic,dst=/diagnostic/a1-network-policy-primitives,readonly" \
+            --entrypoint /diagnostic/a1-network-policy-primitives \
+            "$image"
+
+          docker run --rm \
+            --user 0 \
+            --cap-drop ALL \
+            --cap-add SYS_ADMIN \
+            --cap-add SYS_PTRACE \
+            --cap-add SETUID \
+            --cap-add SETGID \
+            --entrypoint node \
+            "$image" \
+            --input-type=module \
+            -e "import { createA1NetworkPolicyProbe } from './host/network-policy-probe.mjs'; const probe=createA1NetworkPolicyProbe(); for (const policy of [Object.freeze({mode:'deny'}),Object.freeze({host:'registry.npmjs.org',mode:'registry-only',port:443,protocol:'tls'})]) { const request=Object.freeze({policy,protocolVersion:'source-artifact-posix-network-probe.v1'}); console.log(JSON.stringify(await probe.run(request))); }"
