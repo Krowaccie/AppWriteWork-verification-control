@@ -5,6 +5,7 @@ import {
   githubSourceRequest,
   runHostedTestCloudController,
   selectSafeDiagnosticCode,
+  selectSafePreflightDiagnosticCode,
 } from './test-cloud-controller.mjs';
 
 const SHA = '1'.repeat(40);
@@ -130,6 +131,25 @@ test('selects only an explicitly safe stage diagnostic', () => {
       'TEST_CLOUD_PREFLIGHT_BLOCKED',
       allowed,
     ),
+    'TEST_CLOUD_PREFLIGHT_BLOCKED',
+  );
+});
+
+test('preserves only allowlisted identity-shape diagnostics at preflight', () => {
+  assert.equal(
+    selectSafePreflightDiagnosticCode(stage(
+      'BLOCKED',
+      null,
+      'TEST_IDENTITY_USER_KEYS_INVALID',
+    )),
+    'TEST_IDENTITY_USER_KEYS_INVALID',
+  );
+  assert.equal(
+    selectSafePreflightDiagnosticCode(stage(
+      'BLOCKED',
+      null,
+      'SECRET_VALUE_DO_NOT_EXPOSE',
+    )),
     'TEST_CLOUD_PREFLIGHT_BLOCKED',
   );
 });

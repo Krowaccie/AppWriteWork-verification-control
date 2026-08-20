@@ -293,7 +293,30 @@ let abortShareValuesTransition;
 let commitShareValuesTransition;
 let finalizeShareValuesTransition;
 
-class IdentityValidationError extends Error {}
+const SAFE_IDENTITY_VALIDATION_CODES = OBJECT_FREEZE([
+  'TEST_IDENTITY_BINDINGS_INVALID',
+  'TEST_IDENTITY_HTTP_RESPONSE_INVALID',
+  'TEST_IDENTITY_LIST_CARDINALITY_INVALID',
+  'TEST_IDENTITY_SESSION_SET_INVALID',
+  'TEST_IDENTITY_USER_CORE_INVALID',
+  'TEST_IDENTITY_USER_KEYS_INVALID',
+  'TEST_IDENTITY_USER_LABELS_INVALID',
+  'TEST_IDENTITY_USER_OPTIONALS_INVALID',
+  'TEST_IDENTITY_USER_PASSWORD_INVALID',
+  'TEST_IDENTITY_USER_PREFS_INVALID',
+  'TEST_IDENTITY_USER_READBACK_MISMATCH',
+  'TEST_IDENTITY_USER_TARGETS_INVALID',
+  'TEST_IDENTITY_USER_TIMESTAMPS_INVALID',
+  'TEST_IDENTITY_USER_UNIQUENESS_INVALID',
+]);
+
+class IdentityValidationError extends Error {
+  constructor(code = 'TEST_IDENTITY_BINDINGS_INVALID') {
+    super();
+    this.code = arrayIncludes(SAFE_IDENTITY_VALIDATION_CODES, code)
+      ? code : 'TEST_IDENTITY_BINDINGS_INVALID';
+  }
+}
 class IdentityCredentialError extends Error {}
 class IdentityOperationError extends Error {}
 
@@ -305,8 +328,8 @@ function invalidCredential() {
 function forbidden() {
   throw new IdentityOperationError();
 }
-function invalid() {
-  throw new IdentityValidationError();
+function invalid(code) {
+  throw new IdentityValidationError(code);
 }
 
 function deepFreeze(value, seen) {
@@ -333,8 +356,10 @@ function pass(value) {
   return result('PASS', value);
 }
 
-function blockedBindings() {
-  return result('BLOCKED', null, 'TEST_IDENTITY_BINDINGS_INVALID',
+function blockedBindings(code = 'TEST_IDENTITY_BINDINGS_INVALID') {
+  const safeCode = arrayIncludes(SAFE_IDENTITY_VALIDATION_CODES, code)
+    ? code : 'TEST_IDENTITY_BINDINGS_INVALID';
+  return result('BLOCKED', null, safeCode,
     'Protected test-cloud identity bindings could not be qualified.');
 }
 
@@ -802,24 +827,34 @@ async function boundedResponseJson(response, recipe, runtimeQualification, loadR
     if (redirected !== false || status !== 200 || finalUrl !== recipe.finalUrl || body === null
       || OBJECT_GET_PROTOTYPE_OF(body) !== CAPTURED_READABLE_STREAM.prototype
       || headers === null || typeof headers !== 'object' || isProxy(headers)
-      || OBJECT_GET_PROTOTYPE_OF(headers) !== CAPTURED_HEADERS.prototype) invalid();
+      || OBJECT_GET_PROTOTYPE_OF(headers) !== CAPTURED_HEADERS.prototype) {
+      invalid('TEST_IDENTITY_HTTP_RESPONSE_INVALID');
+    }
     const contentType = REFLECT_APPLY(CAPTURED_HEADERS_GET, headers, ['content-type']);
     if (typeof contentType !== 'string'
-      || contentType.split(';', 1)[0].trim().toLowerCase() !== 'application/json') invalid();
+      || contentType.split(';', 1)[0].trim().toLowerCase() !== 'application/json') {
+      invalid('TEST_IDENTITY_HTTP_RESPONSE_INVALID');
+    }
     const contentLength = REFLECT_APPLY(CAPTURED_HEADERS_GET, headers, ['content-length']);
     let expectedLength;
     if (contentLength !== null) {
-      if (!/^[1-9][0-9]*$/.test(contentLength)) invalid();
+      if (!/^[1-9][0-9]*$/.test(contentLength)) {
+        invalid('TEST_IDENTITY_HTTP_RESPONSE_INVALID');
+      }
       expectedLength = Number(contentLength);
       if (!Number.isSafeInteger(expectedLength)
-        || expectedLength > recipe.responseByteLimit) invalid();
+        || expectedLength > recipe.responseByteLimit) {
+        invalid('TEST_IDENTITY_HTTP_RESPONSE_INVALID');
+      }
     }
     if (typeof CAPTURED_STREAM_GET_READER !== 'function'
       || typeof CAPTURED_READER_READ !== 'function'
       || typeof CAPTURED_READER_RELEASE !== 'function') forbidden();
     reader = REFLECT_APPLY(CAPTURED_STREAM_GET_READER, body, []);
     if (reader === null || typeof reader !== 'object' || isProxy(reader)
-      || OBJECT_GET_PROTOTYPE_OF(reader) !== CAPTURED_READER.prototype) invalid();
+      || OBJECT_GET_PROTOTYPE_OF(reader) !== CAPTURED_READER.prototype) {
+      invalid('TEST_IDENTITY_HTTP_RESPONSE_INVALID');
+    }
     const bytes = new CAPTURED_UINT8_ARRAY(recipe.responseByteLimit);
     let offset = 0;
     while (true) {
@@ -828,17 +863,23 @@ async function boundedResponseJson(response, recipe, runtimeQualification, loadR
       const part = await readPromise;
       assertCurrentLoad(loadRecord, runtimeQualification);
       const fields = exactObject(part, ['done', 'value']);
-      if (fields === null || typeof fields.done !== 'boolean') invalid();
+      if (fields === null || typeof fields.done !== 'boolean') {
+        invalid('TEST_IDENTITY_HTTP_RESPONSE_INVALID');
+      }
       if (fields.done) {
-        if (fields.value !== undefined) invalid();
+        if (fields.value !== undefined) invalid('TEST_IDENTITY_HTTP_RESPONSE_INVALID');
         break;
       }
       const chunk = responseChunkObservation(fields.value);
-      if (offset + chunk.byteLength > recipe.responseByteLimit) invalid();
+      if (offset + chunk.byteLength > recipe.responseByteLimit) {
+        invalid('TEST_IDENTITY_HTTP_RESPONSE_INVALID');
+      }
       REFLECT_APPLY(CAPTURED_UINT8_ARRAY_SET, bytes, [fields.value, offset]);
       offset += chunk.byteLength;
     }
-    if (offset < 1 || (expectedLength !== undefined && offset !== expectedLength)) invalid();
+    if (offset < 1 || (expectedLength !== undefined && offset !== expectedLength)) {
+      invalid('TEST_IDENTITY_HTTP_RESPONSE_INVALID');
+    }
     const buffer = REFLECT_APPLY(CAPTURED_TYPED_ARRAY_BUFFER, bytes, []);
     const snapshotBuffer = REFLECT_APPLY(CAPTURED_ARRAY_BUFFER_SLICE, buffer, [0, offset]);
     const snapshot = new CAPTURED_UINT8_ARRAY(snapshotBuffer);
@@ -966,89 +1007,127 @@ function validateTarget(value) {
     || typeof fields.providerId !== 'string' || utf8Length(fields.providerId) > 512
     || typeof fields.providerType !== 'string' || utf8Length(fields.providerType) > 512
     || typeof fields.identifier !== 'string' || utf8Length(fields.identifier) > 1024
-    || typeof fields.expired !== 'boolean') invalid();
+    || typeof fields.expired !== 'boolean') invalid('TEST_IDENTITY_USER_TARGETS_INVALID');
 }
 
 function validatePasswordArm(value) {
   const names = ['password', 'hash', 'hashOptions'];
   const presence = arrayMap(names, (key) => OBJECT_HAS_OWN(value, key));
-  if (arraySome(presence, Boolean) && !arrayEvery(presence, Boolean)) invalid();
+  if (arraySome(presence, Boolean) && !arrayEvery(presence, Boolean)) {
+    invalid('TEST_IDENTITY_USER_PASSWORD_INVALID');
+  }
   if (!arrayEvery(presence, Boolean)) return;
   if (typeof value.password !== 'string' || value.password.length < 1
     || utf8Length(value.password) > 8192 || /[\x00-\x1f\x7f]/.test(value.password)
     || !arrayIncludes(
-      ['argon2', 'scrypt', 'scryptMod', 'bcrypt', 'md5'], value.hash)) invalid();
+      ['argon2', 'scrypt', 'scryptMod', 'bcrypt', 'md5'], value.hash)) {
+    invalid('TEST_IDENTITY_USER_PASSWORD_INVALID');
+  }
   let keys;
   if (value.hash === 'argon2') keys = ['type', 'memoryCost', 'timeCost', 'threads'];
   else if (value.hash === 'scrypt') keys = ['type', 'costCpu', 'costMemory', 'costParallel', 'length'];
   else if (value.hash === 'scryptMod') keys = ['type', 'salt', 'saltSeparator', 'signerKey'];
   else keys = ['type'];
   const options = exactObject(value.hashOptions, keys);
-  if (options === null || options.type !== value.hash) invalid();
+  if (options === null || options.type !== value.hash) {
+    invalid('TEST_IDENTITY_USER_PASSWORD_INVALID');
+  }
   if (value.hash === 'argon2' || value.hash === 'scrypt') {
     for (const key of arraySlice(keys, 1)) {
       if (!Number.isSafeInteger(options[key]) || options[key] < 1
-        || options[key] > 2_147_483_647) invalid();
+        || options[key] > 2_147_483_647) invalid('TEST_IDENTITY_USER_PASSWORD_INVALID');
     }
   }
   if (value.hash === 'scryptMod') {
     for (const key of arraySlice(keys, 1)) {
       if (typeof options[key] !== 'string' || utf8Length(options[key]) > 8192
-        || (options[key] !== '' && !PRINTABLE_ASCII_PATTERN.test(options[key]))) invalid();
+        || (options[key] !== '' && !PRINTABLE_ASCII_PATTERN.test(options[key]))) {
+        invalid('TEST_IDENTITY_USER_PASSWORD_INVALID');
+      }
     }
   }
-  if (value.hash === 'argon2' && !/^\$argon2(i|id)\$/.test(value.password)) invalid();
-  if (value.hash === 'bcrypt' && !/^\$2[aby]\$/.test(value.password)) invalid();
-  if (value.hash === 'md5' && !/^[0-9A-Fa-f]{32}$/.test(value.password)) invalid();
+  if (value.hash === 'argon2' && !/^\$argon2(i|id)\$/.test(value.password)) {
+    invalid('TEST_IDENTITY_USER_PASSWORD_INVALID');
+  }
+  if (value.hash === 'bcrypt' && !/^\$2[aby]\$/.test(value.password)) {
+    invalid('TEST_IDENTITY_USER_PASSWORD_INVALID');
+  }
+  if (value.hash === 'md5' && !/^[0-9A-Fa-f]{32}$/.test(value.password)) {
+    invalid('TEST_IDENTITY_USER_PASSWORD_INVALID');
+  }
   if ((value.hash === 'scrypt' || value.hash === 'scryptMod')
-    && !PRINTABLE_ASCII_PATTERN.test(value.password)) invalid();
+    && !PRINTABLE_ASCII_PATTERN.test(value.password)) {
+    invalid('TEST_IDENTITY_USER_PASSWORD_INVALID');
+  }
 }
 
 function validateUser(value, role, expectedEmail) {
   if (value === null || typeof value !== 'object' || isProxy(value)
-    || OBJECT_GET_PROTOTYPE_OF(value) !== Object.prototype) invalid();
+    || OBJECT_GET_PROTOTYPE_OF(value) !== Object.prototype) {
+    invalid('TEST_IDENTITY_USER_KEYS_INVALID');
+  }
   const keys = REFLECT_OWN_KEYS(value);
   if (arraySome(keys, (key) => typeof key !== 'string'
     || (!arrayIncludes(USER_REQUIRED_KEYS, key)
-      && !arrayIncludes(USER_OPTIONAL_KEYS, key)))) invalid();
-  if (arraySome(USER_REQUIRED_KEYS, (key) => !OBJECT_HAS_OWN(value, key))) invalid();
+      && !arrayIncludes(USER_OPTIONAL_KEYS, key)))) {
+    invalid('TEST_IDENTITY_USER_KEYS_INVALID');
+  }
+  if (arraySome(USER_REQUIRED_KEYS, (key) => !OBJECT_HAS_OWN(value, key))) {
+    invalid('TEST_IDENTITY_USER_KEYS_INVALID');
+  }
   for (const key of keys) {
     const descriptor = OBJECT_GET_OWN_PROPERTY_DESCRIPTOR(value, key);
     if (descriptor === undefined || !OBJECT_HAS_OWN(descriptor, 'value')
-      || descriptor.enumerable !== true) invalid();
+      || descriptor.enumerable !== true) invalid('TEST_IDENTITY_USER_KEYS_INVALID');
     if (descriptor.value !== null && typeof descriptor.value === 'object'
-      && isProxy(descriptor.value)) invalid();
+      && isProxy(descriptor.value)) invalid('TEST_IDENTITY_USER_KEYS_INVALID');
+  }
+  if (!isExactTimestamp(value.$createdAt) || !isExactTimestamp(value.$updatedAt)
+    || !isExactTimestamp(value.registration) || !isExactTimestamp(value.passwordUpdate)
+    || !isExactTimestamp(value.accessedAt)) {
+    invalid('TEST_IDENTITY_USER_TIMESTAMPS_INVALID');
   }
   if (!ID_PATTERN.test(value.$id)
-    || !isExactTimestamp(value.$createdAt) || !isExactTimestamp(value.$updatedAt)
-    || !isExactTimestamp(value.registration) || !isExactTimestamp(value.passwordUpdate)
-    || !isExactTimestamp(value.accessedAt)
     || !validScalarString(value.name, 128, 512)
     || value.email !== expectedEmail || !isValidEmail(value.email)
     || typeof value.phone !== 'string' || utf8Length(value.phone) > 128
     || value.status !== true || typeof value.emailVerification !== 'boolean'
-    || typeof value.phoneVerification !== 'boolean' || typeof value.mfa !== 'boolean') invalid();
+    || typeof value.phoneVerification !== 'boolean' || typeof value.mfa !== 'boolean') {
+    invalid('TEST_IDENTITY_USER_CORE_INVALID');
+  }
   if (!isDenseArray(value.labels, 32) || !valuesAreUnique(value.labels)
-    || arraySome(value.labels, (label) => typeof label !== 'string')) invalid();
-  if (!isDenseArray(value.targets)) invalid();
+    || arraySome(value.labels, (label) => typeof label !== 'string')) {
+    invalid('TEST_IDENTITY_USER_LABELS_INVALID');
+  }
+  if (!isDenseArray(value.targets)) invalid('TEST_IDENTITY_USER_TARGETS_INVALID');
   const targetIdentities = createCapturedSet();
   for (const target of value.targets) {
-    if (capturedSetHas(targetIdentities, target)) invalid();
+    if (capturedSetHas(targetIdentities, target)) {
+      invalid('TEST_IDENTITY_USER_TARGETS_INVALID');
+    }
     capturedSetAdd(targetIdentities, target);
     validateTarget(target);
   }
   const prefs = exactObject(value.prefs, ['onboardingCompletedAt', 'onboardingHintsEnabled']);
   if (prefs === null || prefs.onboardingCompletedAt !== FIXTURE_PREFERENCES.onboardingCompletedAt
     || prefs.onboardingHintsEnabled !== false
-    || sha256(canonicalJson(value.prefs)) !== sha256(canonicalJson(FIXTURE_PREFERENCES))) invalid();
+    || sha256(canonicalJson(value.prefs)) !== sha256(canonicalJson(FIXTURE_PREFERENCES))) {
+    invalid('TEST_IDENTITY_USER_PREFS_INVALID');
+  }
   validatePasswordArm(value);
   if (OBJECT_HAS_OWN(value, 'emailCanonical')
-    && typeof value.emailCanonical !== 'string') invalid();
+    && typeof value.emailCanonical !== 'string') invalid('TEST_IDENTITY_USER_OPTIONALS_INVALID');
   if (OBJECT_HAS_OWN(value, 'impersonatorUserId')
-    && typeof value.impersonatorUserId !== 'string') invalid();
-  if (OBJECT_HAS_OWN(value, 'impersonator') && typeof value.impersonator !== 'boolean') invalid();
+    && typeof value.impersonatorUserId !== 'string') {
+    invalid('TEST_IDENTITY_USER_OPTIONALS_INVALID');
+  }
+  if (OBJECT_HAS_OWN(value, 'impersonator') && typeof value.impersonator !== 'boolean') {
+    invalid('TEST_IDENTITY_USER_OPTIONALS_INVALID');
+  }
   for (const key of ['emailIsFree', 'emailIsDisposable', 'emailIsCorporate', 'emailIsCanonical']) {
-    if (OBJECT_HAS_OWN(value, key) && value[key] !== null && typeof value[key] !== 'boolean') invalid();
+    if (OBJECT_HAS_OWN(value, key) && value[key] !== null && typeof value[key] !== 'boolean') {
+      invalid('TEST_IDENTITY_USER_OPTIONALS_INVALID');
+    }
   }
   return OBJECT_FREEZE({
     role,
@@ -1150,7 +1229,9 @@ export async function loadQualifiedTestCloudIdentityBindings(args) {
       );
       const listFields = exactObject(list, ['total', 'users']);
       if (listFields === null || listFields.total !== 1
-        || !isDenseArray(listFields.users, 1) || listFields.users.length !== 1) invalid();
+        || !isDenseArray(listFields.users, 1) || listFields.users.length !== 1) {
+        invalid('TEST_IDENTITY_LIST_CARDINALITY_INVALID');
+      }
       const listUser = listFields.users[0];
       const qualified = validateUser(listUser, role, email);
       const getRecipe = materializeRoleRecipe(
@@ -1164,7 +1245,9 @@ export async function loadQualifiedTestCloudIdentityBindings(args) {
         loadRecord,
       );
       validateUser(getUser, role, email);
-      if (canonicalJson(listUser) !== canonicalJson(getUser)) invalid();
+      if (canonicalJson(listUser) !== canonicalJson(getUser)) {
+        invalid('TEST_IDENTITY_USER_READBACK_MISMATCH');
+      }
       const sessionRecipe = materializeRoleRecipe(
         requestPlan.routeTemplates[index][1],
         qualified.userId,
@@ -1178,11 +1261,15 @@ export async function loadQualifiedTestCloudIdentityBindings(args) {
       const sessionFields = exactObject(sessions, ['total', 'sessions']);
       if (sessionFields === null || sessionFields.total !== 0
         || !isDenseArray(sessionFields.sessions, 0)
-        || sessionFields.sessions.length !== 0) invalid();
+        || sessionFields.sessions.length !== 0) {
+        invalid('TEST_IDENTITY_SESSION_SET_INVALID');
+      }
       roles.push(roleBinding(role, qualified));
     }
     if (!valuesAreUnique(arrayMap(roles, (role) => role.userId))
-      || !valuesAreUnique(arrayMap(roles, (role) => role.email))) invalid();
+      || !valuesAreUnique(arrayMap(roles, (role) => role.email))) {
+      invalid('TEST_IDENTITY_USER_UNIQUENESS_INVALID');
+    }
     const withoutSelf = {
       schemaVersion: 'test-cloud.identity-bindings.v1',
       responseFormat: RESPONSE_FORMAT,
@@ -1214,7 +1301,8 @@ export async function loadQualifiedTestCloudIdentityBindings(args) {
   } catch (error) {
     blockLoad(loadRecord);
     if (error instanceof IdentityCredentialError) return blockedCredential();
-    return error instanceof IdentityValidationError ? blockedBindings() : blockedOperation();
+    return error instanceof IdentityValidationError
+      ? blockedBindings(error.code) : blockedOperation();
   } finally {
     credentialHeaderSlot.value = undefined;
     credentialHeaderValue = undefined;

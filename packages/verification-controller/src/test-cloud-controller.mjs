@@ -58,6 +58,19 @@ const SAFE_SOURCE_READER_DIAGNOSTIC_CODES = new Set([
   'PRODUCTION_TEST_ONLY_SET_MISMATCH',
 ]);
 const SAFE_PREFLIGHT_DIAGNOSTIC_CODES = new Set([
+  'TEST_IDENTITY_HTTP_RESPONSE_INVALID',
+  'TEST_IDENTITY_LIST_CARDINALITY_INVALID',
+  'TEST_IDENTITY_SESSION_SET_INVALID',
+  'TEST_IDENTITY_USER_CORE_INVALID',
+  'TEST_IDENTITY_USER_KEYS_INVALID',
+  'TEST_IDENTITY_USER_LABELS_INVALID',
+  'TEST_IDENTITY_USER_OPTIONALS_INVALID',
+  'TEST_IDENTITY_USER_PASSWORD_INVALID',
+  'TEST_IDENTITY_USER_PREFS_INVALID',
+  'TEST_IDENTITY_USER_READBACK_MISMATCH',
+  'TEST_IDENTITY_USER_TARGETS_INVALID',
+  'TEST_IDENTITY_USER_TIMESTAMPS_INVALID',
+  'TEST_IDENTITY_USER_UNIQUENESS_INVALID',
   'TEST_CLOUD_CLIENTS_INVALID',
   'TEST_CLOUD_CONTEXT_INVALID',
   'TEST_CLOUD_IDENTITY_BINDINGS_INVALID',
@@ -525,6 +538,13 @@ export function selectSafeDiagnosticCode(outcome, fallback, safeDiagnosticCodes)
   return safeDiagnosticCodes instanceof Set && safeDiagnosticCodes.has(outcomeCode)
     ? outcomeCode
     : fallback;
+}
+
+export function selectSafePreflightDiagnosticCode(
+  outcome,
+  fallback = 'TEST_CLOUD_PREFLIGHT_BLOCKED',
+) {
+  return selectSafeDiagnosticCode(outcome, fallback, SAFE_PREFLIGHT_DIAGNOSTIC_CODES);
 }
 
 async function hostedStage(method, request, code, safeDiagnosticCodes = null) {
@@ -1231,7 +1251,15 @@ export function createProductionHostedDependencies(args) {
         },
       });
       if (identityBindings.status !== 'PASS') {
-        return blockedFrom(identityBindings, 'TEST_CLOUD_IDENTITY_BINDINGS_INVALID');
+        return result(
+          'BLOCKED',
+          null,
+          selectSafePreflightDiagnosticCode(
+            identityBindings,
+            'TEST_CLOUD_IDENTITY_BINDINGS_INVALID',
+          ),
+          retryable(identityBindings),
+        );
       }
       const setupReadback = provider.loadQualifiedTestCloudSetupReadback(Object.freeze({
         runtimeQualification: stage.runtime.runtimeQualification,
