@@ -86,7 +86,7 @@ export async function buildControllerBundlePublication(args, validationContext) 
       || git === null
       || Object.isFrozen(input.git) !== true
       || typeof git.readExactSource !== 'function'
-    ) return blocked('CONTROLLER_BUNDLE_PUBLISHER_INVALID');
+    ) return blocked('CONTROLLER_BUNDLE_PUBLISHER_INPUT_INVALID');
 
     const qualificationValidation = validateControllerRunnerQualification({
       qualification: input.qualification,
@@ -104,7 +104,7 @@ export async function buildControllerBundlePublication(args, validationContext) 
       },
     });
     if (qualificationValidation.status !== 'PASS') {
-      return blocked('CONTROLLER_BUNDLE_PUBLISHER_INVALID');
+      return blocked('CONTROLLER_BUNDLE_PUBLISHER_QUALIFICATION_INVALID');
     }
 
     const trust = produceControllerTrustMaterials({
@@ -114,14 +114,14 @@ export async function buildControllerBundlePublication(args, validationContext) 
       evaluatorClosure: input.evaluatorClosure,
       primaryExecutionRetentionMaxSeconds: input.primaryExecutionRetentionMaxSeconds,
     }, context);
-    if (trust.status !== 'PASS') return blocked('CONTROLLER_BUNDLE_PUBLISHER_INVALID');
+    if (trust.status !== 'PASS') return blocked('CONTROLLER_BUNDLE_PUBLISHER_TRUST_INVALID');
     const source = await readControllerSourceAtExactSha({
       controllerRepository: CONTROLLER_REPOSITORY,
       controllerRevision: input.controllerRevision,
       proposal: input.proposal,
       git: input.git,
     });
-    if (source.status !== 'PASS') return blocked('CONTROLLER_BUNDLE_PUBLISHER_INVALID');
+    if (source.status !== 'PASS') return blocked('CONTROLLER_BUNDLE_PUBLISHER_SOURCE_INVALID');
     const trustBytes = Object.fromEntries(Object.entries(trust.value.materials).map(([kind, artifact]) => [kind, artifact.bytes]));
     const manifestResult = materializeControllerBundleProposal({
       proposal: input.proposal,
@@ -131,7 +131,9 @@ export async function buildControllerBundlePublication(args, validationContext) 
       trustMaterials: trustBytes,
       provenance: trust.value.provenance.bytes,
     });
-    if (manifestResult.status !== 'PASS') return blocked('CONTROLLER_BUNDLE_PUBLISHER_INVALID');
+    if (manifestResult.status !== 'PASS') {
+      return blocked('CONTROLLER_BUNDLE_PUBLISHER_MANIFEST_INVALID');
+    }
 
     const members = [
       member(MANIFEST_PATH, '100644', canonicalBytes(manifestResult.value)),
@@ -223,9 +225,10 @@ function cliArguments(argv) {
 }
 
 export async function runControllerBundlePublisherCli(argv = process.argv.slice(2), environment = process.env) {
+  let stage = 'INPUT';
   try {
     const parsed = cliArguments(argv);
-    if (parsed === null) return blocked('CONTROLLER_BUNDLE_PUBLISHER_CLI_INVALID');
+    if (parsed === null) return blocked('CONTROLLER_BUNDLE_PUBLISHER_CLI_INPUT_INVALID');
     const repositoryRoot = await realpath(path.resolve(parsed['--repository-root']));
     const input = JSON.parse(await readFile(path.resolve(parsed['--input']), 'utf8'));
     const descriptor = exactObject(input, [
@@ -241,8 +244,9 @@ export async function runControllerBundlePublisherCli(argv = process.argv.slice(
       || descriptor.workflowRunId !== descriptor.qualification?.workflowRunId
       || descriptor.workflowHeadSha !== descriptor.qualification?.workflowHeadSha
       || descriptor.workflowHeadSha !== descriptor.controllerRevision
-    ) return blocked('CONTROLLER_BUNDLE_PUBLISHER_CLI_INVALID');
+    ) return blocked('CONTROLLER_BUNDLE_PUBLISHER_CLI_INPUT_INVALID');
 
+    stage = 'QUALIFICATION';
     const qualificationValidation = validateControllerRunnerQualification({
       qualification: descriptor.qualification,
       qualificationDigest: descriptor.qualificationDigest,
@@ -280,10 +284,12 @@ export async function runControllerBundlePublisherCli(argv = process.argv.slice(
       || reproducedQualification?.status !== 'PASS'
       || reproducedQualification.value.digest !== descriptor.qualificationDigest
       || canonicalJson(reproducedQualification.value.qualification) !== canonicalJson(descriptor.qualification)
-    ) return blocked('CONTROLLER_BUNDLE_PUBLISHER_CLI_INVALID');
+    ) return blocked('CONTROLLER_BUNDLE_PUBLISHER_CLI_QUALIFICATION_INVALID');
 
+    stage = 'GIT_ADAPTER';
     const git = createProductionExactShaGitAdapter({ repositoryRoot });
     const proposalPath = 'packages/verification-controller/controller-bundle.proposal.json';
+    stage = 'PROPOSAL_SOURCE';
     const proposalBlob = await git.readExactSource({
       controllerRepository: CONTROLLER_REPOSITORY,
       controllerRevision: descriptor.controllerRevision,
@@ -299,11 +305,13 @@ export async function runControllerBundlePublisherCli(argv = process.argv.slice(
       'scripts/verification/test-cloud-provider-contract.mjs',
       'scripts/verification/test-cloud-setup-attestation.mjs',
     ];
+    stage = 'EVALUATOR_SOURCE';
     const evaluatorSource = await git.readExactSource({
       controllerRepository: CONTROLLER_REPOSITORY,
       controllerRevision: descriptor.controllerRevision,
       paths: evaluatorPaths,
     });
+    stage = 'PUBLICATION';
     const publication = await buildControllerBundlePublication({
       proposal,
       sourceRepositoryRevision: descriptor.sourceRepositoryRevision,
@@ -319,23 +327,28 @@ export async function runControllerBundlePublisherCli(argv = process.argv.slice(
       },
       git,
     }, { clock: SYSTEM_CLOCK });
-    if (publication.status !== 'PASS') return blocked('CONTROLLER_BUNDLE_PUBLISHER_CLI_INVALID');
+    if (publication.status !== 'PASS') return publication;
+    stage = 'WRITE';
     const written = await writeControllerBundlePublicationDirectory({
       publication: publication.value,
       outputRoot: path.resolve(parsed['--output']),
     });
     return written.status === 'PASS'
       ? result('PASS', publication.value.preUploadEvidence)
-      : blocked('CONTROLLER_BUNDLE_PUBLISHER_CLI_INVALID');
+      : written;
   } catch {
-    return blocked('CONTROLLER_BUNDLE_PUBLISHER_CLI_INVALID');
+    return blocked(`CONTROLLER_BUNDLE_PUBLISHER_CLI_${stage}_INVALID`);
   }
 }
 
 if (process.argv[1] !== undefined && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const cliResult = await runControllerBundlePublisherCli();
   if (cliResult.status !== 'PASS') {
-    process.stderr.write('BLOCKED CONTROLLER_BUNDLE_PUBLISHER_CLI_INVALID\n');
+    const code = cliResult.diagnostics[0]?.code;
+    process.stderr.write(`BLOCKED ${
+      /^CONTROLLER_BUNDLE_[A-Z_]+_INVALID$/u.test(code ?? '')
+        ? code : 'CONTROLLER_BUNDLE_PUBLISHER_CLI_INVALID'
+    }\n`);
     process.exitCode = 1;
   } else {
     process.stdout.write(`${canonicalJson(cliResult.value)}\n`);
