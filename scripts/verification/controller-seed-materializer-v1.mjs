@@ -20,9 +20,9 @@ const SOURCE_SET_DESCRIPTOR_SCHEMA_PATH = 'dev/verification/schemas/controller-s
 const PROPOSAL_PATH = 'packages/verification-controller/controller-bundle.proposal.json';
 const OVERLAY_ROOT = 'packages/verification-controller/controller-repository-seed';
 const A1 = Object.freeze({
-  descriptorDigest: 'sha256:37ca56c9fd1bd638e1ee714578c6aab064312167e380bc4725faaa290f8a29c0',
-  sourceTreeDigest: 'sha256:d0bdab8c6831f620272bafd6f1b5982e0236b1ef43b0e7e58758022836973161',
-  binaryDigest: 'sha256:56bd8861336accf993cab6ff9da65659b9df832b03b993ef0deb342b4a89cfa5',
+  descriptorDigest: 'sha256:3b4a84e744f3a02c6d3e37c740fa2c10c471e9d12af6f8d6b03eac033951b9ce',
+  sourceTreeDigest: 'sha256:a846decd8fc7d6b739cabe9467c5d6fa59348eddb60b42b21f106de73afbedd5',
+  binaryDigest: 'sha256:87a176269ec89c05fd08f5e979dc66c1502a7d42b9d23e82421acc9e3b7fe3c0',
 });
 const WORKFLOWS = Object.freeze([
   {

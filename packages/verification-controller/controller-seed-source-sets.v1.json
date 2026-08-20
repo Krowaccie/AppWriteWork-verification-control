@@ -6,6 +6,7 @@
       "sourceRoot": "packages/verification-controller/controller-repository-seed",
       "files": [
         ".github/actions/a1-source-artifact-launcher/action.yml.template",
+        ".github/actions/a1-source-artifact-launcher/run-a1.sh.template",
         "a1-oci/Dockerfile",
         "a1-oci/base-image.lock.v1.json",
         "a1-oci/closure-manifest.v1.json",

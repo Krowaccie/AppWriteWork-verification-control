@@ -1,11 +1,14 @@
 name: Trusted source artifact launcher
-description: Inert template; Phase B1 must bind the reviewed immutable OCI image.
+description: Composite launcher for the reviewed immutable A1 OCI image.
 inputs:
   request:
     description: Canonical verification-a1-hosted-request.v1 JSON.
     required: true
 runs:
-  using: docker
-  image: 'docker://ghcr.io/krowaccie/appwritework-verification-a1@sha256:7b8f7c9cb802f0f6aa010084a50f56583af519acbb59990de7c8d5406943b776'
-  args:
-    - '${{ inputs.request }}'
+  using: composite
+  steps:
+    - name: Run trusted A1 OCI launcher
+      shell: bash
+      env:
+        A1_HOSTED_REQUEST: ${{ inputs.request }}
+      run: bash "$GITHUB_ACTION_PATH/run-a1.sh"
