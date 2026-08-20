@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { runHostedTestCloudController } from './test-cloud-controller.mjs';
+import {
+  githubSourceRequest,
+  runHostedTestCloudController,
+} from './test-cloud-controller.mjs';
 
 const SHA = '1'.repeat(40);
 
@@ -60,4 +63,46 @@ test('collapses an unknown source-reader diagnostic', async () => {
   const outcome = await run('SECRET_VALUE_DO_NOT_EXPOSE');
   assert.equal(outcome.status, 'BLOCKED');
   assert.equal(outcome.diagnostics[0].code, 'SOURCE_ARTIFACT_INVALID');
+});
+
+test('downloads a bounded source artifact through one trusted redirect', async () => {
+  const archive = Uint8Array.from({ length: 24 }, (_, index) => index);
+  const redirectUrl =
+    'https://productionresultssa2.blob.core.windows.net/actions-results/run/artifact.zip?sig=test';
+  const calls = [];
+  const outcome = await githubSourceRequest(async (url, options) => {
+    calls.push([url, options]);
+    if (calls.length === 1) {
+      return new Response(null, { status: 302, headers: { location: redirectUrl } });
+    }
+    return new Response(archive, {
+      status: 200,
+      headers: { 'content-length': String(archive.byteLength) },
+    });
+  }, '/repos/Krowaccie/AppWriteWork/actions/artifacts/9420071362/zip', {
+    method: 'GET',
+    headers: { Authorization: 'Bearer source-token' },
+    redirect: 'error',
+    expectedBytes: archive.byteLength,
+  });
+  assert.deepEqual(outcome.bytes, archive);
+  assert.equal(calls[0][1].redirect, 'manual');
+  assert.equal(calls[1][0], redirectUrl);
+  assert.equal(calls[1][1].redirect, 'error');
+  assert.equal(Object.hasOwn(calls[1][1].headers, 'Authorization'), false);
+});
+
+test('rejects a source artifact redirect outside trusted storage', async () => {
+  await assert.rejects(
+    githubSourceRequest(async () => new Response(null, {
+      status: 302,
+      headers: { location: 'https://example.invalid/artifact.zip?sig=test' },
+    }), '/repos/Krowaccie/AppWriteWork/actions/artifacts/9420071362/zip', {
+      method: 'GET',
+      headers: { Authorization: 'Bearer source-token' },
+      redirect: 'error',
+      expectedBytes: 24,
+    }),
+    (error) => error?.code === 'SOURCE_ARTIFACT_DOWNLOAD_FAILED',
+  );
 });

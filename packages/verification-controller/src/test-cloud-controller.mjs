@@ -565,9 +565,65 @@ function sourceReaderConfiguration(environment) {
   return Object.freeze({ appId, installationId, sourceRepositoryId, sourceWorkflowId });
 }
 
-async function githubSourceRequest(fetchImpl, requestPath, options = {}) {
+function sourceArtifactDownloadFailure() {
+  const error = new Error('The source artifact download failed its closed transport contract.');
+  error.code = 'SOURCE_ARTIFACT_DOWNLOAD_FAILED';
+  return error;
+}
+
+function trustedArtifactRedirect(value) {
+  if (typeof value !== 'string' || value.length < 1 || value.length > 8192) return null;
+  try {
+    const url = new URL(value);
+    if (
+      url.protocol !== 'https:'
+      || url.username !== ''
+      || url.password !== ''
+      || url.port !== ''
+      || url.hash !== ''
+      || url.search.length < 2
+      || !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.blob\.core\.windows\.net$/u
+        .test(url.hostname)
+    ) return null;
+    return url.href;
+  } catch {
+    return null;
+  }
+}
+
+export async function githubSourceRequest(fetchImpl, requestPath, options = {}) {
   if (typeof fetchImpl !== 'function' || typeof requestPath !== 'string') {
     throw new TypeError('GitHub source request is invalid.');
+  }
+  if (Number.isSafeInteger(options.expectedBytes)) {
+    try {
+      let response = await fetchImpl(`https://api.github.com${requestPath}`, {
+        method: options.method,
+        headers: options.headers,
+        body: options.body,
+        redirect: 'manual',
+      });
+      if (response?.status === 302) {
+        const location = typeof response.headers?.get === 'function'
+          ? response.headers.get('location')
+          : null;
+        const redirectUrl = trustedArtifactRedirect(location);
+        if (redirectUrl === null) throw sourceArtifactDownloadFailure();
+        response = await fetchImpl(redirectUrl, {
+          method: 'GET',
+          headers: { Accept: 'application/octet-stream' },
+          redirect: 'error',
+        });
+      }
+      const { readBoundedSourceArtifactArchive } = await loadSourceArtifactReader();
+      return Object.freeze({
+        status: response.status,
+        bytes: await readBoundedSourceArtifactArchive(response, options.expectedBytes),
+      });
+    } catch (error) {
+      if (error?.code === 'SOURCE_ARTIFACT_DOWNLOAD_FAILED') throw error;
+      throw sourceArtifactDownloadFailure();
+    }
   }
   const response = await fetchImpl(`https://api.github.com${requestPath}`, {
     method: options.method,
@@ -575,13 +631,6 @@ async function githubSourceRequest(fetchImpl, requestPath, options = {}) {
     body: options.body,
     redirect: options.redirect ?? 'error',
   });
-  if (Number.isSafeInteger(options.expectedBytes)) {
-    const { readBoundedSourceArtifactArchive } = await loadSourceArtifactReader();
-    return Object.freeze({
-      status: response.status,
-      bytes: await readBoundedSourceArtifactArchive(response, options.expectedBytes),
-    });
-  }
   if (response.status === 204) return Object.freeze({ status: 204, body: null });
   const bytes = new Uint8Array(await response.arrayBuffer());
   if (bytes.byteLength < 2 || bytes.byteLength > MAX_GITHUB_JSON_BYTES) {
