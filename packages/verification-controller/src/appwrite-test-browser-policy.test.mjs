@@ -3,7 +3,10 @@ import { createHash } from 'node:crypto';
 import test from 'node:test';
 import { gzipSync } from 'node:zlib';
 
-import { canonicalJson } from '../../../scripts/verification/canonical-json.mjs';
+import {
+  canonicalJson,
+  digestFileSet,
+} from '../../../scripts/verification/canonical-json.mjs';
 import inventory from '../../../dev/verification/environments/test-cloud.inventory.v1.json' with {
   type: 'json',
 };
@@ -93,6 +96,14 @@ function sourceArtifactSet() {
     'catalog/catalog-bundle.json', 'templates/registry.json', 'templates/entitlements.json',
   ]) members.set(name, payload(name));
   members.set('.vite/manifest.json', Buffer.from(JSON.stringify(manifest)));
+  members.set('build-identity.json', payload('build-identity.json'));
+  const canonicalContentDigest = digestFileSet([...members]
+    .filter(([name]) => name !== 'build-identity.json')
+    .map(([name, bytes]) => ({
+      path: name,
+      mode: '100644',
+      contentDigest: digest(bytes),
+    })));
   const tar = Buffer.concat([
     ...[...members.entries()]
       .sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0)
@@ -103,7 +114,7 @@ function sourceArtifactSet() {
   return {
     releaseEligibleArtifacts: [{
       bytes: Uint8Array.from(siteBytes),
-      canonicalContentDigest: digest(tar),
+      canonicalContentDigest,
       kind: 'site',
       logicalTarget: 'web',
       relativePath: 'site/site.tar.gz',
