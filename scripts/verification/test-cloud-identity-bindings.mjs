@@ -684,6 +684,7 @@ function nonSecretHeaders(projectId) {
   if (typeof projectId !== 'string' || !ID_PATTERN.test(projectId)) invalid();
   return deepFreeze({
     Accept: 'application/json',
+    'Accept-Encoding': 'identity',
     'X-Appwrite-Project': projectId,
     'X-Appwrite-Response-Format': RESPONSE_FORMAT,
   });
