@@ -217,7 +217,7 @@ test('preserves an allowlisted binding-stage failure code without serializing se
     status: 'BLOCKED',
     value: null,
     diagnostics: [{
-      code: 'APPWRITE_TEST_HOSTED_READBACK_INVALID',
+      code: 'APPWRITE_TEST_BINDING_RUNNER_VARIABLES_INVALID',
       safeMessage: 'safe stage message',
       secretValue: 'secret-value-sentinel',
     }],
@@ -230,7 +230,10 @@ test('preserves an allowlisted binding-stage failure code without serializing se
   });
 
   assert.equal(result.status, 'BLOCKED');
-  assert.equal(result.diagnostics[0].code, 'APPWRITE_TEST_HOSTED_READBACK_INVALID');
+  assert.equal(
+    result.diagnostics[0].code,
+    'APPWRITE_TEST_BINDING_RUNNER_VARIABLES_INVALID',
+  );
   assert.equal(JSON.stringify(result).includes('secret-value-sentinel'), false);
 });
 

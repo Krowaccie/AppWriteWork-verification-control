@@ -300,4 +300,8 @@ test('rejects a runner-variable projection that is not identity-bound', () => {
     controllerArtifact: null,
   });
   assert.equal(result.status, 'BLOCKED');
+  assert.equal(
+    result.diagnostics[0].code,
+    'APPWRITE_TEST_BINDING_RUNNER_VARIABLES_INVALID',
+  );
 });
