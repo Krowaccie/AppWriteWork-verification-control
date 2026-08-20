@@ -2,7 +2,6 @@ import { Buffer } from 'node:buffer';
 import { createHash } from 'node:crypto';
 import { readFile as READ_FILE } from 'node:fs/promises';
 import { URL as NodeURL, fileURLToPath } from 'node:url';
-import { env as PROCESS_ENV } from 'node:process';
 import { TextDecoder } from 'node:util';
 import {
   isAsyncFunction,
@@ -4152,7 +4151,14 @@ function safePureValidator(validateOperation, args) {
 }
 
 const PROVIDER_LOAD_KEYS = OBJECT_FREEZE(['runtimeQualification', 'context']);
-const SETUP_LOAD_KEYS = OBJECT_FREEZE(['runtimeQualification', 'context', 'providerContract', 'identityBindings']);
+const SETUP_LOAD_KEYS = OBJECT_FREEZE([
+  'runtimeQualification',
+  'context',
+  'providerContract',
+  'identityBindings',
+  'setupReadbackJson',
+  'setupReadbackDigest',
+]);
 const PROVIDER_EXPECTED_KEYS = OBJECT_FREEZE(['runtimeQualification', 'expectedDigest', 'expectedEnvironmentDigest']);
 const SETUP_EXPECTED_KEYS = OBJECT_FREEZE(['runtimeQualification', 'expectedContractDigest', 'expectedDigest', 'expectedEnvironmentDigest', 'expectedIdentityBindingsDigest', 'expectedRunnerVariableExpectationDigest']);
 const PROVIDER_AUTH_KEYS = OBJECT_FREEZE(['runtimeQualification', 'context', 'providerContractQualification', 'expectedEnvironmentDigest', 'expectedProviderContractDigest']);
@@ -4249,11 +4255,10 @@ function identityQualificationMatches(args) {
     return descriptor !== undefined && REFLECT_HAS(descriptor, 'value') === true && typeof descriptor.value === 'function' && REFLECT_APPLY(descriptor.value, canonicalIdentityBindingsNamespace, [args]) === true;
   } catch { return false; }
 }
-function readProtectedSetupValue(name) {
-  const descriptor = OBJECT_GET_OWN_PROPERTY_DESCRIPTOR(PROCESS_ENV, name);
-  if (descriptor === undefined || REFLECT_HAS(descriptor, 'value') !== true || typeof descriptor.value !== 'string') invalid();
-  assertScalarString(descriptor.value);
-  return descriptor.value;
+function readProtectedSetupValue(value) {
+  if (typeof value !== 'string') invalid();
+  assertScalarString(value);
+  return value;
 }
 export async function loadQualifiedTestCloudProviderContract(args) {
   if (providerLoadRecord.state !== 'EMPTY') return loadBlocked('provider');
@@ -4290,6 +4295,8 @@ export function loadQualifiedTestCloudSetupReadback(args) {
     }
     const runtimeQualification = OBJECT_GET_OWN_PROPERTY_DESCRIPTOR(args, 'runtimeQualification').value;
     const context = OBJECT_GET_OWN_PROPERTY_DESCRIPTOR(args, 'context').value;
+    const setupReadbackJson = OBJECT_GET_OWN_PROPERTY_DESCRIPTOR(args, 'setupReadbackJson').value;
+    const setupReadbackDigest = OBJECT_GET_OWN_PROPERTY_DESCRIPTOR(args, 'setupReadbackDigest').value;
     const providerPass = readClosedPass(OBJECT_GET_OWN_PROPERTY_DESCRIPTOR(args, 'providerContract').value, ['qualification', 'providerContractDigest']);
     const identityPass = readClosedPass(OBJECT_GET_OWN_PROPERTY_DESCRIPTOR(args, 'identityBindings').value, ['qualification', 'identityBindingsDigest']);
     if (providerPass === null || identityPass === null || !exactDigestString(providerPass.value.providerContractDigest) || !exactDigestString(identityPass.value.identityBindingsDigest) || SETUP_TUPLES.get(context) !== undefined) {
@@ -4319,8 +4326,8 @@ export function loadQualifiedTestCloudSetupReadback(args) {
     if (!OBJECT_IS(setupLoadRecord, reading) || !OBJECT_IS(SETUP_TUPLES.get(context), reading) || !activeQualificationIs(runtimeQualification)) {
       return loadBlocked('setup', 'TEST_CLOUD_SETUP_RUNTIME_STATE_INVALID');
     }
-    const setupJson = readProtectedSetupValue('TEST_CLOUD_SETUP_READBACK_JSON');
-    const expectedDigest = readProtectedSetupValue('TEST_CLOUD_SETUP_READBACK_DIGEST');
+    const setupJson = readProtectedSetupValue(setupReadbackJson);
+    const expectedDigest = readProtectedSetupValue(setupReadbackDigest);
     if (!exactDigestString(expectedDigest)) {
       return loadBlocked('setup', 'TEST_CLOUD_SETUP_ENVIRONMENT_BINDING_INVALID');
     }

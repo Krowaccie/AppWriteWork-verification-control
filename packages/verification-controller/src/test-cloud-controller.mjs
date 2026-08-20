@@ -1274,6 +1274,14 @@ export function createProductionHostedDependencies(args) {
         context,
         providerContract,
         identityBindings,
+        setupReadbackJson: readEnvironmentValue(
+          environment,
+          'TEST_CLOUD_SETUP_READBACK_JSON',
+        ),
+        setupReadbackDigest: readEnvironmentValue(
+          environment,
+          'TEST_CLOUD_SETUP_READBACK_DIGEST',
+        ),
       }));
       if (setupReadback.status !== 'PASS') {
         return result(
