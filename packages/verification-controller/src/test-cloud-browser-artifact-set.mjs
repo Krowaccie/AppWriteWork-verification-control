@@ -338,6 +338,52 @@ function registration(){if(regObject)return regObject;const value=O.create(null)
 function protectedMatches(origin,row){if(!exact(row,PROTECTED_KEYS))return false;let url;try{url=new URL(row.finalUrl);}catch{return false;}if(url.protocol!=='https:'||url.username!==''||url.password!==''||url.search!==''||url.hash!==''||url.pathname!==`/${origin.memberPath}`)return false;for(const key of PROTECTED_KEYS)if(key!=='finalUrl'&&canonical(row[key])!==canonical(origin[key]))return false;return true;}
 function authenticateCurrent(record,scenario,operation,policyOrdinal,occurrenceIndex){if(!active(record.runtimeQualification)||call(authProvider,{runtimeQualification:record.runtimeQualification,context:record.context,providerContractQualification:record.provider,expectedEnvironmentDigest:record.environmentDigest,expectedProviderContractDigest:record.providerDigest})!==true)return false;const result=call(policyReader,{runtimeQualification:record.runtimeQualification,context:record.context,providerContractQualification:record.provider,providerSetupReadbackQualification:record.setup});const policy=result?.browserRequestPolicy;if(!exact(policy,['schemaVersion','timeoutMilliseconds','rows','digest'])||policy.schemaVersion!=='test-cloud.browser-request-policy.v1'||policy.timeoutMilliseconds!==5000||!Array.isArray(policy.rows)||policy.rows.length<25||policy.digest!==record.policyDigest)return false;const without={schemaVersion:policy.schemaVersion,timeoutMilliseconds:policy.timeoutMilliseconds,rows:policy.rows};if(sha(canonical(without),record)!==record.policyDigest)return false;const rows=policy.rows.slice(0,25);if(sha(canonical(rows),record)!==record.protectedDigest||rows.some((row,index)=>!protectedMatches(record.rows[index],row)))return false;return call(authScenario,{runtimeQualification:record.runtimeQualification,context:record.context,browserScenarioQualification:scenario,operation,policyOrdinal,occurrenceIndex})===true;}
 
+export async function projectTestCloudBrowserArtifactPolicyRows(args) {
+  const record = {
+    abortRequested: false,
+    streamCleanupProven: true,
+    temporaryChunks: [],
+    records: [],
+    hashScratch: [],
+  };
+  try {
+    if (!exact(args, ['sourceArtifactSet'])) return BLOCKED;
+    const site = siteFrom(args.sourceArtifactSet, record);
+    const inflated = await gunzip(site.bytes, record);
+    if (
+      !DIGEST.test(site.canonicalContentDigest)
+      || sha(inflated, record) !== site.canonicalContentDigest
+    ) return BLOCKED;
+    const members = parseTar(inflated);
+    record.members = members;
+    const built = buildRows(members, viteRoles(readManifest(members)), record);
+    const rows = deepFreeze(built.rows.map((row) => deepFreeze({
+      ...row,
+      requestHeaderBindings: row.requestHeaderBindings.map((entry) => ({ ...entry })),
+      requestOpaqueHeaderRules: row.requestOpaqueHeaderRules.map((entry) => ({ ...entry })),
+      responseHeaderBindings: row.responseHeaderBindings.map((entry) => ({ ...entry })),
+      responseOpaqueHeaderRules: row.responseOpaqueHeaderRules.map((entry) => ({ ...entry })),
+    })));
+    const originFreeArtifactPolicyDigest = sha(canonical(rows), record);
+    const browserArtifactSetDigest = sha(canonical(rows.map((row) => ({
+      ordinal: row.ordinal,
+      memberPath: row.memberPath,
+      responseBodyDigest: row.responseBodyDigest,
+      responseByteLength: row.responseByteLength,
+      exactCount: row.exactCount,
+    }))), record);
+    return pass({
+      browserArtifactSetDigest,
+      originFreeArtifactPolicyDigest,
+      originFreeArtifactPolicyRows: rows,
+    });
+  } catch {
+    return BLOCKED;
+  } finally {
+    zeroOwnedBytes(record, true);
+  }
+}
+
 export async function qualifyTestCloudBrowserArtifactSet(args) {
   let record;
   try {
