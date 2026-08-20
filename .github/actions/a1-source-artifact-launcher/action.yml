@@ -8,7 +8,43 @@ runs:
   using: composite
   steps:
     - name: Run trusted A1 OCI launcher
+      id: launch
       shell: bash
       env:
         A1_HOSTED_REQUEST: ${{ inputs.request }}
       run: bash "$GITHUB_ACTION_PATH/run-a1.sh"
+    - name: Upload validated source artifact
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: ${{ steps.launch.outputs.artifact-name }}
+        path: ${{ steps.launch.outputs.artifact-path }}
+        if-no-files-found: error
+        compression-level: 0
+        overwrite: false
+        include-hidden-files: true
+        retention-days: 7
+    - name: Remove validated artifact staging
+      if: always()
+      shell: bash
+      env:
+        A1_ARTIFACT_PATH: ${{ steps.launch.outputs.artifact-path }}
+      run: |
+        set -euo pipefail
+        if [[
+          "${RUNNER_TEMP:-}" != /*
+          || "$RUNNER_TEMP" == *$'\n'*
+          || "$RUNNER_TEMP" == *,*
+          || ! "${GITHUB_RUN_ID:-}" =~ ^[1-9][0-9]*$
+          || ! "${GITHUB_RUN_ATTEMPT:-}" =~ ^[1-9][0-9]*$
+        ]]; then
+          printf 'A1 cleanup rejected an invalid GitHub runtime binding.\n' >&2
+          exit 2
+        fi
+        readonly expected="${RUNNER_TEMP}/verification-a1-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+        if [[ -n "${A1_ARTIFACT_PATH:-}" && "$A1_ARTIFACT_PATH" != "$expected" ]]; then
+          printf 'A1 cleanup rejected an unexpected artifact path.\n' >&2
+          exit 2
+        fi
+        if [[ -e "$expected" ]]; then
+          rm -rf -- "$expected"
+        fi

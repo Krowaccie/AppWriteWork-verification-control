@@ -49,7 +49,7 @@ jobs:
         run: |
           set -euo pipefail
           action_root='.github/actions/a1-source-artifact-launcher'
-          image='ghcr.io/krowaccie/appwritework-verification-a1@sha256:1efd444383f6b807d54feb1822a9f5d40bb891d3d1d7f06234a5f2866acca63e'
+          image='ghcr.io/krowaccie/appwritework-verification-a1@sha256:ff23ed8834201d90e4c6e67b6f4c6ed66626c2b4bea897147b407647197f15e8'
 
           cmp "$action_root/action.yml.template" "$action_root/action.yml"
           sed "s|__A1_IMMUTABLE_OCI_IMAGE_REQUIRED__|$image|" \
@@ -62,7 +62,11 @@ jobs:
           grep -Fq -- '--cap-drop ALL' "$action_root/run-a1.sh"
           grep -Fq -- '--user 0' "$action_root/run-a1.sh"
           grep -Fq -- 'dst=/github/workspace,readonly' "$action_root/run-a1.sh"
-          if grep -Eq -- '--privileged|seccomp=unconfined|NET_ADMIN|docker[.]sock' "$action_root/run-a1.sh"; then
+          grep -Fq -- 'dst=/work/host-output' "$action_root/run-a1.sh"
+          grep -Fq -- 'A1_VALIDATED_ARTIFACT_OUTPUT=/work/host-output' "$action_root/run-a1.sh"
+          grep -Fq -- 'uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a' "$action_root/action.yml"
+          grep -Fq -- 'retention-days: 7' "$action_root/action.yml"
+          if grep -Eq -- '--privileged|seccomp=unconfined|NET_ADMIN|docker[.]sock|ACTIONS_RUNTIME_TOKEN|ACTIONS_RESULTS_URL' "$action_root/run-a1.sh"; then
             echo 'A1 wrapper broadens the reviewed isolation profile.' >&2
             exit 1
           fi
