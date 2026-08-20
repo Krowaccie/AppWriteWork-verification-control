@@ -92,6 +92,23 @@ const SAFE_LIVE_READBACK_DIAGNOSTIC_CODES = new Set([
   'APPWRITE_TEST_RUNNER_VARIABLE_READBACK_INVALID',
   'APPWRITE_TEST_SITE_READBACK_INVALID',
 ]);
+for (const routeClass of ['FUNCTION', 'IDENTITY', 'LEASE', 'RUNNER_VARIABLE', 'SITE']) {
+  for (const failureClass of [
+    'BODY_INVALID',
+    'CONTENT_LENGTH_INVALID',
+    'CONTENT_TYPE_INVALID',
+    'CONTRACT_INVALID',
+    'FETCH_INVALID',
+    'JSON_INVALID',
+    'REDIRECT_INVALID',
+    'SECRET_REFLECTION_INVALID',
+    'STATUS_INVALID',
+  ]) {
+    SAFE_LIVE_READBACK_DIAGNOSTIC_CODES.add(
+      `APPWRITE_TEST_${routeClass}_RESPONSE_${failureClass}`,
+    );
+  }
+}
 
 function sha256Text(value) {
   return `sha256:${createHash('sha256').update(value, 'utf8').digest('hex')}`;

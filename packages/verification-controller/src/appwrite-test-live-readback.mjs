@@ -22,6 +22,20 @@ const DIGEST = /^sha256:[0-9a-f]{64}$/u;
 const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u;
 const EMAIL = /^[\x21-\x7e]+@[\x21-\x7e]+$/u;
 const MAX_RESPONSE_BYTES = 262_144;
+const RESPONSE_ROUTE_CLASSES = Object.freeze([
+  'FUNCTION', 'IDENTITY', 'LEASE', 'RUNNER_VARIABLE', 'SITE',
+]);
+const RESPONSE_FAILURE_CLASSES = Object.freeze([
+  'BODY_INVALID',
+  'CONTENT_LENGTH_INVALID',
+  'CONTENT_TYPE_INVALID',
+  'CONTRACT_INVALID',
+  'FETCH_INVALID',
+  'JSON_INVALID',
+  'REDIRECT_INVALID',
+  'SECRET_REFLECTION_INVALID',
+  'STATUS_INVALID',
+]);
 const ENVIRONMENT_DIGEST =
   'sha256:e83dac9cc615ccf37fd027683690edb2ff7332ac523d57130c1e86fa8617f302';
 const PROVIDER_CONTRACT_DIGEST =
@@ -111,6 +125,14 @@ function pass(value) {
 
 function fail(code) {
   throw new LiveReadbackError(code);
+}
+
+function failResponse(routeClass, failureClass) {
+  if (
+    !RESPONSE_ROUTE_CLASSES.includes(routeClass)
+    || !RESPONSE_FAILURE_CLASSES.includes(failureClass)
+  ) fail('APPWRITE_TEST_RESPONSE_INVALID');
+  fail(`APPWRITE_TEST_${routeClass}_RESPONSE_${failureClass}`);
 }
 
 function validateInput(args) {
@@ -235,15 +257,19 @@ function assertNoDuplicateJsonKeys(text) {
 
 function createReader(input) {
   const allowlists = {
-    operator: new Set(),
-    fixture: new Set(),
+    operator: new Map(),
+    fixture: new Map(),
   };
   const credentials = {
     operator: input.operatorCredential,
     fixture: input.fixtureCredential,
   };
-  const add = (credentialClass, path) => {
-    if (!['operator', 'fixture'].includes(credentialClass) || typeof path !== 'string') {
+  const add = (credentialClass, path, routeClass) => {
+    if (
+      !['operator', 'fixture'].includes(credentialClass)
+      || typeof path !== 'string'
+      || !RESPONSE_ROUTE_CLASSES.includes(routeClass)
+    ) {
       fail('APPWRITE_TEST_ROUTE_INVALID');
     }
     const target = new URL(input.inventory.environment.endpoint + path);
@@ -252,10 +278,11 @@ function createReader(input) {
       || !target.pathname.startsWith('/v1/')
       || /(?:salmora|69eb4818000afa64a7fa|69eb4a020024c520642e)/iu.test(target.href)
     ) fail('APPWRITE_TEST_ROUTE_INVALID');
-    allowlists[credentialClass].add(path);
+    allowlists[credentialClass].set(path, routeClass);
   };
   const get = async (credentialClass, path) => {
-    if (!allowlists[credentialClass]?.has(path)) fail('APPWRITE_TEST_ROUTE_INVALID');
+    const routeClass = allowlists[credentialClass]?.get(path);
+    if (routeClass === undefined) fail('APPWRITE_TEST_ROUTE_INVALID');
     const credential = credentials[credentialClass];
     let secret;
     let headers;
@@ -271,48 +298,58 @@ function createReader(input) {
         'X-Appwrite-Key': secret,
       };
       const finalUrl = input.inventory.environment.endpoint + path;
-      const response = await input.fetchImpl(finalUrl, {
-        method: 'GET', headers, redirect: 'error', signal: AbortSignal.timeout(10_000),
-      });
+      let response;
+      try {
+        response = await input.fetchImpl(finalUrl, {
+          method: 'GET', headers, redirect: 'error', signal: AbortSignal.timeout(10_000),
+        });
+      } catch {
+        failResponse(routeClass, 'FETCH_INVALID');
+      }
       if (
         response === null
         || typeof response !== 'object'
-        || response.status !== 200
-        || response.redirected !== false
-        || response.url !== finalUrl
         || typeof response.headers?.get !== 'function'
         || typeof response.arrayBuffer !== 'function'
-      ) fail('APPWRITE_TEST_RESPONSE_INVALID');
+      ) failResponse(routeClass, 'CONTRACT_INVALID');
+      if (response.status !== 200) failResponse(routeClass, 'STATUS_INVALID');
+      if (response.redirected !== false || response.url !== finalUrl) {
+        failResponse(routeClass, 'REDIRECT_INVALID');
+      }
       const contentType = response.headers.get('content-type');
       if (
         typeof contentType !== 'string'
         || contentType.split(';', 1)[0].trim().toLowerCase() !== 'application/json'
-      ) fail('APPWRITE_TEST_RESPONSE_INVALID');
+      ) failResponse(routeClass, 'CONTENT_TYPE_INVALID');
       const contentLength = response.headers.get('content-length');
       if (
         contentLength !== null
         && (!/^[1-9][0-9]*$/u.test(contentLength)
           || Number(contentLength) > MAX_RESPONSE_BYTES)
-      ) fail('APPWRITE_TEST_RESPONSE_INVALID');
+      ) failResponse(routeClass, 'CONTENT_LENGTH_INVALID');
       const buffer = await response.arrayBuffer();
       if (!(buffer instanceof ArrayBuffer) || buffer.byteLength < 1 || buffer.byteLength > MAX_RESPONSE_BYTES) {
-        fail('APPWRITE_TEST_RESPONSE_INVALID');
+        failResponse(routeClass, 'BODY_INVALID');
       }
       if (contentLength !== null && Number(contentLength) !== buffer.byteLength) {
-        fail('APPWRITE_TEST_RESPONSE_INVALID');
+        failResponse(routeClass, 'CONTENT_LENGTH_INVALID');
       }
       let text;
       try {
         text = new TextDecoder('utf-8', { fatal: true }).decode(buffer);
       } catch {
-        fail('APPWRITE_TEST_RESPONSE_INVALID');
+        failResponse(routeClass, 'JSON_INVALID');
       }
-      if (text.includes(secret)) fail('APPWRITE_TEST_RESPONSE_INVALID');
-      assertNoDuplicateJsonKeys(text);
+      if (text.includes(secret)) failResponse(routeClass, 'SECRET_REFLECTION_INVALID');
       try {
+        assertNoDuplicateJsonKeys(text);
         return JSON.parse(text);
-      } catch {
-        fail('APPWRITE_TEST_RESPONSE_INVALID');
+      } catch (error) {
+        if (
+          error instanceof LiveReadbackError
+          && error.code !== 'APPWRITE_TEST_RESPONSE_INVALID'
+        ) throw error;
+        failResponse(routeClass, 'JSON_INVALID');
       }
     } finally {
       if (headers !== undefined) headers['X-Appwrite-Key'] = undefined;
@@ -456,7 +493,7 @@ async function readIdentities(reader, emails) {
     query.append('queries[1]', '{"method":"limit","values":[2]}');
     query.append('total', 'true');
     const listPath = `/users?${query.toString()}`;
-    reader.add('fixture', listPath);
+    reader.add('fixture', listPath, 'IDENTITY');
     const listed = await reader.get('fixture', listPath);
     if (
       exactObject(listed, ['total', 'users']) === null
@@ -467,8 +504,8 @@ async function readIdentities(reader, emails) {
     const roleProjection = identityRole(role, listed.users[0], emails[role]);
     const userPath = `/users/${encodeURIComponent(roleProjection.userId)}`;
     const sessionsPath = `${userPath}/sessions?total=true`;
-    reader.add('fixture', userPath);
-    reader.add('fixture', sessionsPath);
+    reader.add('fixture', userPath, 'IDENTITY');
+    reader.add('fixture', sessionsPath, 'IDENTITY');
     const fetched = await reader.get('fixture', userPath);
     if (canonicalJson(fetched) !== canonicalJson(listed.users[0])) {
       fail('APPWRITE_TEST_IDENTITY_READBACK_INVALID');
@@ -608,17 +645,17 @@ export async function readAppwriteTestLiveProjection(args) {
     const { input, emails, now } = validateInput(args);
     const reader = createReader(input);
     const sitePath = `/sites/${encodeURIComponent(input.inventory.environment.siteId)}`;
-    reader.add('operator', sitePath);
+    reader.add('operator', sitePath, 'SITE');
     const functionRecords = [...input.inventory.productFunctions, ...input.inventory.testOnlyFunctions]
       .sort((left, right) => left.functionId < right.functionId ? -1 : 1);
     for (const record of functionRecords) {
-      reader.add('operator', `/functions/${encodeURIComponent(record.functionId)}`);
+      reader.add('operator', `/functions/${encodeURIComponent(record.functionId)}`, 'FUNCTION');
     }
-    reader.add('operator', RUNNER_VARIABLE_QUERY);
+    reader.add('operator', RUNNER_VARIABLE_QUERY, 'RUNNER_VARIABLE');
     const leasePath = `/tablesdb/${encodeURIComponent(input.inventory.control.databaseId)}`
       + `/tables/${encodeURIComponent(input.inventory.control.leaseTableId)}`
       + `/rows/${encodeURIComponent(input.inventory.control.leaseRowId)}`;
-    reader.add('fixture', leasePath);
+    reader.add('fixture', leasePath, 'LEASE');
 
     const site = siteProjection(await reader.get('operator', sitePath), input.inventory);
     const functions = [];
