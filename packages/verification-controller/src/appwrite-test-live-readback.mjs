@@ -293,6 +293,7 @@ function createReader(input) {
       }
       headers = {
         Accept: 'application/json',
+        'Accept-Encoding': 'identity',
         'X-Appwrite-Project': input.inventory.environment.projectId,
         'X-Appwrite-Response-Format': '1.9.5',
         'X-Appwrite-Key': secret,
