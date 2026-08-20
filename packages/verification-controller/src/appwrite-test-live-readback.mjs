@@ -51,7 +51,7 @@ const EXPECTED_RUNNER = Object.freeze({
   runtime: 'python-3.12',
   entrypoint: 'main.py',
   commands: 'python -m pip install --require-hashes --only-binary=:all: -r requirements.txt',
-  providerRootDirectory: 'src/functions/verification-runner-py',
+  providerRootDirectory: '',
   name: 'verification-runner',
   execute: Object.freeze([]),
   events: Object.freeze([]),
