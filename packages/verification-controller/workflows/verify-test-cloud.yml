@@ -64,6 +64,7 @@ jobs:
           test "$(npm --version)" = "11.6.2"
 
       - name: Prove exact immutable controller artifact
+        id: controller-proof
         shell: bash
         env:
           CONTROLLER_ARTIFACT_READ_TOKEN: ${{ github.token }}
@@ -77,6 +78,7 @@ jobs:
           env -i \
             PATH="$PATH" \
             GITHUB_ENV="$GITHUB_ENV" \
+            GITHUB_OUTPUT="$GITHUB_OUTPUT" \
             CONTROLLER_ARTIFACT_READ_TOKEN="$CONTROLLER_ARTIFACT_READ_TOKEN" \
             GITHUB_REPOSITORY="$GITHUB_REPOSITORY" \
             GITHUB_SHA="$GITHUB_SHA" \
@@ -87,6 +89,7 @@ jobs:
           import { appendFileSync } from 'node:fs';
           import { readFile, lstat, realpath } from 'node:fs/promises';
           import path from 'node:path';
+          import { readBoundedResponseBytes } from './packages/verification-controller/src/controller-archive-verifier.mjs';
           import { verifyGithubControllerArtifact } from './packages/verification-controller/src/github-controller-artifact-verifier.mjs';
           import { createProductionExactShaGitAdapter } from './packages/verification-controller/src/production-exact-sha-git-adapter.mjs';
 
@@ -119,6 +122,37 @@ jobs:
           if (verified.status !== 'PASS') {
             throw new Error('BLOCKED TRUSTED_CONTROLLER_REQUIRED');
           }
+          const metadataResponse = await fetch(
+            `https://api.github.com/repos/${process.env.GITHUB_REPOSITORY}/actions/artifacts/${verified.value.controllerArtifactId}`,
+            {
+              method: 'GET',
+              redirect: 'error',
+              headers: {
+                Accept: 'application/vnd.github+json',
+                Authorization: `Bearer ${process.env.CONTROLLER_ARTIFACT_READ_TOKEN}`,
+                'User-Agent': 'appwritework-verification-controller',
+                'X-GitHub-Api-Version': '2022-11-28',
+              },
+            },
+          );
+          const metadataContentType = metadataResponse.headers.get('content-type');
+          if (
+            metadataResponse.status !== 200
+            || typeof metadataContentType !== 'string'
+            || !/^application\/json(?:\s*;|$)/iu.test(metadataContentType)
+          ) throw new Error('BLOCKED TRUSTED_CONTROLLER_REQUIRED');
+          const metadata = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(
+            await readBoundedResponseBytes(metadataResponse, 1024 * 1024),
+          ));
+          const artifactRunId = String(metadata?.workflow_run?.id ?? '');
+          if (
+            String(metadata?.id ?? '') !== verified.value.controllerArtifactId
+            || metadata?.name !== `verification-controller-bundle-${verified.value.controllerBundleSha}`
+            || metadata?.digest !== verified.value.controllerBundleDigest
+            || metadata?.expired !== false
+            || metadata?.workflow_run?.head_sha !== verified.value.controllerBundleSha
+            || !/^[1-9][0-9]*$/u.test(artifactRunId)
+          ) throw new Error('BLOCKED TRUSTED_CONTROLLER_REQUIRED');
           appendFileSync(process.env.GITHUB_ENV, [
             'PROOF_STATUS=PASS',
             'PROOF_REPOSITORY=' + verified.value.controllerRepository,
@@ -127,7 +161,18 @@ jobs:
             'PROOF_BUNDLE_DIGEST=' + verified.value.controllerBundleDigest,
             '',
           ].join('\n'), 'utf8');
+          appendFileSync(process.env.GITHUB_OUTPUT, `artifact_run_id=${artifactRunId}\n`, 'utf8');
           NODE
+
+      - name: Stage only the proven controller artifact
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
+        with:
+          artifact-ids: ${{ vars.TRUSTED_CONTROLLER_ARTIFACT_ID }}
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.controller-proof.outputs.artifact_run_id }}
+          path: ${{ runner.temp }}\controller-artifact
+          merge-multiple: true
 
       - name: Install the exact trusted controller dependencies
         shell: bash
@@ -183,6 +228,7 @@ jobs:
           SOURCE_ARTIFACT_READER_INSTALLATION_ID: ${{ vars.SOURCE_ARTIFACT_READER_INSTALLATION_ID }}
           SOURCE_REPOSITORY_ID: ${{ vars.SOURCE_REPOSITORY_ID }}
           SOURCE_VERIFY_MAIN_WORKFLOW_ID: ${{ vars.SOURCE_VERIFY_MAIN_WORKFLOW_ID }}
+          CONTROLLER_ARTIFACT_DIRECTORY: ${{ runner.temp }}\controller-artifact
           BINDING_DIRECTORY: ${{ runner.temp }}\test-cloud-bindings
           SOURCE_ARTIFACT_READER_PRIVATE_KEY: ${{ secrets.SOURCE_ARTIFACT_READER_PRIVATE_KEY }}
           APPWRITE_TEST_OPERATOR_API_KEY: ${{ secrets.APPWRITE_TEST_OPERATOR_API_KEY }}
