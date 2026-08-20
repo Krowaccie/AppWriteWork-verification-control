@@ -1009,12 +1009,16 @@ function isDenseArray(value, maximum) {
   return true;
 }
 
+function validNullableProviderId(value) {
+  return value === null || (typeof value === 'string' && utf8Length(value) <= 512);
+}
+
 function validateTarget(value) {
   const fields = exactObject(value, TARGET_KEYS);
   if (fields === null || !ID_PATTERN.test(fields.$id) || !ID_PATTERN.test(fields.userId)
     || !isExactTimestamp(fields.$createdAt) || !isExactTimestamp(fields.$updatedAt)
     || !validScalarString(fields.name, 128, 512)
-    || typeof fields.providerId !== 'string' || utf8Length(fields.providerId) > 512
+    || !validNullableProviderId(fields.providerId)
     || typeof fields.providerType !== 'string' || utf8Length(fields.providerType) > 512
     || typeof fields.identifier !== 'string' || utf8Length(fields.identifier) > 1024
     || typeof fields.expired !== 'boolean') invalid('TEST_IDENTITY_USER_TARGETS_INVALID');
