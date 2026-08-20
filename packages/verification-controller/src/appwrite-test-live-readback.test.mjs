@@ -354,6 +354,23 @@ test('rejects a redirected Appwrite response', async () => {
     },
   });
   assert.equal(result.status, 'BLOCKED');
+  assert.equal(result.diagnostics[0].code, 'APPWRITE_TEST_SITE_RESPONSE_REDIRECT_INVALID');
+});
+
+test('reports a non-success Site response without serializing its body or credential', async () => {
+  const { result } = await run({
+    transport: {
+      before(url) {
+        if (new URL(url).pathname.includes('/sites/')) {
+          return jsonResponse(url, { secretValue: OPERATOR_SECRET }, { status: 403 });
+        }
+        return undefined;
+      },
+    },
+  });
+  assert.equal(result.status, 'BLOCKED');
+  assert.equal(result.diagnostics[0].code, 'APPWRITE_TEST_SITE_RESPONSE_STATUS_INVALID');
+  assert.equal(JSON.stringify(result).includes(OPERATOR_SECRET), false);
 });
 
 test('rejects a missing runner variable', async () => {
