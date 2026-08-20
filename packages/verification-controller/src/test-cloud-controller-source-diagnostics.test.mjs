@@ -140,6 +140,14 @@ test('preserves only allowlisted identity-shape diagnostics at preflight', () =>
     selectSafePreflightDiagnosticCode(stage(
       'BLOCKED',
       null,
+      'TEST_CLOUD_SETUP_IDENTITY_QUALIFICATION_INVALID',
+    )),
+    'TEST_CLOUD_SETUP_IDENTITY_QUALIFICATION_INVALID',
+  );
+  assert.equal(
+    selectSafePreflightDiagnosticCode(stage(
+      'BLOCKED',
+      null,
       'TEST_IDENTITY_USER_KEYS_INVALID',
     )),
     'TEST_IDENTITY_USER_KEYS_INVALID',

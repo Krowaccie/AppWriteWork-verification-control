@@ -81,7 +81,15 @@ const SAFE_PREFLIGHT_DIAGNOSTIC_CODES = new Set([
   'TEST_CLOUD_RUNNER_VARIABLE_READBACK_INVALID',
   'TEST_CLOUD_RUNNER_VARIABLE_REQUEST_INVALID',
   'TEST_CLOUD_SETUP_ATTESTATION_INVALID',
+  'TEST_CLOUD_SETUP_ENVIRONMENT_BINDING_INVALID',
+  'TEST_CLOUD_SETUP_FINALIZATION_INVALID',
+  'TEST_CLOUD_SETUP_IDENTITY_DIGEST_MISMATCH',
+  'TEST_CLOUD_SETUP_IDENTITY_QUALIFICATION_INVALID',
+  'TEST_CLOUD_SETUP_PAYLOAD_INVALID',
+  'TEST_CLOUD_SETUP_PROVIDER_BINDING_INVALID',
   'TEST_CLOUD_SETUP_READBACK_INVALID',
+  'TEST_CLOUD_SETUP_REQUEST_INVALID',
+  'TEST_CLOUD_SETUP_RUNTIME_STATE_INVALID',
   'TEST_CLOUD_SITE_IDENTITY_READER_INVALID',
 ]);
 
@@ -1268,7 +1276,15 @@ export function createProductionHostedDependencies(args) {
         identityBindings,
       }));
       if (setupReadback.status !== 'PASS') {
-        return blockedFrom(setupReadback, 'TEST_CLOUD_SETUP_READBACK_INVALID');
+        return result(
+          'BLOCKED',
+          null,
+          selectSafePreflightDiagnosticCode(
+            setupReadback,
+            'TEST_CLOUD_SETUP_READBACK_INVALID',
+          ),
+          retryable(setupReadback),
+        );
       }
       const runnerRequest = appwrite.qualifyTestCloudRunnerVariableReadbackRequest({
         runtimeQualification: stage.runtime.runtimeQualification,
