@@ -1607,13 +1607,40 @@ function createClosedOrdinaryRecord(keys, values) {
   return OBJECT_FREEZE(value);
 }
 
-function runtimeBlockedResult() {
+function safeSetupLoadDiagnosticCode(code) {
+  switch (code) {
+    case 'TEST_CLOUD_SETUP_REQUEST_INVALID':
+    case 'TEST_CLOUD_SETUP_PROVIDER_BINDING_INVALID':
+    case 'TEST_CLOUD_SETUP_RUNTIME_STATE_INVALID':
+    case 'TEST_CLOUD_SETUP_IDENTITY_QUALIFICATION_INVALID':
+    case 'TEST_CLOUD_SETUP_ENVIRONMENT_BINDING_INVALID':
+    case 'TEST_CLOUD_SETUP_PAYLOAD_INVALID':
+    case 'TEST_CLOUD_SETUP_IDENTITY_DIGEST_MISMATCH':
+    case 'TEST_CLOUD_SETUP_FINALIZATION_INVALID':
+      return code;
+    default:
+      return undefined;
+  }
+}
+
+function runtimeBlockedResult(code) {
+  const safeCode = safeSetupLoadDiagnosticCode(code);
+  const diagnostics = safeCode === undefined
+    ? OBJECT_FREEZE([])
+    : OBJECT_FREEZE([createClosedNullRecord(
+      ['code', 'retryable', 'safeMessage'],
+      {
+        code: safeCode,
+        retryable: false,
+        safeMessage: 'Protected test-cloud setup readback could not be qualified.',
+      },
+    )]);
   return createClosedNullRecord(
     ['status', 'value', 'diagnostics'],
     {
       status: 'BLOCKED',
       value: null,
-      diagnostics: OBJECT_FREEZE([]),
+      diagnostics,
     },
   );
 }
@@ -4137,7 +4164,7 @@ const RUNNER_VARIABLE_EVIDENCE_KEYS = OBJECT_FREEZE([
   'providerSetupReadback',
 ]);
 function activeQualificationIs(value) { return runtimeRecord.state === 'ACTIVE' && activationState === 'COMMITTED' && futureBootstrapHub === undefined && OBJECT_IS(value, activeRuntimeQualification); }
-function loadBlocked(kind) {
+function loadBlocked(kind, code) {
   const provider = kind === 'provider';
   const current = provider ? providerLoadRecord : setupLoadRecord;
   if (current.state !== 'BLOCKED') {
@@ -4146,7 +4173,7 @@ function loadBlocked(kind) {
     if (provider) providerLoadRecord = next; else setupLoadRecord = next;
   }
   terminallyBlockRuntime();
-  return runtimeBlockedResult();
+  return runtimeBlockedResult(provider ? undefined : code);
 }
 function exactResultRecord(value, keys) {
   if (value === null || typeof value !== 'object' || isProxy(value) || OBJECT_IS_FROZEN(value) !== true) return null;
@@ -4253,39 +4280,75 @@ export async function loadQualifiedTestCloudProviderContract(args) {
   } catch { return loadBlocked('provider'); }
 }
 export function loadQualifiedTestCloudSetupReadback(args) {
-  if (setupLoadRecord.state !== 'EMPTY') return loadBlocked('setup');
+  let failureCode = 'TEST_CLOUD_SETUP_REQUEST_INVALID';
+  if (setupLoadRecord.state !== 'EMPTY') {
+    return loadBlocked('setup', 'TEST_CLOUD_SETUP_REQUEST_INVALID');
+  }
   try {
-    if (arguments.length !== 1 || !currentPublicOperationAuthorized(args, SETUP_LOAD_KEYS)) return loadBlocked('setup');
+    if (arguments.length !== 1 || !currentPublicOperationAuthorized(args, SETUP_LOAD_KEYS)) {
+      return loadBlocked('setup', 'TEST_CLOUD_SETUP_REQUEST_INVALID');
+    }
     const runtimeQualification = OBJECT_GET_OWN_PROPERTY_DESCRIPTOR(args, 'runtimeQualification').value;
     const context = OBJECT_GET_OWN_PROPERTY_DESCRIPTOR(args, 'context').value;
     const providerPass = readClosedPass(OBJECT_GET_OWN_PROPERTY_DESCRIPTOR(args, 'providerContract').value, ['qualification', 'providerContractDigest']);
     const identityPass = readClosedPass(OBJECT_GET_OWN_PROPERTY_DESCRIPTOR(args, 'identityBindings').value, ['qualification', 'identityBindingsDigest']);
-    if (providerPass === null || identityPass === null || !exactDigestString(providerPass.value.providerContractDigest) || !exactDigestString(identityPass.value.identityBindingsDigest) || SETUP_TUPLES.get(context) !== undefined) return loadBlocked('setup');
+    if (providerPass === null || identityPass === null || !exactDigestString(providerPass.value.providerContractDigest) || !exactDigestString(identityPass.value.identityBindingsDigest) || SETUP_TUPLES.get(context) !== undefined) {
+      return loadBlocked('setup', 'TEST_CLOUD_SETUP_REQUEST_INVALID');
+    }
+    failureCode = 'TEST_CLOUD_SETUP_PROVIDER_BINDING_INVALID';
     const providerRecord = providerRecordFor(providerPass.value.qualification);
-    if (providerRecord === undefined || !OBJECT_IS(providerRecord.passResult, providerPass.result) || !OBJECT_IS(providerRecord.context, context) || !OBJECT_IS(providerRecord.runtimeQualification, runtimeQualification)) return loadBlocked('setup');
+    if (providerRecord === undefined || !OBJECT_IS(providerRecord.passResult, providerPass.result) || !OBJECT_IS(providerRecord.context, context) || !OBJECT_IS(providerRecord.runtimeQualification, runtimeQualification)) {
+      return loadBlocked('setup', 'TEST_CLOUD_SETUP_PROVIDER_BINDING_INVALID');
+    }
+    failureCode = 'TEST_CLOUD_SETUP_RUNTIME_STATE_INVALID';
     const reservation = OBJECT_FREEZE({ state: 'RESERVING', version: 1, runtimeQualification, context });
     setupLoadRecord = reservation; SETUP_TUPLES.set(context, reservation);
-    if (!OBJECT_IS(setupLoadRecord, reservation) || !OBJECT_IS(SETUP_TUPLES.get(context), reservation) || !activeQualificationIs(runtimeQualification)) return loadBlocked('setup');
-    if (!identityQualificationMatches({ runtimeQualification, qualification: identityPass.value.qualification, context, providerContractQualification: providerPass.value.qualification, expectedEnvironmentDigest: providerRecord.environmentDigest, expectedProviderContractDigest: providerRecord.providerContractDigest, expectedIdentityBindingsDigest: identityPass.value.identityBindingsDigest }) || !OBJECT_IS(setupLoadRecord, reservation) || !OBJECT_IS(SETUP_TUPLES.get(context), reservation) || !activeQualificationIs(runtimeQualification)) return loadBlocked('setup');
+    if (!OBJECT_IS(setupLoadRecord, reservation) || !OBJECT_IS(SETUP_TUPLES.get(context), reservation) || !activeQualificationIs(runtimeQualification)) {
+      return loadBlocked('setup', 'TEST_CLOUD_SETUP_RUNTIME_STATE_INVALID');
+    }
+    failureCode = 'TEST_CLOUD_SETUP_IDENTITY_QUALIFICATION_INVALID';
+    if (!identityQualificationMatches({ runtimeQualification, qualification: identityPass.value.qualification, context, providerContractQualification: providerPass.value.qualification, expectedEnvironmentDigest: providerRecord.environmentDigest, expectedProviderContractDigest: providerRecord.providerContractDigest, expectedIdentityBindingsDigest: identityPass.value.identityBindingsDigest })) {
+      return loadBlocked('setup', 'TEST_CLOUD_SETUP_IDENTITY_QUALIFICATION_INVALID');
+    }
+    if (!OBJECT_IS(setupLoadRecord, reservation) || !OBJECT_IS(SETUP_TUPLES.get(context), reservation) || !activeQualificationIs(runtimeQualification)) {
+      return loadBlocked('setup', 'TEST_CLOUD_SETUP_RUNTIME_STATE_INVALID');
+    }
+    failureCode = 'TEST_CLOUD_SETUP_ENVIRONMENT_BINDING_INVALID';
     const reading = OBJECT_FREEZE({ state: 'READING', version: 2, runtimeQualification, context });
     setupLoadRecord = reading; SETUP_TUPLES.set(context, reading);
-    if (!OBJECT_IS(setupLoadRecord, reading) || !OBJECT_IS(SETUP_TUPLES.get(context), reading) || !activeQualificationIs(runtimeQualification)) return loadBlocked('setup');
+    if (!OBJECT_IS(setupLoadRecord, reading) || !OBJECT_IS(SETUP_TUPLES.get(context), reading) || !activeQualificationIs(runtimeQualification)) {
+      return loadBlocked('setup', 'TEST_CLOUD_SETUP_RUNTIME_STATE_INVALID');
+    }
     const setupJson = readProtectedSetupValue('TEST_CLOUD_SETUP_READBACK_JSON');
     const expectedDigest = readProtectedSetupValue('TEST_CLOUD_SETUP_READBACK_DIGEST');
-    if (!exactDigestString(expectedDigest) || !OBJECT_IS(setupLoadRecord, reading) || !activeQualificationIs(runtimeQualification)) return loadBlocked('setup');
+    if (!exactDigestString(expectedDigest)) {
+      return loadBlocked('setup', 'TEST_CLOUD_SETUP_ENVIRONMENT_BINDING_INVALID');
+    }
+    if (!OBJECT_IS(setupLoadRecord, reading) || !activeQualificationIs(runtimeQualification)) {
+      return loadBlocked('setup', 'TEST_CLOUD_SETUP_RUNTIME_STATE_INVALID');
+    }
+    failureCode = 'TEST_CLOUD_SETUP_PAYLOAD_INVALID';
     const bytes = BUFFER_FROM(setupJson, 'utf8');
-    if (bytes.length < 1 || bytes.length > 1_048_576 || REFLECT_APPLY(BUFFER_TO_STRING, bytes, ['utf8']) !== setupJson) return loadBlocked('setup');
+    if (bytes.length < 1 || bytes.length > 1_048_576 || REFLECT_APPLY(BUFFER_TO_STRING, bytes, ['utf8']) !== setupJson) {
+      return loadBlocked('setup', 'TEST_CLOUD_SETUP_PAYLOAD_INVALID');
+    }
     const validated = readValidatedSetup({ bytes, expectedDigest, expectedEnvironmentDigest: providerRecord.environmentDigest, expectedProviderContractDigest: providerRecord.providerContractDigest });
     const setup = validated.providerSetupReadback;
-    if (setup.identityBindings.identityBindingsDigest !== identityPass.value.identityBindingsDigest) return loadBlocked('setup');
+    failureCode = 'TEST_CLOUD_SETUP_IDENTITY_DIGEST_MISMATCH';
+    if (setup.identityBindings.identityBindingsDigest !== identityPass.value.identityBindingsDigest) {
+      return loadBlocked('setup', 'TEST_CLOUD_SETUP_IDENTITY_DIGEST_MISMATCH');
+    }
+    failureCode = 'TEST_CLOUD_SETUP_FINALIZATION_INVALID';
     const runnerVariableExpectationDigest = sha256(BUFFER_FROM(canonicalJson(setup.expectedRunnerVariables), 'utf8'));
     const qualification = OBJECT_FREEZE(OBJECT_CREATE(null));
     const passResult = runtimeOperationPassResult(['qualification', 'identityBindingsDigest', 'providerSetupReadbackDigest', 'runnerVariableExpectationDigest'], { qualification, identityBindingsDigest: identityPass.value.identityBindingsDigest, providerSetupReadbackDigest: expectedDigest, runnerVariableExpectationDigest });
     const qualified = OBJECT_FREEZE({ state: 'QUALIFIED', version: 3, runtimeQualification, context, providerQualification: providerPass.value.qualification, identityQualification: identityPass.value.qualification, identityPassResult: identityPass.result, environmentDigest: providerRecord.environmentDigest, providerContractDigest: providerRecord.providerContractDigest, identityBindingsDigest: identityPass.value.identityBindingsDigest, providerSetupReadbackDigest: expectedDigest, runnerVariableExpectationDigest, qualification, passResult });
     setupLoadRecord = qualified; SETUP_TUPLES.set(context, qualified); SETUP_QUALIFICATIONS.set(qualification, qualified);
-    if (!OBJECT_IS(setupLoadRecord, qualified) || !OBJECT_IS(SETUP_TUPLES.get(context), qualified) || !OBJECT_IS(SETUP_QUALIFICATIONS.get(qualification), qualified)) return loadBlocked('setup');
+    if (!OBJECT_IS(setupLoadRecord, qualified) || !OBJECT_IS(SETUP_TUPLES.get(context), qualified) || !OBJECT_IS(SETUP_QUALIFICATIONS.get(qualification), qualified)) {
+      return loadBlocked('setup', 'TEST_CLOUD_SETUP_FINALIZATION_INVALID');
+    }
     return passResult;
-  } catch { return loadBlocked('setup'); }
+  } catch { return loadBlocked('setup', failureCode); }
 }
 function authenticateRunnerVariableReadbackRequestEvidence(args) {
   try {
