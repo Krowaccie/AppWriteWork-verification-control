@@ -176,7 +176,7 @@ test('preserves an allowlisted live-readback failure code without serializing se
     status: 'BLOCKED',
     value: null,
     diagnostics: [{
-      code: 'APPWRITE_TEST_RUNNER_CONFIGURATION_INVALID',
+      code: 'APPWRITE_TEST_RUNNER_LOGGING_INVALID',
       safeMessage: 'safe stage message',
       secretValue: 'secret-value-sentinel',
     }],
@@ -189,7 +189,7 @@ test('preserves an allowlisted live-readback failure code without serializing se
   });
 
   assert.equal(result.status, 'BLOCKED');
-  assert.equal(result.diagnostics[0].code, 'APPWRITE_TEST_RUNNER_CONFIGURATION_INVALID');
+  assert.equal(result.diagnostics[0].code, 'APPWRITE_TEST_RUNNER_LOGGING_INVALID');
   assert.equal(JSON.stringify(result).includes('secret-value-sentinel'), false);
 });
 
