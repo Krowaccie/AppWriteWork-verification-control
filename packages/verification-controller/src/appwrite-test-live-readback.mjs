@@ -63,6 +63,21 @@ const EXPECTED_RUNNER = Object.freeze({
     'execution.write', 'rows.read', 'rows.write', 'files.read', 'files.write',
   ]),
 });
+const RUNNER_FIELD_CODES = Object.freeze({
+  commands: 'COMMANDS',
+  enabled: 'ENABLED',
+  entrypoint: 'ENTRYPOINT',
+  events: 'EVENTS',
+  execute: 'EXECUTE',
+  functionId: 'ID',
+  logging: 'LOGGING',
+  name: 'NAME',
+  providerRootDirectory: 'PROVIDER_ROOT_DIRECTORY',
+  runtime: 'RUNTIME',
+  schedule: 'SCHEDULE',
+  scopes: 'SCOPES',
+  timeout: 'TIMEOUT',
+});
 
 class LiveReadbackError extends Error {
   constructor(code) {
@@ -390,25 +405,37 @@ function siteProjection(raw, inventory) {
 }
 
 function functionProjection(raw, record) {
+  if (!isPlainObject(raw)) fail('APPWRITE_TEST_FUNCTION_SHAPE_INVALID');
+  if (raw.$id !== record.functionId) fail('APPWRITE_TEST_FUNCTION_ID_INVALID');
+  if (raw.runtime !== record.runtime) fail('APPWRITE_TEST_FUNCTION_RUNTIME_INVALID');
+  if (raw.entrypoint !== record.entrypoint) fail('APPWRITE_TEST_FUNCTION_ENTRYPOINT_INVALID');
+  if (typeof raw.commands !== 'string') fail('APPWRITE_TEST_FUNCTION_COMMANDS_INVALID');
+  if (typeof raw.providerRootDirectory !== 'string') {
+    fail('APPWRITE_TEST_FUNCTION_PROVIDER_ROOT_DIRECTORY_INVALID');
+  }
+  if (typeof raw.name !== 'string' || raw.name.length === 0) {
+    fail('APPWRITE_TEST_FUNCTION_NAME_INVALID');
+  }
+  if (typeof raw.schedule !== 'string') fail('APPWRITE_TEST_FUNCTION_SCHEDULE_INVALID');
+  if (!stringArray(raw.execute)) fail('APPWRITE_TEST_FUNCTION_EXECUTE_INVALID');
+  if (!stringArray(raw.events)) fail('APPWRITE_TEST_FUNCTION_EVENTS_INVALID');
+  if (!stringArray(raw.scopes)) fail('APPWRITE_TEST_FUNCTION_SCOPES_INVALID');
+  if (!Number.isSafeInteger(raw.timeout) || raw.timeout < 1) {
+    fail('APPWRITE_TEST_FUNCTION_TIMEOUT_INVALID');
+  }
+  if (typeof raw.enabled !== 'boolean') fail('APPWRITE_TEST_FUNCTION_ENABLED_INVALID');
+  if (typeof raw.logging !== 'boolean') fail('APPWRITE_TEST_FUNCTION_LOGGING_INVALID');
   if (
-    !isPlainObject(raw)
-    || raw.$id !== record.functionId
-    || raw.runtime !== record.runtime
-    || raw.entrypoint !== record.entrypoint
-    || !['commands', 'providerRootDirectory', 'name', 'schedule']
-      .every((key) => typeof raw[key] === 'string')
-    || raw.name.length === 0
-    || !stringArray(raw.execute)
-    || !stringArray(raw.events)
-    || !stringArray(raw.scopes)
-    || !Number.isSafeInteger(raw.timeout)
-    || raw.timeout < 1
-    || typeof raw.enabled !== 'boolean'
-    || typeof raw.logging !== 'boolean'
-    || !(raw.deploymentId === null || SAFE_ID.test(raw.deploymentId ?? ''))
-  ) fail('APPWRITE_TEST_FUNCTION_READBACK_INVALID');
+    typeof raw.deploymentId !== 'string'
+    && raw.deploymentId !== null
+  ) fail('APPWRITE_TEST_FUNCTION_DEPLOYMENT_ID_INVALID');
+  if (typeof raw.deploymentId === 'string' && raw.deploymentId !== ''
+    && !SAFE_ID.test(raw.deploymentId)) {
+    fail('APPWRITE_TEST_FUNCTION_DEPLOYMENT_ID_INVALID');
+  }
+  const activeDeploymentId = raw.deploymentId === '' ? null : raw.deploymentId;
   const projection = {
-    activeDeploymentId: raw.deploymentId,
+    activeDeploymentId,
     commands: raw.commands,
     entrypoint: raw.entrypoint,
     functionId: record.functionId,
@@ -428,10 +455,10 @@ function functionProjection(raw, record) {
       const actual = projection[key];
       if (Array.isArray(expected)) {
         if (!Array.isArray(actual) || canonicalJson(actual) !== canonicalJson(expected)) {
-          fail('APPWRITE_TEST_RUNNER_CONFIGURATION_INVALID');
+          fail(`APPWRITE_TEST_RUNNER_${RUNNER_FIELD_CODES[key]}_INVALID`);
         }
       } else if (actual !== expected) {
-        fail('APPWRITE_TEST_RUNNER_CONFIGURATION_INVALID');
+        fail(`APPWRITE_TEST_RUNNER_${RUNNER_FIELD_CODES[key]}_INVALID`);
       }
     }
   }

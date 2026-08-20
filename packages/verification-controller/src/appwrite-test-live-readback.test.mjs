@@ -301,6 +301,25 @@ test('reads and returns only the sanitized Appwrite Test projection', async () =
   }
 });
 
+test('normalizes an empty Appwrite deployment ID to no active deployment', async () => {
+  const firstFunction = inventory.productFunctions[0];
+  const { result } = await run({
+    transport: {
+      before(url) {
+        if (new URL(url).pathname.endsWith(`/${firstFunction.functionId}`)) {
+          return jsonResponse(url, {
+            ...functionResponse(firstFunction),
+            deploymentId: '',
+          });
+        }
+        return undefined;
+      },
+    },
+  });
+
+  assert.equal(result.status, 'PASS', result.diagnostics?.[0]?.code);
+});
+
 test('does not read either credential before the fixed inventory is accepted', async () => {
   const changed = structuredClone(inventory);
   changed.environment.projectId = '69eb4818000afa64a7fa';
@@ -415,6 +434,7 @@ test('rejects a runner configuration mismatch', async () => {
     },
   });
   assert.equal(result.status, 'BLOCKED');
+  assert.equal(result.diagnostics[0].code, 'APPWRITE_TEST_RUNNER_LOGGING_INVALID');
 });
 
 test('rejects a non-idle fixed lease', async () => {
