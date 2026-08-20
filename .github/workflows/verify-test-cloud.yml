@@ -64,7 +64,7 @@ jobs:
           test "$(npm --version)" = "11.6.2"
 
       - name: Prove exact immutable controller artifact
-        id: controller-proof
+        id: controller_proof
         shell: bash
         env:
           CONTROLLER_ARTIFACT_READ_TOKEN: ${{ github.token }}
@@ -170,7 +170,7 @@ jobs:
           artifact-ids: ${{ vars.TRUSTED_CONTROLLER_ARTIFACT_ID }}
           github-token: ${{ github.token }}
           repository: ${{ github.repository }}
-          run-id: ${{ steps.controller-proof.outputs.artifact_run_id }}
+          run-id: ${{ steps.controller_proof.outputs.artifact_run_id }}
           path: ${{ runner.temp }}\controller-artifact
           merge-multiple: true
 
