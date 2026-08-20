@@ -1,7 +1,10 @@
 import { readFile } from 'node:fs/promises';
 
 import { createA1SupervisorClient } from './a1-supervisor-client.mjs';
-import { createGithubArtifactClient } from './github-artifact-client.mjs';
+import {
+  createFilesystemArtifactClient,
+  createGithubArtifactClient,
+} from './github-artifact-client.mjs';
 import { createA1NetworkPolicyProbe } from './network-policy-probe.mjs';
 import { createValidatedArtifactUploadClient } from './validated-artifact-upload.mjs';
 import { createWorkspaceKernelDriver } from './workspace-kernel-driver.mjs';
@@ -39,6 +42,7 @@ export const HOSTED_RUNTIME_PATHS = Object.freeze({
   controllerTempRoot: '/work/controller-upload',
   exportRoot: '/work/launcher/source',
   gitExecutable: '/usr/bin/git',
+  validatedArtifactOutput: '/work/host-output',
   launcherTempRoot: '/work/launcher',
   nodeExecutable: '/usr/local/bin/node',
   npmCache: '/work/launcher/child/npm-cache',
@@ -195,7 +199,7 @@ function supervisorPaths(exportRoot) {
   });
 }
 
-function composePlatform(configuration, runtimeBinding) {
+function composePlatform(configuration, officialArtifactClient) {
   const networkPolicyProbe = createA1NetworkPolicyProbe();
   const sourceSupervisor = createA1SupervisorClient({
     networkPolicyProbe,
@@ -247,7 +251,6 @@ function composePlatform(configuration, runtimeBinding) {
       siteOutput: HOSTED_RUNTIME_PATHS.siteOutput,
     }),
   });
-  const officialArtifactClient = createGithubArtifactClient({ runtimeBinding });
   const githubRuntimeBinding = Object.freeze({
     async assertAvailable() { return closed({ diagnostics: EMPTY_DIAGNOSTICS, status: 'PASS', value: null }); },
     operatingSystem: 'linux',
@@ -283,10 +286,33 @@ function composePlatform(configuration, runtimeBinding) {
 
 export async function runHostedRuntime({ environment, requestText } = {}) {
   let request;
-  let runtimeBinding;
+  let officialArtifactClient;
   try {
     request = parseHostedRequest(requestText);
-    runtimeBinding = captureGithubArtifactRuntimeBinding(environment);
+    if (
+      environment !== null
+      && typeof environment === 'object'
+      && environment.GITHUB_ACTIONS === 'true'
+      && environment.A1_VALIDATED_ARTIFACT_OUTPUT === HOSTED_RUNTIME_PATHS.validatedArtifactOutput
+      && /^[1-9][0-9]*$/u.test(environment.A1_VALIDATED_ARTIFACT_UID ?? '')
+      && environment.A1_VALIDATED_ARTIFACT_UID !== '1000'
+      && /^[1-9][0-9]*$/u.test(environment.A1_VALIDATED_ARTIFACT_GID ?? '')
+    ) {
+      const ownerUid = Number(environment.A1_VALIDATED_ARTIFACT_UID);
+      const ownerGid = Number(environment.A1_VALIDATED_ARTIFACT_GID);
+      delete environment.A1_VALIDATED_ARTIFACT_OUTPUT;
+      delete environment.A1_VALIDATED_ARTIFACT_UID;
+      delete environment.A1_VALIDATED_ARTIFACT_GID;
+      officialArtifactClient = createFilesystemArtifactClient({
+        outputRoot: HOSTED_RUNTIME_PATHS.validatedArtifactOutput,
+        ownerGid,
+        ownerUid,
+      });
+    } else {
+      officialArtifactClient = createGithubArtifactClient({
+        runtimeBinding: captureGithubArtifactRuntimeBinding(environment),
+      });
+    }
   } catch (error) {
     const code = error?.message === 'HOSTED_REQUEST_INVALID'
       ? 'ARTIFACT_SCHEMA_INVALID'
@@ -310,7 +336,7 @@ export async function runHostedRuntime({ environment, requestText } = {}) {
     }
     return await runTrustedHostedSourceArtifact(Object.freeze({
       controllerConfiguration,
-      platformCapabilities: composePlatform(configuration, runtimeBinding),
+      platformCapabilities: composePlatform(configuration, officialArtifactClient),
     }));
   } catch {
     return blocked('ARTIFACT_BUILD_FAILED', 'Trusted artifact construction could not be completed.');

@@ -1,5 +1,15 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  writeFile,
+} from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import test from 'node:test';
 
 import {
@@ -9,7 +19,11 @@ import {
   parseHostedRequest,
   runHostedRuntime,
 } from '../host/hosted-runtime.mjs';
-import { createGithubArtifactClient } from '../host/github-artifact-client.mjs';
+import {
+  createFilesystemArtifactClient,
+  createGithubArtifactClient,
+} from '../host/github-artifact-client.mjs';
+import { SOURCE_ARTIFACT_UPLOAD_MEMBERS } from '../host/validated-artifact-upload.mjs';
 import { createBoundedPosixProcessTransport } from '../launcher/repository/packages/verification-controller/src/source-artifact-posix-process-transport.mjs';
 import { createBoundedPosixSandboxTransport } from '../launcher/repository/packages/verification-controller/src/source-artifact-posix-sandbox-transport.mjs';
 
@@ -87,7 +101,7 @@ test('official artifact client restores runtime values only around the pinned up
     runtimeBinding,
     uploadOperation: async ({ artifactName, files, rootDirectory }) => {
       assert.equal(environment.ACTIONS_RUNTIME_TOKEN, 'secret-runtime-token');
-      assert.equal(artifactName, 'verification-artifacts-test');
+      assert.equal(artifactName, `verification-artifacts-${REVISION}`);
       assert.equal(files.length, 39);
       assert.equal(rootDirectory, '/trusted/staging');
       return { id: 1, size: 39 };
@@ -95,7 +109,7 @@ test('official artifact client restores runtime values only around the pinned up
   });
   const files = Array.from({ length: 39 }, (_, index) => `/trusted/staging/${index}`);
   const result = await client.uploadArtifact(
-    'verification-artifacts-test',
+    `verification-artifacts-${REVISION}`,
     files,
     '/trusted/staging',
     { compressionLevel: 0 },
@@ -103,6 +117,53 @@ test('official artifact client restores runtime values only around the pinned up
   assert.deepEqual(result, { id: 1, size: 39 });
   assert.equal(environment.ACTIONS_RUNTIME_TOKEN, undefined);
   assert.equal(environment.ACTIONS_RESULTS_URL, undefined);
+});
+
+test('filesystem artifact client exports only the exact validated member set to an empty private bind root', async () => {
+  const temporaryRoot = await mkdtemp(path.join(os.tmpdir(), 'a1-filesystem-artifact-'));
+  const stagingRoot = path.join(temporaryRoot, 'staging');
+  const outputRoot = path.join(temporaryRoot, 'host-output');
+  try {
+    await mkdir(stagingRoot, { mode: 0o700 });
+    await mkdir(outputRoot, { mode: 0o700 });
+    const files = [];
+    for (const [index, { relativePath }] of SOURCE_ARTIFACT_UPLOAD_MEMBERS.entries()) {
+      const source = path.join(stagingRoot, ...relativePath.split('/'));
+      await mkdir(path.dirname(source), { mode: 0o700, recursive: true });
+      await writeFile(source, `validated-${index}\n`, { mode: 0o600 });
+      await chmod(source, 0o600);
+      files.push(source);
+    }
+
+    const client = createFilesystemArtifactClient({ outputRoot });
+    const result = await client.uploadArtifact(
+      `verification-artifacts-${REVISION}`,
+      Object.freeze(files),
+      stagingRoot,
+      Object.freeze({ compressionLevel: 0 }),
+    );
+
+    assert.match(result.digest, /^sha256:[0-9a-f]{64}$/u);
+    assert.equal(result.id, 1);
+    assert.ok(result.size > 0);
+    for (const [index, { relativePath }] of SOURCE_ARTIFACT_UPLOAD_MEMBERS.entries()) {
+      assert.equal(
+        await readFile(path.join(outputRoot, ...relativePath.split('/')), 'utf8'),
+        `validated-${index}\n`,
+      );
+    }
+    await assert.rejects(
+      client.uploadArtifact(
+        `verification-artifacts-${REVISION}`,
+        Object.freeze(files),
+        stagingRoot,
+        Object.freeze({ compressionLevel: 0 }),
+      ),
+      /ARTIFACT_UPLOAD_CLIENT_INVALID/u,
+    );
+  } finally {
+    await rm(temporaryRoot, { force: true, recursive: true });
+  }
 });
 
 test('hosted runtime configuration canonicalizes the packaged trusted inventory for the launcher', () => {
@@ -141,6 +202,7 @@ test('hosted runtime paths keep candidate, workspace, and upload staging physica
     npmCache: '/work/launcher/child/npm-cache',
     npmExecutable: '/usr/local/bin/npm',
     siteOutput: '/work/launcher/site',
+    validatedArtifactOutput: '/work/host-output',
   }));
   assert.equal(HOSTED_RUNTIME_PATHS.controllerTempRoot.startsWith(`${HOSTED_RUNTIME_PATHS.candidateWorkspaceRoot}/`), false);
   assert.equal(HOSTED_RUNTIME_PATHS.artifactOutputRoot.startsWith(`${HOSTED_RUNTIME_PATHS.candidateWorkspaceRoot}/`), false);
