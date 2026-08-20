@@ -92,6 +92,16 @@ const SAFE_LIVE_READBACK_DIAGNOSTIC_CODES = new Set([
   'APPWRITE_TEST_RUNNER_VARIABLE_READBACK_INVALID',
   'APPWRITE_TEST_SITE_READBACK_INVALID',
 ]);
+const SAFE_BINDING_DIAGNOSTIC_CODES = new Set([
+  'APPWRITE_TEST_BINDING_INPUT_INVALID',
+  'APPWRITE_TEST_BINDING_INVALID',
+  'APPWRITE_TEST_BINDING_OUTPUT_INVALID',
+  'APPWRITE_TEST_CONTROLLER_ARTIFACT_INVALID',
+  'APPWRITE_TEST_HOSTED_ATTESTATION_INVALID',
+  'APPWRITE_TEST_HOSTED_READBACK_INVALID',
+  'APPWRITE_TEST_SETUP_ATTESTATION_INVALID',
+  'APPWRITE_TEST_SETUP_READBACK_INVALID',
+]);
 for (const field of [
   'COMMANDS',
   'DEPLOYMENT_ID',
@@ -434,9 +444,16 @@ export async function collectAppwriteTestReadback(args) {
       nowEpochSeconds: Math.floor(Date.now() / 1000),
       controllerArtifact: input.controllerArtifact,
     });
+    if (bindings?.status !== 'PASS') {
+      const code = Array.isArray(bindings?.diagnostics)
+        && bindings.diagnostics.length === 1
+        && SAFE_BINDING_DIAGNOSTIC_CODES.has(bindings.diagnostics[0]?.code)
+        ? bindings.diagnostics[0].code
+        : 'APPWRITE_TEST_BINDING_OUTPUT_INVALID';
+      return blocked(code);
+    }
     if (
-      bindings?.status !== 'PASS'
-      || exactObject(bindings.value?.bindings, BINDING_NAMES) === null
+      exactObject(bindings.value?.bindings, BINDING_NAMES) === null
       || !isPlainObject(bindings.value?.evidence)
     ) return blocked('APPWRITE_TEST_BINDING_OUTPUT_INVALID');
     return pass({
