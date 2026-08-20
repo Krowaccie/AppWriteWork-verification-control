@@ -15,11 +15,27 @@ const MAX_ARGUMENT_BYTES = 1_048_576;
 const DEFAULT_MAX_OUTPUT_BYTES = 1_048_576;
 const MAX_OUTPUT_BYTES = 16_777_216;
 const MAX_HELPER_ENVELOPE_BYTES = MAX_OUTPUT_BYTES * 6 + 65_536;
-const WINDOWS_HELPER_GRACE_MS = 15_000;
+const WINDOWS_HELPER_STARTUP_TIMEOUT_MS = 60_000;
+const WINDOWS_HELPER_SHUTDOWN_GRACE_MS = 15_000;
 const TRUSTED_WINDOWS_ROOT = "C:\\Windows";
 const TRUSTED_POWERSHELL =
   "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe";
 const TRUSTED_COMSPEC = "C:\\Windows\\System32\\cmd.exe";
+
+export function windowsHelperWatchdogTimeoutMs(timeoutMs) {
+  if (
+    !Number.isInteger(timeoutMs) ||
+    timeoutMs <= 0 ||
+    timeoutMs > MAX_TIMEOUT_MS
+  ) {
+    throw new RangeError("timeoutMs is outside the bounded process timeout");
+  }
+  return (
+    timeoutMs +
+    WINDOWS_HELPER_STARTUP_TIMEOUT_MS +
+    WINDOWS_HELPER_SHUTDOWN_GRACE_MS
+  );
+}
 
 function frozenResult(status, fields = {}) {
   return Object.freeze({
@@ -313,7 +329,7 @@ function runWindows(request, launcher) {
       if (!terminateHelper(helper)) {
         helperTerminationFailed = true;
       }
-    }, request.timeoutMs + WINDOWS_HELPER_GRACE_MS);
+    }, windowsHelperWatchdogTimeoutMs(request.timeoutMs));
 
     helper.stdout.on("data", (chunk) => {
       if (helperOutputExceeded) return;
