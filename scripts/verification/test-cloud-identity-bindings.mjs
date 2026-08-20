@@ -1038,7 +1038,7 @@ function validatePasswordArm(value) {
     invalid('TEST_IDENTITY_USER_PASSWORD_INVALID');
   }
   let keys;
-  if (value.hash === 'argon2') keys = ['type', 'memoryCost', 'timeCost', 'threads'];
+  if (value.hash === 'argon2') keys = ['type', 'memory_cost', 'time_cost', 'threads'];
   else if (value.hash === 'scrypt') keys = ['type', 'costCpu', 'costMemory', 'costParallel', 'length'];
   else if (value.hash === 'scryptMod') keys = ['type', 'salt', 'saltSeparator', 'signerKey'];
   else keys = ['type'];
