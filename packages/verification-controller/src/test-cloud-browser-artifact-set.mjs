@@ -112,6 +112,7 @@ function parseTar(bytes){
   }
   if(end!==2)return (()=>{throw new TypeError();})();return members;
 }
+function hostedSitePayloadDigest(members,record){const files=[];for(const [path,bytes] of members){if(path==='build-identity.json')continue;files.push({path,mode:'100644',contentDigest:sha(bytes,record)});}files.sort((left,right)=>left.path<right.path?-1:left.path>right.path?1:0);return sha(canonical(files),record);}
 function settleWithin(promise) {
   return new Promise((resolve) => {
     let settled = false;
@@ -350,11 +351,9 @@ export async function projectTestCloudBrowserArtifactPolicyRows(args) {
     if (!exact(args, ['sourceArtifactSet'])) return BLOCKED;
     const site = siteFrom(args.sourceArtifactSet, record);
     const inflated = await gunzip(site.bytes, record);
-    if (
-      !DIGEST.test(site.canonicalContentDigest)
-      || sha(inflated, record) !== site.canonicalContentDigest
-    ) return BLOCKED;
+    if (!DIGEST.test(site.canonicalContentDigest)) return BLOCKED;
     const members = parseTar(inflated);
+    if (hostedSitePayloadDigest(members, record) !== site.canonicalContentDigest) return BLOCKED;
     record.members = members;
     const built = buildRows(members, viteRoles(readManifest(members)), record);
     const rows = deepFreeze(built.rows.map((row) => deepFreeze({
@@ -417,8 +416,9 @@ export async function qualifyTestCloudBrowserArtifactSet(args) {
     record.state = 'MATERIALIZING';
     const site = siteFrom(args.sourceArtifactSet, record);
     const inflated = await gunzip(site.bytes, record);
-    if (record.abortRequested || current !== record || record.state !== 'MATERIALIZING' || !DIGEST.test(site.canonicalContentDigest) || sha(inflated, record) !== site.canonicalContentDigest) throw new TypeError();
+    if (record.abortRequested || current !== record || record.state !== 'MATERIALIZING' || !DIGEST.test(site.canonicalContentDigest)) throw new TypeError();
     const members = parseTar(inflated);
+    if (hostedSitePayloadDigest(members, record) !== site.canonicalContentDigest) throw new TypeError();
     record.members = members;
     const manifest = readManifest(members);
     const built = buildRows(members, viteRoles(manifest), record);

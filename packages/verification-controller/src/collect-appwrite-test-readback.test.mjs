@@ -8,6 +8,7 @@ import test from 'node:test';
 import { canonicalJson } from '../../../scripts/verification/canonical-json.mjs';
 import {
   collectAppwriteTestReadback,
+  githubSourceRequest,
   runCollectAppwriteTestReadbackCli,
 } from './collect-appwrite-test-readback.mjs';
 
@@ -167,6 +168,92 @@ test('collapses an unknown source-reader failure code to the generic collector c
   assert.equal(result.status, 'BLOCKED');
   assert.equal(result.diagnostics[0].code, 'APPWRITE_TEST_COLLECT_INVALID');
   assert.equal(JSON.stringify(result).includes('secret-value-sentinel'), false);
+});
+
+test('preserves an allowlisted live-readback failure code without serializing secrets', async () => {
+  const fakes = dependencies();
+  fakes.readLiveImpl = async () => ({
+    status: 'BLOCKED',
+    value: null,
+    diagnostics: [{
+      code: 'APPWRITE_TEST_RUNNER_CONFIGURATION_INVALID',
+      safeMessage: 'safe stage message',
+      secretValue: 'secret-value-sentinel',
+    }],
+  });
+
+  const result = await collectAppwriteTestReadback({
+    input: input(),
+    environment: environment(),
+    dependencies: fakes,
+  });
+
+  assert.equal(result.status, 'BLOCKED');
+  assert.equal(result.diagnostics[0].code, 'APPWRITE_TEST_RUNNER_CONFIGURATION_INVALID');
+  assert.equal(JSON.stringify(result).includes('secret-value-sentinel'), false);
+});
+
+test('collapses an unknown live-readback failure code to the stage code', async () => {
+  const fakes = dependencies();
+  fakes.readLiveImpl = async () => ({
+    status: 'BLOCKED',
+    value: null,
+    diagnostics: [{ code: 'MALICIOUS_SECRET_VALUE_SENTINEL' }],
+  });
+
+  const result = await collectAppwriteTestReadback({
+    input: input(),
+    environment: environment(),
+    dependencies: fakes,
+  });
+
+  assert.equal(result.status, 'BLOCKED');
+  assert.equal(result.diagnostics[0].code, 'APPWRITE_TEST_LIVE_PROJECTION_INVALID');
+});
+
+test('downloads a bounded source artifact through one trusted Azure redirect', async () => {
+  const archive = Uint8Array.from({ length: 24 }, (_, index) => index);
+  const redirectUrl =
+    'https://productionresultssa2.blob.core.windows.net/actions-results/run/artifact.zip?sig=test';
+  const calls = [];
+  const result = await githubSourceRequest(async (url, options) => {
+    calls.push([url, options]);
+    if (calls.length === 1) {
+      return new Response(null, { status: 302, headers: { location: redirectUrl } });
+    }
+    return new Response(archive, {
+      status: 200,
+      headers: { 'content-length': String(archive.byteLength) },
+    });
+  }, '/repos/Krowaccie/AppWriteWork/actions/artifacts/9420071362/zip', {
+    method: 'GET',
+    headers: { Authorization: 'Bearer test-source-token' },
+    redirect: 'error',
+    expectedBytes: archive.byteLength,
+  });
+
+  assert.equal(result.status, 200);
+  assert.deepEqual(result.bytes, archive);
+  assert.equal(calls[0][1].redirect, 'manual');
+  assert.equal(calls[0][1].headers.Authorization, 'Bearer test-source-token');
+  assert.equal(calls[1][0], redirectUrl);
+  assert.equal(calls[1][1].redirect, 'error');
+  assert.equal(Object.hasOwn(calls[1][1].headers, 'Authorization'), false);
+});
+
+test('rejects an artifact redirect outside the exact trusted storage host class', async () => {
+  await assert.rejects(
+    githubSourceRequest(async () => new Response(null, {
+      status: 302,
+      headers: { location: 'https://example.invalid/artifact.zip?sig=test' },
+    }), '/repos/Krowaccie/AppWriteWork/actions/artifacts/9420071362/zip', {
+      method: 'GET',
+      headers: { Authorization: 'Bearer test-source-token' },
+      redirect: 'error',
+      expectedBytes: 24,
+    }),
+    (error) => error?.code === 'SOURCE_ARTIFACT_DOWNLOAD_FAILED',
+  );
 });
 
 test('CLI writes exactly eight bindings plus canonical evidence and manifest files', async () => {

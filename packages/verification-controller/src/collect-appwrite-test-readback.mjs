@@ -79,6 +79,19 @@ const SAFE_SOURCE_READER_DIAGNOSTIC_CODES = new Set([
   'PRODUCTION_RELEASE_SET_MISMATCH',
   'PRODUCTION_TEST_ONLY_SET_MISMATCH',
 ]);
+const SAFE_LIVE_READBACK_DIAGNOSTIC_CODES = new Set([
+  'APPWRITE_TEST_CREDENTIAL_INVALID',
+  'APPWRITE_TEST_FUNCTION_READBACK_INVALID',
+  'APPWRITE_TEST_IDENTITY_READBACK_INVALID',
+  'APPWRITE_TEST_LEASE_READBACK_INVALID',
+  'APPWRITE_TEST_LIVE_READBACK_INPUT_INVALID',
+  'APPWRITE_TEST_LIVE_READBACK_INVALID',
+  'APPWRITE_TEST_RESPONSE_INVALID',
+  'APPWRITE_TEST_ROUTE_INVALID',
+  'APPWRITE_TEST_RUNNER_CONFIGURATION_INVALID',
+  'APPWRITE_TEST_RUNNER_VARIABLE_READBACK_INVALID',
+  'APPWRITE_TEST_SITE_READBACK_INVALID',
+]);
 
 function sha256Text(value) {
   return `sha256:${createHash('sha256').update(value, 'utf8').digest('hex')}`;
@@ -177,9 +190,64 @@ function readEnvironment(environment) {
   return values;
 }
 
-async function githubSourceRequest(fetchImpl, requestPath, options = {}) {
+function sourceArtifactDownloadFailure() {
+  const error = new Error('The source artifact download failed its closed transport contract.');
+  error.code = 'SOURCE_ARTIFACT_DOWNLOAD_FAILED';
+  return error;
+}
+
+function trustedArtifactRedirect(value) {
+  if (typeof value !== 'string' || value.length < 1 || value.length > 8192) return null;
+  try {
+    const url = new URL(value);
+    if (
+      url.protocol !== 'https:'
+      || url.username !== ''
+      || url.password !== ''
+      || url.port !== ''
+      || url.hash !== ''
+      || url.search.length < 2
+      || !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.blob\.core\.windows\.net$/u
+        .test(url.hostname)
+    ) return null;
+    return url.href;
+  } catch {
+    return null;
+  }
+}
+
+export async function githubSourceRequest(fetchImpl, requestPath, options = {}) {
   if (typeof fetchImpl !== 'function' || typeof requestPath !== 'string') {
     throw new TypeError('GitHub source request is invalid.');
+  }
+  if (Number.isSafeInteger(options.expectedBytes)) {
+    try {
+      let response = await fetchImpl(`https://api.github.com${requestPath}`, {
+        method: options.method,
+        headers: options.headers,
+        body: options.body,
+        redirect: 'manual',
+      });
+      if (response?.status === 302) {
+        const location = typeof response.headers?.get === 'function'
+          ? response.headers.get('location')
+          : null;
+        const redirectUrl = trustedArtifactRedirect(location);
+        if (redirectUrl === null) throw sourceArtifactDownloadFailure();
+        response = await fetchImpl(redirectUrl, {
+          method: 'GET',
+          headers: { Accept: 'application/octet-stream' },
+          redirect: 'error',
+        });
+      }
+      return Object.freeze({
+        status: response.status,
+        bytes: await readBoundedSourceArtifactArchive(response, options.expectedBytes),
+      });
+    } catch (error) {
+      if (error?.code === 'SOURCE_ARTIFACT_DOWNLOAD_FAILED') throw error;
+      throw sourceArtifactDownloadFailure();
+    }
   }
   const response = await fetchImpl(`https://api.github.com${requestPath}`, {
     method: options.method,
@@ -187,12 +255,6 @@ async function githubSourceRequest(fetchImpl, requestPath, options = {}) {
     body: options.body,
     redirect: options.redirect ?? 'error',
   });
-  if (Number.isSafeInteger(options.expectedBytes)) {
-    return Object.freeze({
-      status: response.status,
-      bytes: await readBoundedSourceArtifactArchive(response, options.expectedBytes),
-    });
-  }
   if (response.status === 204) return Object.freeze({ status: 204, body: null });
   const bytes = new Uint8Array(await response.arrayBuffer());
   if (bytes.byteLength < 2 || bytes.byteLength > MAX_GITHUB_JSON_BYTES) {
@@ -294,7 +356,14 @@ export async function collectAppwriteTestReadback(args) {
       fetchImpl: globalThis.fetch,
       clock: Object.freeze({ nowEpochSeconds: () => Math.floor(Date.now() / 1000) }),
     });
-    if (live?.status !== 'PASS') return blocked('APPWRITE_TEST_LIVE_PROJECTION_INVALID');
+    if (live?.status !== 'PASS') {
+      const code = Array.isArray(live?.diagnostics)
+        && live.diagnostics.length === 1
+        && SAFE_LIVE_READBACK_DIAGNOSTIC_CODES.has(live.diagnostics[0]?.code)
+        ? live.diagnostics[0].code
+        : 'APPWRITE_TEST_LIVE_PROJECTION_INVALID';
+      return blocked(code);
+    }
     const policy = dependencies.createPolicyImpl({
       browserArtifactProjection: projected.value,
       environmentDigest: 'sha256:e83dac9cc615ccf37fd027683690edb2ff7332ac523d57130c1e86fa8617f302',
