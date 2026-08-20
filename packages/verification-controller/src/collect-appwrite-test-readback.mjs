@@ -56,6 +56,29 @@ const ENVIRONMENT_NAMES = Object.freeze([
   'E2E_VIEWER_EMAIL',
 ]);
 const MAX_GITHUB_JSON_BYTES = 2 * 1024 * 1024;
+const SAFE_SOURCE_READER_DIAGNOSTIC_CODES = new Set([
+  'SOURCE_ARTIFACT_DIGEST_MISMATCH',
+  'SOURCE_ARTIFACT_DOWNLOAD_FAILED',
+  'SOURCE_ARTIFACT_IDENTITY_MISMATCH',
+  'SOURCE_ARTIFACT_LIST_FAILED',
+  'SOURCE_ARTIFACT_MANIFEST_INVALID',
+  'SOURCE_ARTIFACT_READER_INPUT_INVALID',
+  'SOURCE_ARTIFACT_ZIP_UNSAFE',
+  'SOURCE_APP_JWT_INPUT_INVALID',
+  'SOURCE_APP_JWT_SIGN_FAILED',
+  'SOURCE_INSTALLATION_TOKEN_CREATE_FAILED',
+  'SOURCE_INSTALLATION_TOKEN_REVOCATION_FAILED',
+  'SOURCE_INSTALLATION_TOKEN_SCOPE_MISMATCH',
+  'SOURCE_REPOSITORY_IDENTITY_MISMATCH',
+  'SOURCE_REPOSITORY_READ_FAILED',
+  'SOURCE_RUN_IDENTITY_MISMATCH',
+  'SOURCE_RUN_READ_FAILED',
+  'SOURCE_WORKFLOW_IDENTITY_MISMATCH',
+  'SOURCE_WORKFLOW_READ_FAILED',
+  'PRODUCTION_HANDOFF_EXTRA_ARTIFACT',
+  'PRODUCTION_RELEASE_SET_MISMATCH',
+  'PRODUCTION_TEST_ONLY_SET_MISMATCH',
+]);
 
 function sha256Text(value) {
   return `sha256:${createHash('sha256').update(value, 'utf8').digest('hex')}`;
@@ -298,8 +321,13 @@ export async function collectAppwriteTestReadback(args) {
       bindings: bindings.value.bindings,
       evidence: bindings.value.evidence,
     });
-  } catch {
-    return blocked('APPWRITE_TEST_COLLECT_INVALID');
+  } catch (error) {
+    const code = error !== null && typeof error === 'object'
+      && typeof error.code === 'string'
+      && SAFE_SOURCE_READER_DIAGNOSTIC_CODES.has(error.code)
+      ? error.code
+      : 'APPWRITE_TEST_COLLECT_INVALID';
+    return blocked(code);
   }
 }
 

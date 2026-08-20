@@ -132,6 +132,43 @@ test('composes the exact source, live, policy, and binding stages', async () => 
     'test-cloud.browser-request-policy.v1');
 });
 
+test('preserves an allowlisted source-reader failure code without serializing secrets', async () => {
+  const safeCode = 'SOURCE_INSTALLATION_TOKEN_SCOPE_MISMATCH';
+  const sourceError = new Error('provider response contained a secret-value-sentinel');
+  sourceError.code = safeCode;
+  const fakes = dependencies();
+  fakes.readSourceArtifactImpl = async () => { throw sourceError; };
+
+  const result = await collectAppwriteTestReadback({
+    input: input(),
+    environment: environment(),
+    dependencies: fakes,
+  });
+
+  assert.equal(result.status, 'BLOCKED');
+  assert.equal(result.diagnostics[0].code, safeCode);
+  const serialized = JSON.stringify(result);
+  assert.equal(serialized.includes('secret-value-sentinel'), false);
+  for (const secret of Object.values(environment())) assert.equal(serialized.includes(secret), false);
+});
+
+test('collapses an unknown source-reader failure code to the generic collector code', async () => {
+  const sourceError = new Error('provider response contained a secret-value-sentinel');
+  sourceError.code = 'MALICIOUS_SECRET_VALUE_SENTINEL';
+  const fakes = dependencies();
+  fakes.readSourceArtifactImpl = async () => { throw sourceError; };
+
+  const result = await collectAppwriteTestReadback({
+    input: input(),
+    environment: environment(),
+    dependencies: fakes,
+  });
+
+  assert.equal(result.status, 'BLOCKED');
+  assert.equal(result.diagnostics[0].code, 'APPWRITE_TEST_COLLECT_INVALID');
+  assert.equal(JSON.stringify(result).includes('secret-value-sentinel'), false);
+});
+
 test('CLI writes exactly eight bindings plus canonical evidence and manifest files', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'appwrite-test-readback-'));
   const inputPath = path.join(root, 'input.json');
