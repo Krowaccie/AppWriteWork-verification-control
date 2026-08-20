@@ -76,6 +76,7 @@ const CAPTURED_SET_ADD = ownMethod(CAPTURED_SET_PROTOTYPE, 'add');
 const CAPTURED_SET_DELETE = ownMethod(CAPTURED_SET_PROTOTYPE, 'delete');
 const CAPTURED_STRING_ITERATOR = ownMethod(String.prototype, Symbol.iterator);
 const CAPTURED_STRING_CODE_POINT_AT = ownMethod(String.prototype, 'codePointAt');
+const CAPTURED_STRING_SLICE = ownMethod(String.prototype, 'slice');
 const CAPTURED_STRING_ITERATOR_PROTOTYPE = typeof CAPTURED_STRING_ITERATOR === 'function'
   ? OBJECT_GET_PROTOTYPE_OF(REFLECT_APPLY(CAPTURED_STRING_ITERATOR, '', []))
   : undefined;
@@ -127,6 +128,7 @@ function capturedIdentityIntrinsicsAvailable() {
     && typeof CAPTURED_STRING_ITERATOR === 'function'
     && typeof CAPTURED_STRING_ITERATOR_NEXT === 'function'
     && typeof CAPTURED_STRING_CODE_POINT_AT === 'function'
+    && typeof CAPTURED_STRING_SLICE === 'function'
     && typeof CAPTURED_DATE === 'function' && !isProxy(CAPTURED_DATE)
     && CAPTURED_DATE_PROTOTYPE !== null && typeof CAPTURED_DATE_PROTOTYPE === 'object'
     && !isProxy(CAPTURED_DATE_PROTOTYPE)
@@ -948,7 +950,7 @@ async function fetchIdentity(recipe, secret, runtimeQualification, loadRecord) {
 }
 
 const RFC3339_MILLISECONDS =
-  /^\d{4}-(0[1-9]|1[0-2])-([0-2]\d|3[01])T([01]\d|2[0-3]):[0-5]\d:[0-5]\d\.\d{3}Z$/;
+  /^\d{4}-(0[1-9]|1[0-2])-([0-2]\d|3[01])T([01]\d|2[0-3]):[0-5]\d:[0-5]\d\.\d{3}(?:Z|\+00:00)$/;
 
 function utf8Length(value) {
   return REFLECT_APPLY(CAPTURED_TEXT_ENCODER_ENCODE, TEXT_ENCODER, [value]).byteLength;
@@ -987,7 +989,10 @@ function isExactTimestamp(value) {
   const date = REFLECT_CONSTRUCT(CAPTURED_DATE, [time]);
   if (date === null || typeof date !== 'object' || isProxy(date)
     || OBJECT_GET_PROTOTYPE_OF(date) !== CAPTURED_DATE_PROTOTYPE) forbidden();
-  return REFLECT_APPLY(CAPTURED_DATE_TO_ISO_STRING, date, []) === value;
+  const normalizedValue = value[value.length - 1] === 'Z'
+    ? value
+    : `${REFLECT_APPLY(CAPTURED_STRING_SLICE, value, [0, -6])}Z`;
+  return REFLECT_APPLY(CAPTURED_DATE_TO_ISO_STRING, date, []) === normalizedValue;
 }
 
 function isDenseArray(value, maximum) {
