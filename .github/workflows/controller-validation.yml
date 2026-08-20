@@ -60,6 +60,8 @@ jobs:
             grep -Fq -- "--cap-add $capability" "$action_root/run-a1.sh"
           done
           grep -Fq -- '--cap-drop ALL' "$action_root/run-a1.sh"
+          test "$(grep -Foc -- '--security-opt ' "$action_root/run-a1.sh")" = '1'
+          grep -Fq -- '--security-opt apparmor=unconfined' "$action_root/run-a1.sh"
           grep -Fq -- '--user 0' "$action_root/run-a1.sh"
           grep -Fq -- 'dst=/github/workspace,readonly' "$action_root/run-a1.sh"
           grep -Fq -- 'dst=/work/host-output' "$action_root/run-a1.sh"

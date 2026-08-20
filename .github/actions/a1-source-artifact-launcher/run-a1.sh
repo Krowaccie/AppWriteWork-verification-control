@@ -61,6 +61,7 @@ docker run --rm \
   --cap-add SYS_PTRACE \
   --cap-add SETUID \
   --cap-add SETGID \
+  --security-opt apparmor=unconfined \
   --mount "type=bind,src=$workspace,dst=/github/workspace,readonly" \
   --mount "type=bind,src=$artifact_path,dst=/work/host-output" \
   --env GITHUB_ACTIONS \
