@@ -57,6 +57,20 @@ const SAFE_SOURCE_READER_DIAGNOSTIC_CODES = new Set([
   'PRODUCTION_RELEASE_SET_MISMATCH',
   'PRODUCTION_TEST_ONLY_SET_MISMATCH',
 ]);
+const SAFE_PREFLIGHT_DIAGNOSTIC_CODES = new Set([
+  'TEST_CLOUD_CLIENTS_INVALID',
+  'TEST_CLOUD_CONTEXT_INVALID',
+  'TEST_CLOUD_IDENTITY_BINDINGS_INVALID',
+  'TEST_CLOUD_LANE_COMPOSITION_INVALID',
+  'TEST_CLOUD_PROVIDER_CONTRACT_INVALID',
+  'TEST_CLOUD_PROVIDER_STORE_INVALID',
+  'TEST_CLOUD_RUNNER_VARIABLE_OPERATOR_INVALID',
+  'TEST_CLOUD_RUNNER_VARIABLE_READBACK_INVALID',
+  'TEST_CLOUD_RUNNER_VARIABLE_REQUEST_INVALID',
+  'TEST_CLOUD_SETUP_ATTESTATION_INVALID',
+  'TEST_CLOUD_SETUP_READBACK_INVALID',
+  'TEST_CLOUD_SITE_IDENTITY_READER_INVALID',
+]);
 
 const loadControllerReattestation = () =>
   import('./github-controller-artifact-verifier.mjs');
@@ -445,7 +459,9 @@ function result(status, value, code = null, retryable = false) {
   };
   const safeMessage = SAFE_SOURCE_READER_DIAGNOSTIC_CODES.has(code)
     ? messages.SOURCE_ARTIFACT_INVALID
-    : messages[code];
+    : SAFE_PREFLIGHT_DIAGNOSTIC_CODES.has(code)
+      ? messages.TEST_CLOUD_PREFLIGHT_BLOCKED
+      : messages[code];
   return deepFreeze({
     status,
     value,
@@ -504,14 +520,22 @@ function validHostedSourceSnapshot(value, request) {
     && validateArtifactSetOutput(value.artifactSet, value.selection);
 }
 
+export function selectSafeDiagnosticCode(outcome, fallback, safeDiagnosticCodes) {
+  const outcomeCode = outcome?.diagnostics?.[0]?.code;
+  return safeDiagnosticCodes instanceof Set && safeDiagnosticCodes.has(outcomeCode)
+    ? outcomeCode
+    : fallback;
+}
+
 async function hostedStage(method, request, code, safeDiagnosticCodes = null) {
   try {
     const outcome = await method(deepFreeze(request));
     if (!validControllerResult(outcome) || outcome.status !== 'PASS') {
-      const outcomeCode = outcome?.diagnostics?.[0]?.code;
-      const selectedCode = safeDiagnosticCodes?.has(outcomeCode)
-        ? outcomeCode
-        : code;
+      const selectedCode = selectSafeDiagnosticCode(
+        outcome,
+        code,
+        safeDiagnosticCodes,
+      );
       return result('BLOCKED', null, selectedCode, retryable(outcome));
     }
     return outcome;
@@ -1176,19 +1200,25 @@ export function createProductionHostedDependencies(args) {
         runId: `verify-${source.selection.sourceRevision.slice(0, 12)}-${source.selection.workflowRunId}-${source.selection.workflowRunAttempt}`,
         credentialHandles,
       });
-      if (contextResult.status !== 'PASS') return blockedFrom(contextResult);
+      if (contextResult.status !== 'PASS') {
+        return blockedFrom(contextResult, 'TEST_CLOUD_CONTEXT_INVALID');
+      }
       const context = contextResult.value;
       const clients = appwrite.createTestCloudClients({
         context,
         credentialHandles,
         fetch: fetchImpl,
       });
-      if (clients.status !== 'PASS') return blockedFrom(clients);
+      if (clients.status !== 'PASS') {
+        return blockedFrom(clients, 'TEST_CLOUD_CLIENTS_INVALID');
+      }
       const providerContract = await provider.loadQualifiedTestCloudProviderContract(Object.freeze({
         runtimeQualification: stage.runtime.runtimeQualification,
         context,
       }));
-      if (providerContract.status !== 'PASS') return blockedFrom(providerContract);
+      if (providerContract.status !== 'PASS') {
+        return blockedFrom(providerContract, 'TEST_CLOUD_PROVIDER_CONTRACT_INVALID');
+      }
       const identityBindings = await identities.loadQualifiedTestCloudIdentityBindings({
         runtimeQualification: stage.runtime.runtimeQualification,
         context,
@@ -1200,14 +1230,18 @@ export function createProductionHostedDependencies(args) {
           viewer: stage.credentials.E2E_VIEWER_EMAIL,
         },
       });
-      if (identityBindings.status !== 'PASS') return blockedFrom(identityBindings);
+      if (identityBindings.status !== 'PASS') {
+        return blockedFrom(identityBindings, 'TEST_CLOUD_IDENTITY_BINDINGS_INVALID');
+      }
       const setupReadback = provider.loadQualifiedTestCloudSetupReadback(Object.freeze({
         runtimeQualification: stage.runtime.runtimeQualification,
         context,
         providerContract,
         identityBindings,
       }));
-      if (setupReadback.status !== 'PASS') return blockedFrom(setupReadback);
+      if (setupReadback.status !== 'PASS') {
+        return blockedFrom(setupReadback, 'TEST_CLOUD_SETUP_READBACK_INVALID');
+      }
       const runnerRequest = appwrite.qualifyTestCloudRunnerVariableReadbackRequest({
         runtimeQualification: stage.runtime.runtimeQualification,
         context,
@@ -1216,16 +1250,22 @@ export function createProductionHostedDependencies(args) {
         identityBindings,
         providerSetupReadback: setupReadback,
       });
-      if (runnerRequest.status !== 'PASS') return blockedFrom(runnerRequest);
+      if (runnerRequest.status !== 'PASS') {
+        return blockedFrom(runnerRequest, 'TEST_CLOUD_RUNNER_VARIABLE_REQUEST_INVALID');
+      }
       const runnerOperator = appwrite.createTestCloudRunnerVariableReadbackOperator({
         runtimeQualification: stage.runtime.runtimeQualification,
         requestQualification: runnerRequest.value.requestQualification,
       });
-      if (runnerOperator.status !== 'PASS') return blockedFrom(runnerOperator);
+      if (runnerOperator.status !== 'PASS') {
+        return blockedFrom(runnerOperator, 'TEST_CLOUD_RUNNER_VARIABLE_OPERATOR_INVALID');
+      }
       const runnerReadback = await runnerOperator.value.getRunnerVariableDigests({
         runtimeQualification: stage.runtime.runtimeQualification,
       });
-      if (runnerReadback.status !== 'PASS') return blockedFrom(runnerReadback);
+      if (runnerReadback.status !== 'PASS') {
+        return blockedFrom(runnerReadback, 'TEST_CLOUD_RUNNER_VARIABLE_READBACK_INVALID');
+      }
       const setupAttestation = preflight.createTestCloudSetupAttestation({
         runtimeQualification: stage.runtime.runtimeQualification,
         context,
@@ -1238,17 +1278,23 @@ export function createProductionHostedDependencies(args) {
         providerSetupReadback: setupReadback,
         runnerVariableReadbackResult: runnerReadback,
       });
-      if (setupAttestation.status !== 'PASS') return blockedFrom(setupAttestation);
+      if (setupAttestation.status !== 'PASS') {
+        return blockedFrom(setupAttestation, 'TEST_CLOUD_SETUP_ATTESTATION_INVALID');
+      }
       const store = providerStore.createProviderControlStore({
         context,
         client: clients.value.fixture,
       });
-      if (store.status !== 'PASS') return blockedFrom(store);
+      if (store.status !== 'PASS') {
+        return blockedFrom(store, 'TEST_CLOUD_PROVIDER_STORE_INVALID');
+      }
       const siteIdentityReader = deployment.createTestSiteIdentityReader({
         context,
         fetchTrusted: fetchImpl,
       });
-      if (siteIdentityReader.status !== 'PASS') return blockedFrom(siteIdentityReader);
+      if (siteIdentityReader.status !== 'PASS') {
+        return blockedFrom(siteIdentityReader, 'TEST_CLOUD_SITE_IDENTITY_READER_INVALID');
+      }
       const providerFacade = Object.freeze({
         async readExact() { return Object.freeze({ status: 500 }); },
         async deleteExact() { return Object.freeze({ status: 500 }); },
@@ -1402,7 +1448,7 @@ export function createProductionHostedDependencies(args) {
           });
         },
       });
-      return composeProductionTestCloudLane({
+      const lane = composeProductionTestCloudLane({
         artifactSet: source.artifactSet,
         clock: Object.freeze({ now: clock.now }),
         controller: stage.controller,
@@ -1425,6 +1471,9 @@ export function createProductionHostedDependencies(args) {
         }),
         selection: source.selection,
       });
+      return lane.status === 'PASS'
+        ? lane
+        : blockedFrom(lane, 'TEST_CLOUD_LANE_COMPOSITION_INVALID');
     },
 
     async runLane(stage) {
@@ -1540,6 +1589,7 @@ export async function runHostedTestCloudController(args) {
       setup: setup.value,
     },
     'TEST_CLOUD_PREFLIGHT_BLOCKED',
+    SAFE_PREFLIGHT_DIAGNOSTIC_CODES,
   );
   if (lane.status !== 'PASS') return lane;
   try {
