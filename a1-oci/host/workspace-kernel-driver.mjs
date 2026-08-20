@@ -34,7 +34,7 @@ const TREE_PATHS = Object.freeze([
   'artifact-handoff.v1.json',
   'artifact-manifest.v1.json',
   'functions',
-  ...FUNCTION_NAMES.map((name) => `functions/${name}.tar.gz`),
+  ...FUNCTION_NAMES.map((name) => `functions/${name}.tar.gz`).sort(),
   'site',
   'site/site.tar.gz',
 ]);
@@ -121,7 +121,7 @@ function encodeIdentity(bytes, expectedRoot) {
   const caseCollision = buffer[26];
   const componentMatchesRoot = buffer[27];
   if (
-    root === null || root !== expectedRoot || device === 0n || inode === 0n || linkCount !== 1n
+    root === null || root !== expectedRoot || device === 0n || inode === 0n || linkCount === 0n
     || symbolicLink !== 0 || caseCollision !== 0 || componentMatchesRoot !== 1
   ) throw workspaceError('A1_WORKSPACE_IDENTITY');
   const scalar = (value) => value <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(value) : value.toString(10);

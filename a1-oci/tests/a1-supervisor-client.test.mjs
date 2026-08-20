@@ -164,8 +164,36 @@ test('process adapter emits exact A1SV request and a fixed sanitized spawn', asy
     '/work/config', '/work/npm-cache', '/work/output/site',
   ]);
   assert.deepEqual(fixture.spawns[0].options.env, { LANG: 'C.UTF-8', LC_ALL: 'C.UTF-8', TZ: 'UTC' });
+  assert.equal(Object.hasOwn(fixture.spawns[0].options, 'uid'), false);
+  assert.equal(Object.hasOwn(fixture.spawns[0].options, 'gid'), false);
   assert.equal(Object.hasOwn(fixture.spawns[0].options.env, 'ACTIONS_RUNTIME_TOKEN'), false);
   assert.equal(Object.hasOwn(fixture.spawns[0].options.env, 'ACTIONS_RESULTS_URL'), false);
+});
+
+test('process adapter accepts the transport hardened null-prototype argv', async () => {
+  const fixture = clientFixture((child) => {
+    const start = Buffer.alloc(9);
+    start[0] = 0;
+    start.writeInt32BE(0, 1);
+    start.set([0, 0, 0, 1], 5);
+    child.stdout.write(frame(1, 5, 1, start));
+    child.stdout.write(frame(1, 7, 2));
+    child.stdout.end();
+    queueMicrotask(() => child.emit('close', 0, null));
+  });
+  const request = processRequest();
+  const hardenedArgs = [...request.process.args];
+  Object.setPrototypeOf(hardenedArgs, null);
+  Object.freeze(hardenedArgs);
+  const hardenedRequest = closed({
+    ...request,
+    process: closed({ ...request.process, args: hardenedArgs }),
+  });
+
+  const result = await fixture.client.run(hardenedRequest, new AbortController().signal);
+
+  assert.equal(result.status, 'PASS');
+  assert.equal(fixture.spawns.length, 1);
 });
 
 test('network proof is an exact controller-owned probe call, never a constant success', async () => {

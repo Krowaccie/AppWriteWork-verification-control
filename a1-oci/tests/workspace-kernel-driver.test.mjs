@@ -24,9 +24,10 @@ const MEMBER_PATHS = Object.freeze([
 ]);
 const TREE_PATHS = Object.freeze([
   'artifact-handoff.v1.json', 'artifact-manifest.v1.json', 'functions',
-  ...MEMBER_PATHS.filter((value) => value.startsWith('functions/')),
+  ...MEMBER_PATHS.filter((value) => value.startsWith('functions/')).sort(),
   'site', 'site/site.tar.gz',
 ]);
+const SUPERVISOR_TREE_PATHS = Object.freeze([...TREE_PATHS].sort());
 
 function closed(fields) {
   return Object.freeze(Object.assign(Object.create(null), fields));
@@ -48,7 +49,7 @@ function identity(root) {
   value[0] = root === 'source' ? 1 : 2;
   value.writeBigUInt64BE(7n, 1);
   value.writeBigUInt64BE(root === 'source' ? 11n : 12n, 9);
-  value.writeBigUInt64BE(1n, 17);
+  value.writeBigUInt64BE(2n, 17);
   value.set([0, 0, 1], 25);
   return value;
 }
@@ -173,7 +174,7 @@ function normalDispatch(log) {
       return token;
     }
     if (opcode === 5) return identity(roots.get(payload.subarray(1, 33).toString('hex')));
-    if (opcode === 6) return Buffer.from(TREE_PATHS.join('\n'));
+    if (opcode === 6) return Buffer.from(SUPERVISOR_TREE_PATHS.join('\n'));
     return Buffer.alloc(0);
   };
 }
@@ -192,6 +193,8 @@ test('persistent workspace driver exposes exactly 11 methods and maps every opco
     'source-artifact-posix-workspace-kernel.v1', '/work/source', '/work/output',
   ]);
   assert.deepEqual(fixture.spawns[0].options.env, { LANG: 'C.UTF-8', LC_ALL: 'C.UTF-8', TZ: 'UTC' });
+  assert.equal(fixture.spawns[0].options.uid, 1000);
+  assert.equal(fixture.spawns[0].options.gid, 1000);
 
   const root = await fixture.driver.createRoot('output');
   const handle = await fixture.driver.openRoot(root.native);
@@ -246,7 +249,7 @@ test('workspace operations are serialized behind one persistent session', async 
 });
 
 test('path and retained identity tamper fail closed and terminate the supervisor', async () => {
-  const badPaths = [...TREE_PATHS];
+  const badPaths = [...SUPERVISOR_TREE_PATHS];
   badPaths[0] = '../escape';
   const log = [];
   const fixture = createFixture((frames) => {

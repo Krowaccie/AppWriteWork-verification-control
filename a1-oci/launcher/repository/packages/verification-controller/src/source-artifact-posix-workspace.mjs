@@ -171,6 +171,12 @@ export function createPosixSourceArtifactWorkspaceHost(config) {
         throw new Error('export');
       }
 
+      const outputResetResult = await kernel.rollbackExport(outputHandle);
+      if (outputResetResult?.status !== 'PASS') {
+        operationFailure = outputResetResult;
+        throw new Error('output reset');
+      }
+
       let closePromise = null;
       const workspaceLease = freeze({
         close() {

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-readonly image='ghcr.io/krowaccie/appwritework-verification-a1@sha256:ff23ed8834201d90e4c6e67b6f4c6ed66626c2b4bea897147b407647197f15e8'
+readonly image='ghcr.io/krowaccie/appwritework-verification-a1@sha256:e846b592b9a745aa48d2415dbc3066d4fccddba26a16002ef8eac6d94bdb791d'
 readonly workspace="${GITHUB_WORKSPACE:-}"
 readonly runner_temp="${RUNNER_TEMP:-}"
 
@@ -57,6 +57,9 @@ printf 'artifact-name=%s\nartifact-path=%s\n' "$artifact_name" "$artifact_path" 
 docker run --rm \
   --user 0 \
   --cap-drop ALL \
+  --cap-add CHOWN \
+  --cap-add DAC_OVERRIDE \
+  --cap-add FOWNER \
   --cap-add SYS_ADMIN \
   --cap-add SYS_PTRACE \
   --cap-add SETUID \

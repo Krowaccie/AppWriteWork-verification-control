@@ -455,6 +455,16 @@ function exactCapability(value, methodNames) {
   return objectFreeze({ receiver: value, ...copy });
 }
 
+function exactTrustedCapability(value, methodNames) {
+  const copy = exactTrustedDataObject(value, methodNames);
+  if (copy === null) return null;
+  for (let index = 0; index < methodNames.length; index += 1) {
+    const method = copy[methodNames[index]];
+    if (typeof method !== 'function' || isProxy(method)) return null;
+  }
+  return objectFreeze({ receiver: value, ...copy });
+}
+
 function exactLimits(value) {
   const copy = exactDataObject(value, LIMIT_KEYS);
   if (copy === null || !objectIsFrozen(value)) return null;
@@ -1233,15 +1243,21 @@ function createCommandSpec(state, commandId) {
       network = 'deny';
       break;
     case 'typecheck':
-      executable = state.configuration.npmExecutable;
-      args = ['exec', '--', 'tsc', '-b', '--pretty', 'false'];
+      executable = state.configuration.nodeExecutable;
+      args = [
+        '/opt/appwritework/verification-a1/host/typecheck-driver.mjs',
+        webRoot,
+      ];
       cwd = webRoot;
       network = 'deny';
       break;
     case 'vite-build':
-      executable = state.configuration.npmExecutable;
+      executable = state.configuration.nodeExecutable;
       args = [
-        'exec', '--', 'vite', 'build', '--outDir', workspace.siteOutput, '--emptyOutDir',
+        reflectApply(pathPosixJoin, PathPosix, [
+          webRoot, 'node_modules', 'vite', 'bin', 'vite.js',
+        ]),
+        'build', '--configLoader', 'runner', '--outDir', workspace.siteOutput, '--emptyOutDir',
       ];
       cwd = webRoot;
       network = 'deny';
@@ -1390,7 +1406,10 @@ function authenticateInspectedOutput(candidate) {
   if (envelope === null) return null;
   const value = exactTrustedDataObject(envelope.value, ['retainedOutput', 'snapshot']);
   if (value === null) return null;
-  const retainedOutput = exactCapability(value.retainedOutput, ['close', 'readMember', 'revalidate']);
+  const retainedOutput = exactTrustedCapability(
+    value.retainedOutput,
+    ['close', 'readMember', 'revalidate'],
+  );
   if (retainedOutput === null) return null;
   return objectFreeze({ retainedOutput, snapshot: value.snapshot });
 }
