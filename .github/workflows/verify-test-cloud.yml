@@ -64,10 +64,10 @@ jobs:
           test "$(npm --version)" = "11.6.2"
 
       - name: Prove exact immutable controller artifact
-        id: controller_proof
         shell: bash
         env:
           CONTROLLER_ARTIFACT_READ_TOKEN: ${{ github.token }}
+          CONTROLLER_ARTIFACT_DIRECTORY: ${{ runner.temp }}\controller-artifact
           GITHUB_REPOSITORY: ${{ github.repository }}
           GITHUB_SHA: ${{ github.sha }}
           TRUSTED_CONTROLLER_SHA: ${{ vars.TRUSTED_CONTROLLER_SHA }}
@@ -78,18 +78,23 @@ jobs:
           env -i \
             PATH="$PATH" \
             GITHUB_ENV="$GITHUB_ENV" \
-            GITHUB_OUTPUT="$GITHUB_OUTPUT" \
             CONTROLLER_ARTIFACT_READ_TOKEN="$CONTROLLER_ARTIFACT_READ_TOKEN" \
+            CONTROLLER_ARTIFACT_DIRECTORY="$CONTROLLER_ARTIFACT_DIRECTORY" \
             GITHUB_REPOSITORY="$GITHUB_REPOSITORY" \
             GITHUB_SHA="$GITHUB_SHA" \
             TRUSTED_CONTROLLER_ARTIFACT_ID="$TRUSTED_CONTROLLER_ARTIFACT_ID" \
             TRUSTED_CONTROLLER_BUNDLE_DIGEST="$TRUSTED_CONTROLLER_BUNDLE_DIGEST" \
             TRUSTED_CONTROLLER_SHA="$TRUSTED_CONTROLLER_SHA" \
             node --input-type=module <<'NODE'
+          import { createHash } from 'node:crypto';
           import { appendFileSync } from 'node:fs';
-          import { readFile, lstat, realpath } from 'node:fs/promises';
+          import { lstat, mkdir, readFile, realpath, writeFile } from 'node:fs/promises';
           import path from 'node:path';
-          import { readBoundedResponseBytes } from './packages/verification-controller/src/controller-archive-verifier.mjs';
+          import {
+            extractBoundedZipArchive,
+            MAX_VERIFICATION_ARCHIVE_BYTES,
+            readBoundedResponseBytes,
+          } from './packages/verification-controller/src/controller-archive-verifier.mjs';
           import { verifyGithubControllerArtifact } from './packages/verification-controller/src/github-controller-artifact-verifier.mjs';
           import { createProductionExactShaGitAdapter } from './packages/verification-controller/src/production-exact-sha-git-adapter.mjs';
 
@@ -122,11 +127,11 @@ jobs:
           if (verified.status !== 'PASS') {
             throw new Error('BLOCKED TRUSTED_CONTROLLER_REQUIRED');
           }
-          const metadataResponse = await fetch(
-            `https://api.github.com/repos/${process.env.GITHUB_REPOSITORY}/actions/artifacts/${verified.value.controllerArtifactId}`,
+          const redirectResponse = await fetch(
+            `https://api.github.com/repos/${process.env.GITHUB_REPOSITORY}/actions/artifacts/${verified.value.controllerArtifactId}/zip`,
             {
               method: 'GET',
-              redirect: 'error',
+              redirect: 'manual',
               headers: {
                 Accept: 'application/vnd.github+json',
                 Authorization: `Bearer ${process.env.CONTROLLER_ARTIFACT_READ_TOKEN}`,
@@ -135,24 +140,63 @@ jobs:
               },
             },
           );
-          const metadataContentType = metadataResponse.headers.get('content-type');
+          const rawLocation = redirectResponse.headers.get('location');
+          let signedUrl = null;
+          try {
+            const candidate = new URL(rawLocation);
+            const hostname = candidate.hostname.toLowerCase();
+            if (
+              redirectResponse.status === 302
+              && candidate.protocol === 'https:'
+              && (
+                hostname === 'objects.githubusercontent.com'
+                || hostname.endsWith('.githubusercontent.com')
+                || hostname.endsWith('.blob.core.windows.net')
+              )
+              && candidate.username === ''
+              && candidate.password === ''
+              && (candidate.port === '' || candidate.port === '443')
+              && candidate.pathname.startsWith('/')
+              && candidate.pathname.length > 1
+              && candidate.hash === ''
+            ) signedUrl = candidate.toString();
+          } catch {}
+          if (signedUrl === null) throw new Error('BLOCKED TRUSTED_CONTROLLER_REQUIRED');
+          const archiveResponse = await fetch(signedUrl, {
+            method: 'GET',
+            redirect: 'error',
+            headers: {
+              Accept: 'application/octet-stream',
+              'User-Agent': 'appwritework-verification-controller',
+            },
+          });
+          if (archiveResponse.status !== 200) {
+            throw new Error('BLOCKED TRUSTED_CONTROLLER_REQUIRED');
+          }
+          const archive = await readBoundedResponseBytes(
+            archiveResponse,
+            MAX_VERIFICATION_ARCHIVE_BYTES,
+          );
+          const archiveDigest = `sha256:${createHash('sha256').update(archive).digest('hex')}`;
+          if (archiveDigest !== verified.value.controllerBundleDigest) {
+            throw new Error('BLOCKED TRUSTED_CONTROLLER_REQUIRED');
+          }
+          const artifactRoot = path.resolve(process.env.CONTROLLER_ARTIFACT_DIRECTORY);
           if (
-            metadataResponse.status !== 200
-            || typeof metadataContentType !== 'string'
-            || !/^application\/json(?:\s*;|$)/iu.test(metadataContentType)
+            !path.isAbsolute(process.env.CONTROLLER_ARTIFACT_DIRECTORY)
+            || artifactRoot !== process.env.CONTROLLER_ARTIFACT_DIRECTORY
           ) throw new Error('BLOCKED TRUSTED_CONTROLLER_REQUIRED');
-          const metadata = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(
-            await readBoundedResponseBytes(metadataResponse, 1024 * 1024),
-          ));
-          const artifactRunId = String(metadata?.workflow_run?.id ?? '');
-          if (
-            String(metadata?.id ?? '') !== verified.value.controllerArtifactId
-            || metadata?.name !== `verification-controller-bundle-${verified.value.controllerBundleSha}`
-            || metadata?.digest !== verified.value.controllerBundleDigest
-            || metadata?.expired !== false
-            || metadata?.workflow_run?.head_sha !== verified.value.controllerBundleSha
-            || !/^[1-9][0-9]*$/u.test(artifactRunId)
-          ) throw new Error('BLOCKED TRUSTED_CONTROLLER_REQUIRED');
+          await mkdir(artifactRoot);
+          const entries = [...extractBoundedZipArchive(archive).entries()]
+            .sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0);
+          for (const [relativePath, bytes] of entries) {
+            const destination = path.resolve(artifactRoot, ...relativePath.split('/'));
+            if (!destination.startsWith(`${artifactRoot}${path.sep}`)) {
+              throw new Error('BLOCKED TRUSTED_CONTROLLER_REQUIRED');
+            }
+            await mkdir(path.dirname(destination), { recursive: true });
+            await writeFile(destination, bytes, { flag: 'wx', mode: 0o600 });
+          }
           appendFileSync(process.env.GITHUB_ENV, [
             'PROOF_STATUS=PASS',
             'PROOF_REPOSITORY=' + verified.value.controllerRepository,
@@ -161,18 +205,7 @@ jobs:
             'PROOF_BUNDLE_DIGEST=' + verified.value.controllerBundleDigest,
             '',
           ].join('\n'), 'utf8');
-          appendFileSync(process.env.GITHUB_OUTPUT, `artifact_run_id=${artifactRunId}\n`, 'utf8');
           NODE
-
-      - name: Stage only the proven controller artifact
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
-        with:
-          artifact-ids: ${{ vars.TRUSTED_CONTROLLER_ARTIFACT_ID }}
-          github-token: ${{ github.token }}
-          repository: ${{ github.repository }}
-          run-id: ${{ steps.controller_proof.outputs.artifact_run_id }}
-          path: ${{ runner.temp }}\controller-artifact
-          merge-multiple: true
 
       - name: Install the exact trusted controller dependencies
         shell: bash
