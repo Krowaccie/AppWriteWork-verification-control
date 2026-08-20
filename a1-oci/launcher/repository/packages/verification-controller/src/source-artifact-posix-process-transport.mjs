@@ -503,7 +503,7 @@ function normalizeSupervisorResult(candidate, processSpec, aborted) {
 
 export function createBoundedPosixProcessTransport(config) {
   const configuration = readConfiguration(config);
-  return closed({
+  return Object.freeze({
     async run(processSpec, abortSignal) {
       let signalState = abortState(abortSignal);
       if (signalState === 'invalid') return NETWORK_UNAVAILABLE;

@@ -268,7 +268,7 @@ function successfulProcessResult(result) {
 export function createBoundedPosixSandboxTransport(config) {
   const configuration = readConfiguration(config);
   const transports = buildTransports(configuration);
-  return closed({
+  return Object.freeze({
     async run(processSpec, abortSignal) {
       let commandId;
       try {

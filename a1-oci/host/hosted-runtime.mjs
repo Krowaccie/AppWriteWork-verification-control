@@ -28,6 +28,8 @@ const REVISION = /^[0-9a-f]{40}$/u;
 const TREE_DIGEST = /^sha256:[0-9a-f]{64}$/u;
 const RUN_ID = /^[1-9][0-9]*$/u;
 const EMPTY_DIAGNOSTICS = Object.freeze([]);
+const inventoryDecoder = new TextDecoder('utf-8', { fatal: true });
+const inventoryEncoder = new TextEncoder();
 
 export const HOSTED_RUNTIME_PATHS = Object.freeze({
   artifactOutputRoot: '/work/artifacts',
@@ -76,6 +78,19 @@ function canonical(value) {
     return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonical(value[key])}`).join(',')}}`;
   }
   return JSON.stringify(value);
+}
+
+function canonicalInventoryBytes(value) {
+  if (!(value instanceof Uint8Array) || value.byteLength > LIMITS.trustedInventoryBytes) {
+    throw new Error('TRUSTED_INVENTORY_INVALID');
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(inventoryDecoder.decode(new Uint8Array(value)));
+  } catch {
+    throw new Error('TRUSTED_INVENTORY_INVALID');
+  }
+  return inventoryEncoder.encode(canonical(parsed));
 }
 
 export function parseHostedRequest(text) {
@@ -136,7 +151,7 @@ export function captureGithubArtifactRuntimeBinding(environment) {
   });
 }
 
-export function createHostedRuntimeConfiguration(request, trustedInventoryBytes = new Uint8Array()) {
+export function createHostedRuntimeConfiguration(request, trustedInventoryBytes) {
   const outputRoot = `${HOSTED_RUNTIME_PATHS.artifactOutputRoot}/.verification/artifacts/${request.sourceRevision}`;
   return Object.freeze({
     artifactOutputRoot: HOSTED_RUNTIME_PATHS.artifactOutputRoot,
@@ -159,7 +174,7 @@ export function createHostedRuntimeConfiguration(request, trustedInventoryBytes 
     sourceRef: request.sourceRef,
     sourceRevision: request.sourceRevision,
     sourceTreeDigest: request.sourceTreeDigest,
-    trustedInventoryBytes: new Uint8Array(trustedInventoryBytes),
+    trustedInventoryBytes: canonicalInventoryBytes(trustedInventoryBytes),
     workflow: request.workflow,
     workflowRunAttempt: request.workflowRunAttempt,
     workflowRunId: request.workflowRunId,

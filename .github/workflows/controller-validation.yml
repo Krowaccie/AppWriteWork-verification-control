@@ -40,6 +40,10 @@ jobs:
         shell: bash
         run: node --test --test-isolation=none packages/verification-controller/src/*.test.mjs
 
+      - name: Run A1 OCI contract suite
+        shell: bash
+        run: node --test --test-isolation=none a1-oci/tests/*.test.mjs
+
       - name: Validate public secret-free governance
         shell: bash
         run: |

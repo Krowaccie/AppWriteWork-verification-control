@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import {
@@ -9,6 +10,8 @@ import {
   runHostedRuntime,
 } from '../host/hosted-runtime.mjs';
 import { createGithubArtifactClient } from '../host/github-artifact-client.mjs';
+import { createBoundedPosixProcessTransport } from '../launcher/repository/packages/verification-controller/src/source-artifact-posix-process-transport.mjs';
+import { createBoundedPosixSandboxTransport } from '../launcher/repository/packages/verification-controller/src/source-artifact-posix-sandbox-transport.mjs';
 
 const REVISION = '0123456789abcdef0123456789abcdef01234567';
 const TREE_DIGEST = `sha256:${'a'.repeat(64)}`;
@@ -102,8 +105,15 @@ test('official artifact client restores runtime values only around the pinned up
   assert.equal(environment.ACTIONS_RESULTS_URL, undefined);
 });
 
-test('hosted runtime configuration is frozen and contains no credential values', () => {
-  const configuration = createHostedRuntimeConfiguration(parseHostedRequest(canonical(request())));
+test('hosted runtime configuration canonicalizes the packaged trusted inventory for the launcher', () => {
+  const inventoryBytes = readFileSync(new URL(
+    '../launcher/repository/dev/verification/environments/test-cloud.inventory.v1.json',
+    import.meta.url,
+  ));
+  const configuration = createHostedRuntimeConfiguration(
+    parseHostedRequest(canonical(request())),
+    inventoryBytes,
+  );
   assert.equal(Object.isFrozen(configuration), true);
   assert.equal(configuration.sourceCheckoutRoot, '/github/workspace');
   assert.equal(configuration.nodeExecutable, '/usr/local/bin/node');
@@ -111,6 +121,10 @@ test('hosted runtime configuration is frozen and contains no credential values',
   assert.equal(configuration.producerArgv.at(1), `.verification/artifacts/${REVISION}`);
   assert.equal(configuration.limits.outputFileMembers, 39);
   assert.equal(JSON.stringify(configuration).includes('ACTIONS_RUNTIME_TOKEN'), false);
+  assert.equal(
+    new TextDecoder().decode(configuration.trustedInventoryBytes),
+    canonical(JSON.parse(inventoryBytes.toString('utf8'))),
+  );
 });
 
 test('hosted runtime paths keep candidate, workspace, and upload staging physically disjoint', () => {
@@ -130,6 +144,35 @@ test('hosted runtime paths keep candidate, workspace, and upload staging physica
   }));
   assert.equal(HOSTED_RUNTIME_PATHS.controllerTempRoot.startsWith(`${HOSTED_RUNTIME_PATHS.candidateWorkspaceRoot}/`), false);
   assert.equal(HOSTED_RUNTIME_PATHS.artifactOutputRoot.startsWith(`${HOSTED_RUNTIME_PATHS.candidateWorkspaceRoot}/`), false);
+});
+
+test('hosted runtime transport adapters satisfy the exact ordinary capability contract', () => {
+  const supervisor = Object.freeze({
+    async proveNetworkPolicy() { return true; },
+    async run() { throw new Error('not executed by constructor contract test'); },
+  });
+  const processTransport = createBoundedPosixProcessTransport({
+    gitExecutable: HOSTED_RUNTIME_PATHS.gitExecutable,
+    sourceCheckoutRoot: HOSTED_RUNTIME_PATHS.candidateWorkspaceRoot,
+    supervisor,
+  });
+  const sandboxTransport = createBoundedPosixSandboxTransport({
+    nodeExecutable: HOSTED_RUNTIME_PATHS.nodeExecutable,
+    npmExecutable: HOSTED_RUNTIME_PATHS.npmExecutable,
+    supervisor,
+    workspace: Object.freeze({
+      commandTemp: HOSTED_RUNTIME_PATHS.childTemp,
+      configHome: HOSTED_RUNTIME_PATHS.configHome,
+      exportRoot: HOSTED_RUNTIME_PATHS.exportRoot,
+      npmCache: HOSTED_RUNTIME_PATHS.npmCache,
+      siteOutput: HOSTED_RUNTIME_PATHS.siteOutput,
+    }),
+  });
+
+  assert.equal(Object.isFrozen(processTransport), true);
+  assert.equal(Object.getPrototypeOf(processTransport), Object.prototype);
+  assert.equal(Object.isFrozen(sandboxTransport), true);
+  assert.equal(Object.getPrototypeOf(sandboxTransport), Object.prototype);
 });
 
 test('hosted runtime returns a closed blocker before composition when artifact runtime is absent', async () => {
