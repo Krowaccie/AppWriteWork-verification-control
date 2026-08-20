@@ -100,6 +100,10 @@
         "packages/verification-controller/schemas/test-cloud-hosted-prepublication-readback.v1.schema.json",
         "packages/verification-controller/schemas/test-cloud-hosted-setup-attestation.v1.schema.json",
         "packages/verification-controller/schemas/test-cloud-hosted-setup-readback.v1.schema.json",
+        "packages/verification-controller/src/appwrite-test-browser-policy.mjs",
+        "packages/verification-controller/src/appwrite-test-live-readback.mjs",
+        "packages/verification-controller/src/appwrite-test-setup-bindings.mjs",
+        "packages/verification-controller/src/collect-appwrite-test-readback.mjs",
         "packages/verification-controller/src/controller-archive-verifier.mjs",
         "packages/verification-controller/src/create-production-browser-policy.mjs",
         "packages/verification-controller/src/create-verified-release-record-handoff.mjs",
@@ -121,6 +125,7 @@
         "packages/verification-controller/src/release-record-contract.mjs",
         "packages/verification-controller/src/run-production-readonly-playwright.mjs",
         "packages/verification-controller/src/source-artifact-reader.mjs",
+        "packages/verification-controller/src/test-cloud-binding-artifact-verifier.mjs",
         "packages/verification-controller/src/test-cloud-browser-artifact-set.mjs",
         "packages/verification-controller/src/test-cloud-browser-route-adapter.mjs",
         "packages/verification-controller/src/test-cloud-contained-browser-scenario-adapter.mjs",
@@ -132,6 +137,7 @@
         "packages/verification-controller/src/verified-production-handoff.mjs",
         "packages/verification-controller/src/verified-release-record-handoff.mjs",
         "packages/verification-controller/src/verify-production-browser-policy.mjs",
+        "packages/verification-controller/workflows/collect-appwrite-test-readback.yml",
         "packages/verification-controller/workflows/production-readonly.yml",
         "packages/verification-controller/workflows/publish-controller-bundle.yml",
         "packages/verification-controller/workflows/release-production.yml",
@@ -176,6 +182,10 @@
         {
           "source": "packages/verification-controller/package.json",
           "destination": "package.json"
+        },
+        {
+          "source": "packages/verification-controller/workflows/collect-appwrite-test-readback.yml",
+          "destination": ".github/workflows/collect-appwrite-test-readback.yml"
         },
         {
           "source": "packages/verification-controller/workflows/publish-controller-bundle.yml",

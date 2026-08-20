@@ -49,6 +49,14 @@ secret-free artifact containing:
 - hosted attestation JSON and digest;
 - sanitized projection evidence and safe diagnostics.
 
+The eight values are intentionally not GitHub environment variables. The
+provider document is larger than GitHub's per-variable limit, and the complete
+set can exceed the Windows process-environment limit. A small artifact ID and
+raw ZIP digest are the only persistent pointers. Both consuming workflows
+download the same-repository artifact, verify its metadata, workflow head SHA,
+raw ZIP digest, exact member set, per-file manifest, canonical JSON, and setup
+semantics, then read the verified files directly.
+
 Secrets exist only in the process environment of the producer step. They are
 removed before artifact upload and must not appear in stdout, stderr, files, or
 GitHub outputs.
@@ -98,13 +106,14 @@ The workflow must:
 - use `windows-2025` and Node `24.11.1`;
 - use environment `appwrite-test`;
 - require `github.sha == vars.TRUSTED_CONTROLLER_SHA`;
-- map only `APPWRITE_TEST_OPERATOR_API_KEY` and
-  `APPWRITE_TEST_FIXTURE_API_KEY`;
-- accept exact controller SHA, source SHA, initial-seed mode, and a canonical
-  source-policy input artifact;
+- map only the two Appwrite read credentials, source-artifact reader key, and
+  the three identity email values needed for identity-safe digest projection;
+- accept the exact controller SHA, successful source `Verify Main` tuple,
+  runner SHA, initial-seed mode, and optional controller artifact tuple;
 - upload one artifact named
   `appwrite-test-setup-readback-<controller-sha>-<source-sha>`;
-- upload only the eight binding values and sanitized evidence;
+- upload only the eight binding values, sanitized evidence, and a canonical
+  per-file manifest;
 - use the repository's seven-day retention;
 - never log JSON binding values because they may contain nonsecret but private
   identity-derived digests.
@@ -120,25 +129,28 @@ producer rejects `test-only.invalid`, `example`, production hosts, placeholder
 digests, duplicate ordinals, or a policy whose self-field-free digest does not
 match.
 
-The source-policy artifact is secret-free data. Its generation can occur on
-the source feature branch before source `main` moves, but the hosted verifier
-will independently compare its first 25 rows to the exact source artifact
-published by `Verify Main`.
+The source-browser policy is generated inside the collector from the exact
+successful `Verify Main` artifact. Its first 25 rows therefore come from the
+same source revision and artifact tuple used later by the hosted verifier.
 
 ## Data flow
 
-1. Generate the source-browser policy from the exact candidate source SHA.
-2. Dispatch the protected readback workflow at the exact controller SHA.
+1. Merge the independently reviewed source candidate and obtain a successful
+   `Verify Main` artifact tuple.
+2. Dispatch the protected initial readback workflow at the exact controller
+   SHA and source tuple.
 3. Read Appwrite Test state using disjoint operator and fixture credentials.
-4. Assemble and self-validate the eight canonical bindings.
-5. Upload only the redacted readback artifact.
-6. Independently download and validate the artifact by ID and digest.
-7. Set the eight values in `appwrite-test` and `controller-promotion` as
-   required by their consuming workflows.
-8. Dispatch the initial controller publisher.
-9. Read back the uploaded controller artifact ID and raw ZIP digest.
-10. Produce the ordinary hosted binding and replace the initial hosted pair.
-11. Run `Verify Test Cloud` against the successful source `Verify Main` tuple.
+4. Generate the browser policy from the source artifact and assemble all eight
+   canonical bindings.
+5. Upload the redacted readback artifact and record only its artifact ID and
+   raw ZIP digest in each consuming environment.
+6. Have the publisher independently download and validate that artifact, then
+   publish the initial controller bundle.
+7. Read back the controller bundle artifact ID and raw ZIP digest.
+8. Produce an ordinary readback artifact bound to that exact controller tuple
+   and replace only the two small pointer variables.
+9. Have `Verify Test Cloud` independently validate and materialize the ordinary
+   artifact, then run against the successful source `Verify Main` tuple.
 
 ## Failure and retry behavior
 
@@ -167,4 +179,3 @@ Tests must cover:
 Completion requires focused tests, the complete standalone controller test
 suite, controller validation on the public PR, independent artifact readback,
 and a real `Verify Test Cloud` PASS. A local PASS alone is not completion.
-

@@ -1,10 +1,12 @@
 # Appwrite Test Live Readback Producer Implementation Plan
 
+Status: IN_PROGRESS
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Produce and deploy canonical, secret-free Appwrite Test setup bindings from live protected readback so the controller publisher and `Verify Test Cloud` can run against real test infrastructure.
 
-**Architecture:** A read-only acquisition module obtains fixed Appwrite Test projections through disjoint operator and fixture credentials. A pure assembler creates and self-validates the eight setup bindings, and a manual protected workflow uploads only those bindings and sanitized evidence.
+**Architecture:** A read-only acquisition module obtains fixed Appwrite Test projections through disjoint operator and fixture credentials. A pure assembler creates and self-validates the eight setup bindings, and a manual protected workflow uploads a canonical artifact. Consumers trust only its small ID/digest pointer and independently verify and materialize its files, avoiding GitHub variable and Windows process-environment size limits.
 
 **Tech Stack:** Node.js 24.11.1, GitHub Actions `windows-2025`, Appwrite REST API, canonical JSON/SHA-256, Node test runner.
 
@@ -82,16 +84,20 @@
 - Create: `packages/verification-controller/src/collect-appwrite-test-readback.test.mjs`
 - Create: `.github/workflows/collect-appwrite-test-readback.yml`
 - Create: `packages/verification-controller/workflows/collect-appwrite-test-readback.yml`
+- Create: `packages/verification-controller/src/test-cloud-binding-artifact-verifier.mjs`
+- Create: `packages/verification-controller/src/test-cloud-binding-artifact-verifier.test.mjs`
 - Modify: `.github/workflows/controller-validation.yml`
 
 **Interfaces:**
-- CLI arguments: `--input <canonical-json> --source-policy <canonical-json> --output <new-directory>`.
-- Workflow inputs: `trusted_controller_sha`, `source_repository_revision`, `initial_seed`, and `source_policy_artifact_id`.
+- Collector CLI arguments: `--input <canonical-json> --output <new-directory>`.
+- Verifier CLI arguments: `--input <canonical-pointer-json> --output <new-directory>`.
+- Workflow inputs: exact controller/source/runner SHA tuple, successful source run tuple, initial mode, and optional controller artifact tuple.
 - Artifact name: `appwrite-test-setup-readback-<controller-sha>-<source-sha>`.
 
-- [ ] Write failing CLI tests for exact argument parsing, no overwrite, safe diagnostics, and the eight expected output files.
+- [ ] Write failing CLI tests for exact argument parsing, no overwrite, safe diagnostics, eight binding files, sanitized evidence, and the per-file manifest.
 - [ ] Implement the CLI as composition of Tasks 1-3 with dependencies injected for tests.
-- [ ] Write workflow-contract tests asserting manual-only trigger, `windows-2025`, `appwrite-test`, exact SHA guard, pinned checkout/setup-node/upload actions, two allowed secret names, and absence of recovery/production names.
+- [ ] Write verifier tests for metadata, workflow SHA, raw ZIP digest, exact member set, per-file digest, canonical/semantic binding validation, and no-overwrite materialization.
+- [ ] Write workflow-contract tests asserting manual-only trigger, `windows-2025`, `appwrite-test`, exact SHA guard, pinned checkout/setup-node/upload actions, the closed secret set, and absence of recovery/production names.
 - [ ] Add the manual workflow and extend controller validation to run all root/controller `*.test.mjs` files before accepting a PR.
 - [ ] Run focused CLI/workflow tests and the complete controller test command; require zero failures.
 - [ ] Commit with message `Add protected Appwrite Test readback workflow`.
@@ -117,16 +123,16 @@
 - No source-controlled secret or binding-value files.
 
 **Interfaces:**
-- Consumes: exact merged controller SHA, exact source candidate SHA, source-policy artifact, existing Appwrite Test secrets.
-- Produces: eight environment variables plus controller artifact ID/raw ZIP digest.
+- Consumes: exact merged controller SHA, successful source `Verify Main` tuple, existing Appwrite Test secrets.
+- Produces: one initial binding artifact pointer, controller artifact ID/raw ZIP digest, then one ordinary binding artifact pointer.
 
 - [ ] Update `TRUSTED_CONTROLLER_SHA` in `appwrite-test` and `controller-promotion` to the new protected SHA.
 - [ ] Dispatch the readback workflow in initial-seed mode and wait for PASS.
-- [ ] Download the artifact by exact ID, validate its member set/digests locally, and set the eight binding variables without printing their values.
+- [ ] Download the artifact by exact ID, validate metadata/member set/digests/semantics, and set only `TRUSTED_TEST_CLOUD_BINDING_ARTIFACT_ID` plus `TRUSTED_TEST_CLOUD_BINDING_ARTIFACT_DIGEST`.
 - [ ] Set `VERIFICATION_RUNNER_REVISION` to the exact runner source revision consumed by the proposal.
 - [ ] Dispatch `Publish Controller Bundle` with `initial_seed=true`; fix branch/environment defects until PASS.
 - [ ] Read back the exact artifact ID, name, workflow head SHA, direct-member set, materialized manifest, and raw ZIP SHA-256.
-- [ ] Generate the ordinary hosted binding using that exact artifact tuple and replace only the hosted variable quartet.
+- [ ] Generate the ordinary artifact using that exact controller tuple and replace only the two small binding-artifact pointer variables.
 - [ ] Set and read back `TRUSTED_CONTROLLER_ARTIFACT_ID` and `TRUSTED_CONTROLLER_BUNDLE_DIGEST`.
 
 ### Task 7: Source pin, hosted run, and closeout
@@ -139,11 +145,10 @@
 - Consumes: merged controller SHA/artifact tuple and final source candidate SHA.
 - Produces: successful source `Verify Main`, successful controller `Verify Test Cloud`, and final closeout evidence.
 
-- [ ] Update the source candidate's controller action pin and binding readback records; run the repository change-impact preflight and focused tests.
+- [ ] Update the source candidate's controller action pin and workflow/package closure; run the repository change-impact preflight and focused tests.
 - [ ] Push the source branch and wait for PR `Verify Main` PASS while ignoring the out-of-scope production Site status.
 - [ ] Freeze the exact source diff, refresh the CIR/fingerprint, and obtain the single required action-time approval for source `main` movement.
 - [ ] Merge the source PR through GitHub, read back the exact `main` SHA, and require `Verify Main` artifact publication PASS.
 - [ ] Dispatch `Verify Test Cloud` with exact source run ID/attempt/SHA and iterate on code or bindings until all six scenarios and cleanup evidence PASS.
 - [ ] Run fresh local retained suites, `npm run build`, and two identical `post-test-deploy` impact checker passes.
 - [ ] Mark the activation plan complete only after hosted PASS; record production as untouched and the production lane as separately pending.
-

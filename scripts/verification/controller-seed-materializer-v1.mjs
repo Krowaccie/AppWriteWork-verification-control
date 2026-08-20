@@ -26,6 +26,10 @@ const A1 = Object.freeze({
 });
 const WORKFLOWS = Object.freeze([
   {
+    source: 'packages/verification-controller/workflows/collect-appwrite-test-readback.yml',
+    destination: '.github/workflows/collect-appwrite-test-readback.yml',
+  },
+  {
     source: 'packages/verification-controller/workflows/publish-controller-bundle.yml',
     destination: '.github/workflows/publish-controller-bundle.yml',
   },
