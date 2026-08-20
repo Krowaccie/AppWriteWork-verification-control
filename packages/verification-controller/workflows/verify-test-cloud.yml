@@ -119,6 +119,35 @@ jobs:
         shell: bash
         run: npm ci --ignore-scripts --no-audit --no-fund
 
+      - name: Verify exact Appwrite Test binding artifact
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          CONTROLLER_REVISION: ${{ vars.TRUSTED_CONTROLLER_SHA }}
+          SOURCE_REPOSITORY_REVISION: ${{ inputs.revision }}
+          RUNNER_REVISION: ${{ vars.VERIFICATION_RUNNER_REVISION }}
+          BINDING_ARTIFACT_ID: ${{ vars.TRUSTED_TEST_CLOUD_BINDING_ARTIFACT_ID }}
+          BINDING_ARTIFACT_DIGEST: ${{ vars.TRUSTED_TEST_CLOUD_BINDING_ARTIFACT_DIGEST }}
+          BINDING_VERIFIER_INPUT: ${{ runner.temp }}\test-cloud-binding-verifier-input.json
+          BINDING_DIRECTORY: ${{ runner.temp }}\test-cloud-bindings
+        run: |
+          $ErrorActionPreference = 'Stop'
+          node --input-type=module -e @'
+          import { writeFile } from 'node:fs/promises';
+          import { canonicalJson } from './scripts/verification/canonical-json.mjs';
+          const input = {
+            artifactId: process.env.BINDING_ARTIFACT_ID,
+            bundleDigest: process.env.BINDING_ARTIFACT_DIGEST,
+            initialSeed: false,
+            runnerRevision: process.env.RUNNER_REVISION,
+            sourceRepositoryRevision: process.env.SOURCE_REPOSITORY_REVISION,
+            trustedSha: process.env.CONTROLLER_REVISION,
+          };
+          await writeFile(process.env.BINDING_VERIFIER_INPUT, `${canonicalJson(input)}\n`, { flag: 'wx' });
+          '@
+          node packages/verification-controller/src/test-cloud-binding-artifact-verifier.mjs --input $env:BINDING_VERIFIER_INPUT --output $env:BINDING_DIRECTORY
+
       - name: Install pinned Playwright Chromium
         shell: bash
         run: npm exec --package=playwright@1.61.1 -- playwright install chromium
@@ -140,14 +169,7 @@ jobs:
           SOURCE_ARTIFACT_READER_INSTALLATION_ID: ${{ vars.SOURCE_ARTIFACT_READER_INSTALLATION_ID }}
           SOURCE_REPOSITORY_ID: ${{ vars.SOURCE_REPOSITORY_ID }}
           SOURCE_VERIFY_MAIN_WORKFLOW_ID: ${{ vars.SOURCE_VERIFY_MAIN_WORKFLOW_ID }}
-          TEST_CLOUD_SETUP_READBACK_JSON: ${{ vars.TEST_CLOUD_SETUP_READBACK_JSON }}
-          TEST_CLOUD_SETUP_READBACK_DIGEST: ${{ vars.TEST_CLOUD_SETUP_READBACK_DIGEST }}
-          TEST_CLOUD_SETUP_ATTESTATION_JSON: ${{ vars.TEST_CLOUD_SETUP_ATTESTATION_JSON }}
-          TEST_CLOUD_SETUP_ATTESTATION_DIGEST: ${{ vars.TEST_CLOUD_SETUP_ATTESTATION_DIGEST }}
-          TEST_CLOUD_HOSTED_SETUP_READBACK_JSON: ${{ vars.TEST_CLOUD_HOSTED_SETUP_READBACK_JSON }}
-          TEST_CLOUD_HOSTED_SETUP_READBACK_DIGEST: ${{ vars.TEST_CLOUD_HOSTED_SETUP_READBACK_DIGEST }}
-          TEST_CLOUD_HOSTED_SETUP_ATTESTATION_JSON: ${{ vars.TEST_CLOUD_HOSTED_SETUP_ATTESTATION_JSON }}
-          TEST_CLOUD_HOSTED_SETUP_ATTESTATION_DIGEST: ${{ vars.TEST_CLOUD_HOSTED_SETUP_ATTESTATION_DIGEST }}
+          BINDING_DIRECTORY: ${{ runner.temp }}\test-cloud-bindings
           SOURCE_ARTIFACT_READER_PRIVATE_KEY: ${{ secrets.SOURCE_ARTIFACT_READER_PRIVATE_KEY }}
           APPWRITE_TEST_OPERATOR_API_KEY: ${{ secrets.APPWRITE_TEST_OPERATOR_API_KEY }}
           APPWRITE_TEST_FIXTURE_API_KEY: ${{ secrets.APPWRITE_TEST_FIXTURE_API_KEY }}
@@ -157,7 +179,7 @@ jobs:
           E2E_EDITOR_PASSWORD: ${{ secrets.E2E_EDITOR_PASSWORD }}
           E2E_VIEWER_EMAIL: ${{ secrets.E2E_VIEWER_EMAIL }}
           E2E_VIEWER_PASSWORD: ${{ secrets.E2E_VIEWER_PASSWORD }}
-        run: node packages/verification-controller/src/test-cloud-controller.mjs --hosted --revision "$REQUESTED_REVISION" --source-run-id "$SOURCE_RUN_ID" --source-run-attempt "$SOURCE_RUN_ATTEMPT"
+        run: node packages/verification-controller/src/test-cloud-controller.mjs --hosted --revision "$REQUESTED_REVISION" --source-run-id "$SOURCE_RUN_ID" --source-run-attempt "$SOURCE_RUN_ATTEMPT" --binding-directory "$BINDING_DIRECTORY"
 
 # The staged controller performs tokenless reattestLocalControllerArtifact in
 # the same process that admits source-reader and ordinary-lane credentials.

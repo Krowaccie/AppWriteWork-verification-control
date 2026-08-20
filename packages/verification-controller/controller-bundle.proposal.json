@@ -12,6 +12,10 @@
   },
   "entrypoints": [
     {
+      "path": "packages/verification-controller/src/collect-appwrite-test-readback.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
       "path": "packages/verification-controller/src/controller-bundle-publisher.mjs",
       "sha256": "UNMATERIALIZED"
     },
@@ -36,7 +40,15 @@
       "sha256": "UNMATERIALIZED"
     },
     {
+      "path": "packages/verification-controller/src/test-cloud-binding-artifact-verifier.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
       "path": "packages/verification-controller/src/test-cloud-controller.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "packages/verification-controller/workflows/collect-appwrite-test-readback.yml",
       "sha256": "UNMATERIALIZED"
     },
     {
@@ -91,6 +103,22 @@
     },
     {
       "path": "packages/verification-controller/playwright.config.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "packages/verification-controller/src/appwrite-test-browser-policy.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "packages/verification-controller/src/appwrite-test-live-readback.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "packages/verification-controller/src/appwrite-test-setup-bindings.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "packages/verification-controller/src/collect-appwrite-test-readback.mjs",
       "sha256": "UNMATERIALIZED"
     },
     {
@@ -190,6 +218,10 @@
       "sha256": "UNMATERIALIZED"
     },
     {
+      "path": "packages/verification-controller/src/test-cloud-binding-artifact-verifier.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
       "path": "packages/verification-controller/src/test-cloud-browser-artifact-set.mjs",
       "sha256": "UNMATERIALIZED"
     },
@@ -231,6 +263,10 @@
     },
     {
       "path": "packages/verification-controller/src/verify-production-browser-policy.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "packages/verification-controller/workflows/collect-appwrite-test-readback.yml",
       "sha256": "UNMATERIALIZED"
     },
     {

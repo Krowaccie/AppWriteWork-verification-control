@@ -1,0 +1,166 @@
+name: Collect Appwrite Test Readback
+
+on:
+  workflow_dispatch:
+    inputs:
+      trusted_controller_sha:
+        description: Exact protected controller commit running the collector.
+        required: true
+        type: string
+      source_repository_revision:
+        description: Exact successful Verify Main source revision.
+        required: true
+        type: string
+      source_run_id:
+        description: Exact successful Verify Main workflow run ID.
+        required: true
+        type: string
+      source_run_attempt:
+        description: Exact successful Verify Main workflow run attempt.
+        required: true
+        type: string
+      runner_revision:
+        description: Exact verification runner source revision.
+        required: true
+        type: string
+      initial_seed:
+        description: Produce the prepublication binding before the first controller artifact exists.
+        required: true
+        type: boolean
+      controller_artifact_id:
+        description: Required only when initial_seed is false.
+        required: false
+        type: string
+      controller_artifact_digest:
+        description: Required only when initial_seed is false.
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: collect-appwrite-test-readback
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: windows-2025
+    timeout-minutes: 30
+    environment: appwrite-test
+    if: github.repository == 'Krowaccie/AppWriteWork-verification-control' && github.sha == vars.TRUSTED_CONTROLLER_SHA
+    steps:
+      - name: Validate immutable requested tuple
+        shell: pwsh
+        env:
+          REQUESTED_CONTROLLER_SHA: ${{ inputs.trusted_controller_sha }}
+          SOURCE_REPOSITORY_REVISION: ${{ inputs.source_repository_revision }}
+          RUNNER_REVISION: ${{ inputs.runner_revision }}
+          SOURCE_RUN_ID: ${{ inputs.source_run_id }}
+          SOURCE_RUN_ATTEMPT: ${{ inputs.source_run_attempt }}
+          INITIAL_SEED: ${{ inputs.initial_seed }}
+          CONTROLLER_ARTIFACT_ID: ${{ inputs.controller_artifact_id }}
+          CONTROLLER_ARTIFACT_DIGEST: ${{ inputs.controller_artifact_digest }}
+          TRUSTED_CONTROLLER_SHA: ${{ vars.TRUSTED_CONTROLLER_SHA }}
+          WORKFLOW_HEAD_SHA: ${{ github.sha }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          foreach ($value in @($env:REQUESTED_CONTROLLER_SHA, $env:SOURCE_REPOSITORY_REVISION, $env:RUNNER_REVISION)) {
+            if ($value -cnotmatch '^[0-9a-f]{40}$') { throw 'BLOCKED READBACK_TUPLE_INVALID' }
+          }
+          if ($env:SOURCE_RUN_ID -cnotmatch '^[1-9][0-9]*$' -or $env:SOURCE_RUN_ATTEMPT -cnotmatch '^[1-9][0-9]*$') {
+            throw 'BLOCKED READBACK_TUPLE_INVALID'
+          }
+          if ($env:REQUESTED_CONTROLLER_SHA -cne $env:TRUSTED_CONTROLLER_SHA -or $env:WORKFLOW_HEAD_SHA -cne $env:TRUSTED_CONTROLLER_SHA) {
+            throw 'BLOCKED CONTROLLER_REVISION_MISMATCH'
+          }
+          if ($env:INITIAL_SEED -ceq 'true') {
+            if ($env:CONTROLLER_ARTIFACT_ID -or $env:CONTROLLER_ARTIFACT_DIGEST) { throw 'BLOCKED INITIAL_SEED_TUPLE_INVALID' }
+          } elseif ($env:INITIAL_SEED -ceq 'false') {
+            if ($env:CONTROLLER_ARTIFACT_ID -cnotmatch '^[1-9][0-9]*$' -or $env:CONTROLLER_ARTIFACT_DIGEST -cnotmatch '^sha256:[0-9a-f]{64}$') {
+              throw 'BLOCKED CONTROLLER_ARTIFACT_TUPLE_INVALID'
+            }
+          } else {
+            throw 'BLOCKED INITIAL_SEED_TUPLE_INVALID'
+          }
+
+      - name: Checkout only the requested controller commit
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          ref: ${{ inputs.trusted_controller_sha }}
+          persist-credentials: false
+
+      - name: Set up exact Node.js runtime
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '24.11.1'
+          package-manager-cache: false
+
+      - name: Verify exact runtime
+        shell: pwsh
+        run: |
+          if ((node --version) -cne 'v24.11.1') { throw 'BLOCKED NODE_VERSION_INVALID' }
+          if ((npm --version) -cne '11.6.2') { throw 'BLOCKED NPM_VERSION_INVALID' }
+
+      - name: Collect canonical read-only Appwrite Test bindings
+        shell: pwsh
+        env:
+          CONTROLLER_REVISION: ${{ inputs.trusted_controller_sha }}
+          SOURCE_REPOSITORY_REVISION: ${{ inputs.source_repository_revision }}
+          SOURCE_RUN_ID: ${{ inputs.source_run_id }}
+          SOURCE_RUN_ATTEMPT: ${{ inputs.source_run_attempt }}
+          RUNNER_REVISION: ${{ inputs.runner_revision }}
+          INITIAL_SEED: ${{ inputs.initial_seed }}
+          CONTROLLER_ARTIFACT_ID: ${{ inputs.controller_artifact_id }}
+          CONTROLLER_ARTIFACT_DIGEST: ${{ inputs.controller_artifact_digest }}
+          SOURCE_ARTIFACT_READER_APP_ID: ${{ vars.SOURCE_ARTIFACT_READER_APP_ID }}
+          SOURCE_ARTIFACT_READER_INSTALLATION_ID: ${{ vars.SOURCE_ARTIFACT_READER_INSTALLATION_ID }}
+          SOURCE_REPOSITORY_ID: ${{ vars.SOURCE_REPOSITORY_ID }}
+          SOURCE_VERIFY_MAIN_WORKFLOW_ID: ${{ vars.SOURCE_VERIFY_MAIN_WORKFLOW_ID }}
+          SOURCE_ARTIFACT_READER_PRIVATE_KEY: ${{ secrets.SOURCE_ARTIFACT_READER_PRIVATE_KEY }}
+          APPWRITE_TEST_OPERATOR_API_KEY: ${{ secrets.APPWRITE_TEST_OPERATOR_API_KEY }}
+          APPWRITE_TEST_FIXTURE_API_KEY: ${{ secrets.APPWRITE_TEST_FIXTURE_API_KEY }}
+          E2E_EDITOR_EMAIL: ${{ secrets.E2E_EDITOR_EMAIL }}
+          E2E_OWNER_EMAIL: ${{ secrets.E2E_OWNER_EMAIL }}
+          E2E_VIEWER_EMAIL: ${{ secrets.E2E_VIEWER_EMAIL }}
+          COLLECTOR_INPUT: ${{ runner.temp }}\appwrite-test-readback-input.json
+          COLLECTOR_OUTPUT: ${{ runner.temp }}\appwrite-test-readback
+        run: |
+          $ErrorActionPreference = 'Stop'
+          node --input-type=module -e @'
+          import { writeFile } from 'node:fs/promises';
+          import { canonicalJson } from './scripts/verification/canonical-json.mjs';
+          const initialSeed = process.env.INITIAL_SEED === 'true';
+          const input = {
+            controllerArtifact: initialSeed ? null : {
+              artifactId: process.env.CONTROLLER_ARTIFACT_ID,
+              digest: process.env.CONTROLLER_ARTIFACT_DIGEST,
+            },
+            controllerRevision: process.env.CONTROLLER_REVISION,
+            initialSeed,
+            runnerRevision: process.env.RUNNER_REVISION,
+            sourceReader: {
+              appId: process.env.SOURCE_ARTIFACT_READER_APP_ID,
+              installationId: process.env.SOURCE_ARTIFACT_READER_INSTALLATION_ID,
+              sourceRepositoryId: Number(process.env.SOURCE_REPOSITORY_ID),
+              sourceWorkflowId: Number(process.env.SOURCE_VERIFY_MAIN_WORKFLOW_ID),
+            },
+            sourceRepositoryRevision: process.env.SOURCE_REPOSITORY_REVISION,
+            sourceRunAttempt: Number(process.env.SOURCE_RUN_ATTEMPT),
+            sourceRunId: process.env.SOURCE_RUN_ID,
+          };
+          await writeFile(process.env.COLLECTOR_INPUT, `${canonicalJson(input)}\n`, { flag: 'wx' });
+          '@
+          node packages/verification-controller/src/collect-appwrite-test-readback.mjs --input $env:COLLECTOR_INPUT --output $env:COLLECTOR_OUTPUT
+
+      - name: Upload exact binding artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: appwrite-test-setup-readback-${{ inputs.trusted_controller_sha }}-${{ inputs.source_repository_revision }}
+          path: ${{ runner.temp }}\appwrite-test-readback
+          if-no-files-found: error
+          include-hidden-files: false
+          compression-level: 0
+          overwrite: false
+          retention-days: 7

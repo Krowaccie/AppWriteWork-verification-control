@@ -57,6 +57,36 @@ jobs:
         with:
           node-version: '24.11.1'
 
+      - name: Verify exact Appwrite Test binding artifact
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          CONTROLLER_REVISION: ${{ inputs.trusted_controller_sha }}
+          SOURCE_REPOSITORY_REVISION: ${{ inputs.source_repository_revision }}
+          INITIAL_SEED: ${{ inputs.initial_seed }}
+          RUNNER_REVISION: ${{ vars.VERIFICATION_RUNNER_REVISION }}
+          BINDING_ARTIFACT_ID: ${{ vars.TRUSTED_TEST_CLOUD_BINDING_ARTIFACT_ID }}
+          BINDING_ARTIFACT_DIGEST: ${{ vars.TRUSTED_TEST_CLOUD_BINDING_ARTIFACT_DIGEST }}
+          BINDING_VERIFIER_INPUT: ${{ runner.temp }}\test-cloud-binding-verifier-input.json
+          BINDING_DIRECTORY: ${{ runner.temp }}\test-cloud-bindings
+        run: |
+          $ErrorActionPreference = 'Stop'
+          node --input-type=module -e @'
+          import { writeFile } from 'node:fs/promises';
+          import { canonicalJson } from './scripts/verification/canonical-json.mjs';
+          const input = {
+            artifactId: process.env.BINDING_ARTIFACT_ID,
+            bundleDigest: process.env.BINDING_ARTIFACT_DIGEST,
+            initialSeed: process.env.INITIAL_SEED === 'true',
+            runnerRevision: process.env.RUNNER_REVISION,
+            sourceRepositoryRevision: process.env.SOURCE_REPOSITORY_REVISION,
+            trustedSha: process.env.CONTROLLER_REVISION,
+          };
+          await writeFile(process.env.BINDING_VERIFIER_INPUT, `${canonicalJson(input)}\n`, { flag: 'wx' });
+          '@
+          node packages/verification-controller/src/test-cloud-binding-artifact-verifier.mjs --input $env:BINDING_VERIFIER_INPUT --output $env:BINDING_DIRECTORY
+
       - name: Qualify runner and create same-run publisher input
         shell: pwsh
         env:
@@ -64,20 +94,14 @@ jobs:
           SOURCE_REPOSITORY_REVISION: ${{ inputs.source_repository_revision }}
           INITIAL_SEED: ${{ inputs.initial_seed }}
           RUNNER_REVISION: ${{ vars.VERIFICATION_RUNNER_REVISION }}
-          TEST_CLOUD_SETUP_READBACK_JSON: ${{ vars.TEST_CLOUD_SETUP_READBACK_JSON }}
-          TEST_CLOUD_SETUP_READBACK_DIGEST: ${{ vars.TEST_CLOUD_SETUP_READBACK_DIGEST }}
-          TEST_CLOUD_SETUP_ATTESTATION_JSON: ${{ vars.TEST_CLOUD_SETUP_ATTESTATION_JSON }}
-          TEST_CLOUD_SETUP_ATTESTATION_DIGEST: ${{ vars.TEST_CLOUD_SETUP_ATTESTATION_DIGEST }}
-          TEST_CLOUD_HOSTED_SETUP_READBACK_JSON: ${{ vars.TEST_CLOUD_HOSTED_SETUP_READBACK_JSON }}
-          TEST_CLOUD_HOSTED_SETUP_READBACK_DIGEST: ${{ vars.TEST_CLOUD_HOSTED_SETUP_READBACK_DIGEST }}
-          TEST_CLOUD_HOSTED_SETUP_ATTESTATION_JSON: ${{ vars.TEST_CLOUD_HOSTED_SETUP_ATTESTATION_JSON }}
-          TEST_CLOUD_HOSTED_SETUP_ATTESTATION_DIGEST: ${{ vars.TEST_CLOUD_HOSTED_SETUP_ATTESTATION_DIGEST }}
+          BINDING_DIRECTORY: ${{ runner.temp }}\test-cloud-bindings
           QUALIFICATION_INPUT: ${{ runner.temp }}\controller-runner-qualification-input.json
           PUBLISHER_INPUT: ${{ runner.temp }}\controller-bundle-publisher-input.json
         run: |
           $ErrorActionPreference = 'Stop'
           node --input-type=module -e @'
-          import { writeFile } from 'node:fs/promises';
+          import { readFile, writeFile } from 'node:fs/promises';
+          import path from 'node:path';
           import { canonicalJson, sha256Bytes } from './scripts/verification/canonical-json.mjs';
           import { checkInitialTestCloudSetup, checkTestCloudSetup, qualifyExecutionObservationReadback } from './scripts/verification/test-cloud-setup-check.mjs';
           import { validateTestCloudHostedSetupAttestationDocument } from './scripts/verification/test-cloud-hosted-setup-attestation.mjs';
@@ -87,9 +111,23 @@ jobs:
           if (!['true', 'false'].includes(process.env.INITIAL_SEED)) {
             throw new Error('BLOCKED INITIAL_SEED_MODE_INVALID');
           }
+          const bindingNames = [
+            'TEST_CLOUD_SETUP_READBACK_JSON',
+            'TEST_CLOUD_SETUP_READBACK_DIGEST',
+            'TEST_CLOUD_SETUP_ATTESTATION_JSON',
+            'TEST_CLOUD_SETUP_ATTESTATION_DIGEST',
+            'TEST_CLOUD_HOSTED_SETUP_READBACK_JSON',
+            'TEST_CLOUD_HOSTED_SETUP_READBACK_DIGEST',
+            'TEST_CLOUD_HOSTED_SETUP_ATTESTATION_JSON',
+            'TEST_CLOUD_HOSTED_SETUP_ATTESTATION_DIGEST',
+          ];
+          const bindingValues = Object.fromEntries(await Promise.all(bindingNames.map(async (name) => [
+            name,
+            await readFile(path.join(process.env.BINDING_DIRECTORY, `${name}.txt`), 'utf8'),
+          ])));
           const parseBinding = (jsonName, digestName) => {
-            const raw = process.env[jsonName];
-            const digest = process.env[digestName];
+            const raw = bindingValues[jsonName];
+            const digest = bindingValues[digestName];
             if (typeof raw !== 'string' || typeof digest !== 'string' || sha256Bytes(encoder.encode(raw)) !== digest) {
               throw new Error('BLOCKED SETUP_BINDING_DIGEST_MISMATCH');
             }
@@ -133,7 +171,7 @@ jobs:
               attestation: hostedAttestation.value,
               attestationDigest: hostedAttestation.digest,
               clock: Object.freeze({ nowEpochSeconds: () => Math.floor(Date.now() / 1000) }),
-              expectedProviderSetupReadbackDigest: process.env.TEST_CLOUD_SETUP_READBACK_DIGEST,
+              expectedProviderSetupReadbackDigest: bindingValues.TEST_CLOUD_SETUP_READBACK_DIGEST,
               expectedHostedSetupReadbackDigest: hostedReadback.digest,
               expectedExecutionObservationPolicyDigest: checked.value.executionObservationPolicyDigest,
               expectedPrimaryExecutionRetentionMaxSeconds: checked.value.primaryExecutionRetentionMaxSeconds,
@@ -151,10 +189,10 @@ jobs:
             sourceRepositoryRevision: process.env.SOURCE_REPOSITORY_REVISION,
             controllerRevision: process.env.CONTROLLER_REVISION,
             runnerRevision: process.env.RUNNER_REVISION,
-            setupReadback: JSON.parse(process.env.TEST_CLOUD_SETUP_READBACK_JSON),
-            setupReadbackDigest: process.env.TEST_CLOUD_SETUP_READBACK_DIGEST,
-            setupAttestation: JSON.parse(process.env.TEST_CLOUD_SETUP_ATTESTATION_JSON),
-            setupAttestationDigest: process.env.TEST_CLOUD_SETUP_ATTESTATION_DIGEST,
+            setupReadback: JSON.parse(bindingValues.TEST_CLOUD_SETUP_READBACK_JSON),
+            setupReadbackDigest: bindingValues.TEST_CLOUD_SETUP_READBACK_DIGEST,
+            setupAttestation: JSON.parse(bindingValues.TEST_CLOUD_SETUP_ATTESTATION_JSON),
+            setupAttestationDigest: bindingValues.TEST_CLOUD_SETUP_ATTESTATION_DIGEST,
             primaryExecutionRetentionMaxSeconds: checked.value.primaryExecutionRetentionMaxSeconds,
           };
           await writeFile(process.env.QUALIFICATION_INPUT, `${canonicalJson(input)}\n`, { flag: 'wx' });

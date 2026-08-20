@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto';
+import { lstat, readFile, readdir, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isProxy } from 'node:util/types';
@@ -23,6 +24,16 @@ const CONTROLLER_ENTRYPOINT =
 const PLAYWRIGHT_IMAGE_DIGEST =
   'sha256:5b8f294aff9041b7191c34a4bab3ac270157a28774d4b0660e9743297b697e48';
 const MAX_GITHUB_JSON_BYTES = 1024 * 1024;
+const TEST_CLOUD_BINDING_NAMES = Object.freeze([
+  'TEST_CLOUD_SETUP_READBACK_JSON',
+  'TEST_CLOUD_SETUP_READBACK_DIGEST',
+  'TEST_CLOUD_SETUP_ATTESTATION_JSON',
+  'TEST_CLOUD_SETUP_ATTESTATION_DIGEST',
+  'TEST_CLOUD_HOSTED_SETUP_READBACK_JSON',
+  'TEST_CLOUD_HOSTED_SETUP_READBACK_DIGEST',
+  'TEST_CLOUD_HOSTED_SETUP_ATTESTATION_JSON',
+  'TEST_CLOUD_HOSTED_SETUP_ATTESTATION_DIGEST',
+]);
 
 const loadControllerReattestation = () =>
   import('./github-controller-artifact-verifier.mjs');
@@ -1625,13 +1636,19 @@ export async function runTestCloudController(args) {
 function hostedArgs(argv) {
   if (
     !Array.isArray(argv)
-    || argv.length !== 7
+    || ![7, 9].includes(argv.length)
     || argv[0] !== '--hosted'
     || argv[1] !== '--revision'
     || !FULL_SHA.test(argv[2] ?? '')
     || argv[3] !== '--source-run-id'
     || !SAFE_ID.test(argv[4] ?? '')
     || argv[5] !== '--source-run-attempt'
+    || (argv.length === 9 && (
+      argv[7] !== '--binding-directory'
+      || typeof argv[8] !== 'string'
+      || argv[8].length < 1
+      || argv[8].includes('\0')
+    ))
   ) return null;
   const sourceRunAttempt = positiveInteger(argv[6]);
   if (sourceRunAttempt === null) return null;
@@ -1639,7 +1656,54 @@ function hostedArgs(argv) {
     requestedRevision: argv[2],
     sourceRunId: argv[4],
     sourceRunAttempt,
+    bindingDirectory: argv.length === 9 ? argv[8] : null,
   });
+}
+
+async function readExactBindingDirectory(directory, io = { lstat, readFile, readdir, realpath }) {
+  if (typeof directory !== 'string' || !path.isAbsolute(directory) || directory.includes('\0')) {
+    throw new TypeError('invalid binding directory');
+  }
+  const root = await io.realpath(path.resolve(directory));
+  const rootInfo = await io.lstat(root);
+  if (!rootInfo.isDirectory() || rootInfo.isSymbolicLink()) throw new TypeError('invalid binding directory');
+  const expectedFiles = TEST_CLOUD_BINDING_NAMES.map((name) => `${name}.txt`).sort();
+  const actualFiles = (await io.readdir(root)).sort();
+  if (
+    actualFiles.length !== expectedFiles.length
+    || actualFiles.some((name, index) => name !== expectedFiles[index])
+  ) throw new TypeError('invalid binding directory');
+  const decoder = new TextDecoder('utf-8', { fatal: true });
+  const values = {};
+  let totalBytes = 0;
+  for (const name of TEST_CLOUD_BINDING_NAMES) {
+    const filePath = path.join(root, `${name}.txt`);
+    const info = await io.lstat(filePath);
+    const resolved = await io.realpath(filePath);
+    const relative = path.relative(root, resolved);
+    if (
+      !info.isFile()
+      || info.isSymbolicLink()
+      || relative.startsWith(`..${path.sep}`)
+      || relative === '..'
+      || path.isAbsolute(relative)
+    ) throw new TypeError('invalid binding file');
+    const bytes = Buffer.from(await io.readFile(resolved));
+    totalBytes += bytes.length;
+    if (bytes.length < 1 || bytes.length > 1024 * 1024 || totalBytes > 2 * 1024 * 1024) {
+      throw new TypeError('invalid binding file');
+    }
+    values[name] = decoder.decode(bytes);
+  }
+  const overlay = Object.freeze(values);
+  for (let index = 0; index < TEST_CLOUD_BINDING_NAMES.length; index += 2) {
+    if (parseCanonicalJsonBinding(
+      overlay,
+      TEST_CLOUD_BINDING_NAMES[index],
+      TEST_CLOUD_BINDING_NAMES[index + 1],
+    ) === null) throw new TypeError('invalid binding pair');
+  }
+  return overlay;
 }
 
 function write(stream, value) {
@@ -1654,7 +1718,7 @@ export async function main(argv = process.argv.slice(2), dependencies = {}) {
     write(stderr, 'BLOCKED TRUSTED_CONTROLLER_CLI_INVALID\n');
     return 2;
   }
-  const environment = dependencies.environment ?? process.env;
+  let environment = dependencies.environment ?? process.env;
   const inventory = dependencies.inventory ?? configuredInventory;
   if (
     !Number.isSafeInteger(inventory?.control?.primaryExecutionRetentionMaxSeconds)
@@ -1671,6 +1735,18 @@ export async function main(argv = process.argv.slice(2), dependencies = {}) {
     ?? runHostedTestCloudController;
   let outcome;
   try {
+    if (parsed.bindingDirectory !== null) {
+      const bindingValues = await readExactBindingDirectory(
+        parsed.bindingDirectory,
+        dependencies.bindingDirectoryIo,
+      );
+      environment = Object.freeze({ ...environment, ...bindingValues });
+    }
+    const request = Object.freeze({
+      requestedRevision: parsed.requestedRevision,
+      sourceRunId: parsed.sourceRunId,
+      sourceRunAttempt: parsed.sourceRunAttempt,
+    });
     const dependencyArgs = { environment, fetchImpl };
     if (Object.hasOwn(dependencies, 'controllerArtifactIo')) {
       dependencyArgs.controllerArtifactIo = dependencies.controllerArtifactIo;
@@ -1682,7 +1758,7 @@ export async function main(argv = process.argv.slice(2), dependencies = {}) {
     outcome = await runHostedController({
       dependencies: hostedDependencies,
       environment,
-      request: parsed,
+      request,
     });
   } catch {
     write(stderr, 'BLOCKED TEST_CLOUD_SETUP_INCOMPLETE\n');
