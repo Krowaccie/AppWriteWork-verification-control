@@ -211,6 +211,29 @@ test('collapses an unknown live-readback failure code to the stage code', async 
   assert.equal(result.diagnostics[0].code, 'APPWRITE_TEST_LIVE_PROJECTION_INVALID');
 });
 
+test('preserves an allowlisted binding-stage failure code without serializing secrets', async () => {
+  const fakes = dependencies();
+  fakes.createBindingsImpl = () => ({
+    status: 'BLOCKED',
+    value: null,
+    diagnostics: [{
+      code: 'APPWRITE_TEST_HOSTED_READBACK_INVALID',
+      safeMessage: 'safe stage message',
+      secretValue: 'secret-value-sentinel',
+    }],
+  });
+
+  const result = await collectAppwriteTestReadback({
+    input: input(),
+    environment: environment(),
+    dependencies: fakes,
+  });
+
+  assert.equal(result.status, 'BLOCKED');
+  assert.equal(result.diagnostics[0].code, 'APPWRITE_TEST_HOSTED_READBACK_INVALID');
+  assert.equal(JSON.stringify(result).includes('secret-value-sentinel'), false);
+});
+
 test('downloads a bounded source artifact through one trusted Azure redirect', async () => {
   const archive = Uint8Array.from({ length: 24 }, (_, index) => index);
   const redirectUrl =
