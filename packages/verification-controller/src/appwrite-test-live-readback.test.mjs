@@ -130,7 +130,7 @@ function functionResponse(record) {
     commands: runner
       ? 'python -m pip install --require-hashes --only-binary=:all: -r requirements.txt'
       : '',
-    providerRootDirectory: record.sourcePath,
+    providerRootDirectory: runner ? '' : record.sourcePath,
     name: runner ? 'verification-runner' : record.logicalId,
     execute: [],
     events: [],
@@ -310,6 +310,25 @@ test('normalizes an empty Appwrite deployment ID to no active deployment', async
           return jsonResponse(url, {
             ...functionResponse(firstFunction),
             deploymentId: '',
+          });
+        }
+        return undefined;
+      },
+    },
+  });
+
+  assert.equal(result.status, 'PASS', result.diagnostics?.[0]?.code);
+});
+
+test('requires the test runner to remain disconnected from a VCS provider', async () => {
+  const runner = inventory.testOnlyFunctions[0];
+  const { result } = await run({
+    transport: {
+      before(url) {
+        if (new URL(url).pathname.endsWith(`/${runner.functionId}`)) {
+          return jsonResponse(url, {
+            ...functionResponse(runner),
+            providerRootDirectory: '',
           });
         }
         return undefined;
