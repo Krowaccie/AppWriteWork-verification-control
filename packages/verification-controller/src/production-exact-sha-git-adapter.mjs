@@ -62,7 +62,8 @@ function validPaths(paths) {
 }
 
 function validOrigin(value) {
-  return value === `https://github.com/${CONTROLLER_REPOSITORY}.git`
+  return value === `https://github.com/${CONTROLLER_REPOSITORY}`
+    || value === `https://github.com/${CONTROLLER_REPOSITORY}.git`
     || value === `git@github.com:${CONTROLLER_REPOSITORY}.git`
     || value === `ssh://git@github.com/${CONTROLLER_REPOSITORY}.git`;
 }
