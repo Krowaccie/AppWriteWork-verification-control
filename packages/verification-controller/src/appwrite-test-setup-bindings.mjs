@@ -188,7 +188,7 @@ function validateBrowserPolicy(policy) {
     if (
       url.protocol !== 'https:'
       || url.origin !== expectedOrigin
-      || /(?:test-only\.invalid|\.example|salmora|69eb4818000afa64a7fa|69eb4a020024c520642e)/iu
+      || /(?:test-only\.invalid|\.example|salmora\.net|69eb4818000afa64a7fa|69eb4a020024c520642e)/iu
         .test(row.finalUrl)
     ) throw new TypeError('browser policy');
   }

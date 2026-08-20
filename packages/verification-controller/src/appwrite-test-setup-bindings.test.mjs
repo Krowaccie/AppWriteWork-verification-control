@@ -219,6 +219,29 @@ test('creates the eight canonical initial-seed Appwrite Test bindings', () => {
   assert.equal(result.value.evidence.sourceRepositoryRevision, SHA_B);
 });
 
+test('accepts a Salmora brand asset only on the fixed public test origin', () => {
+  const browserRequestPolicy = buildBrowserRequestPolicy();
+  browserRequestPolicy.rows[1].finalUrl =
+    `${inventory.environment.publicOrigin}/salmora-mark.svg`;
+  browserRequestPolicy.digest = digest(canonicalJson({
+    schemaVersion: browserRequestPolicy.schemaVersion,
+    timeoutMilliseconds: browserRequestPolicy.timeoutMilliseconds,
+    rows: browserRequestPolicy.rows,
+  }));
+  const result = createAppwriteTestSetupBindings({
+    controllerRevision: SHA_A,
+    sourceRepositoryRevision: SHA_B,
+    runnerRevision: SHA_C,
+    initialSeed: true,
+    liveProjection: buildLiveProjection(),
+    browserRequestPolicy,
+    nowEpochSeconds: 1_800_000_000,
+    controllerArtifact: null,
+  });
+
+  assert.equal(result.status, 'PASS', result.diagnostics?.[0]?.code);
+});
+
 test('rejects production, fixture, and placeholder browser targets', () => {
   for (const finalUrl of [
     'https://salmora.net/index.html',
