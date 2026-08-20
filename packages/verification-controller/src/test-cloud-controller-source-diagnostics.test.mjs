@@ -4,6 +4,7 @@ import test from 'node:test';
 import {
   githubSourceRequest,
   runHostedTestCloudController,
+  selectSafeDiagnosticCode,
 } from './test-cloud-controller.mjs';
 
 const SHA = '1'.repeat(40);
@@ -104,5 +105,31 @@ test('rejects a source artifact redirect outside trusted storage', async () => {
       expectedBytes: 24,
     }),
     (error) => error?.code === 'SOURCE_ARTIFACT_DOWNLOAD_FAILED',
+  );
+});
+
+test('selects only an explicitly safe stage diagnostic', () => {
+  const allowed = new Set(['TEST_CLOUD_RUNNER_VARIABLE_READBACK_INVALID']);
+  const outcome = stage(
+    'BLOCKED',
+    null,
+    'TEST_CLOUD_RUNNER_VARIABLE_READBACK_INVALID',
+  );
+  assert.equal(
+    selectSafeDiagnosticCode(
+      outcome,
+      'TEST_CLOUD_PREFLIGHT_BLOCKED',
+      allowed,
+    ),
+    'TEST_CLOUD_RUNNER_VARIABLE_READBACK_INVALID',
+  );
+  outcome.diagnostics[0].code = 'SECRET_VALUE_DO_NOT_EXPOSE';
+  assert.equal(
+    selectSafeDiagnosticCode(
+      outcome,
+      'TEST_CLOUD_PREFLIGHT_BLOCKED',
+      allowed,
+    ),
+    'TEST_CLOUD_PREFLIGHT_BLOCKED',
   );
 });
