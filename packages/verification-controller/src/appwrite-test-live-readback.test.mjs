@@ -292,6 +292,9 @@ test('reads and returns only the sanitized Appwrite Test projection', async () =
   assert.ok(counters.fixture > 0);
   assert.equal(requests.every(({ options }) => options.method === 'GET'), true);
   assert.equal(requests.every(({ options }) => options.redirect === 'error'), true);
+  assert.equal(requests.every(
+    ({ options }) => options.headers['Accept-Encoding'] === 'identity',
+  ), true);
   const serialized = JSON.stringify(result);
   for (const forbidden of [OPERATOR_SECRET, FIXTURE_SECRET, ...Object.values(EMAILS)]) {
     assert.equal(serialized.includes(forbidden), false);
