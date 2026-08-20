@@ -1013,6 +1013,10 @@ function validNullableProviderId(value) {
   return value === null || (typeof value === 'string' && utf8Length(value) <= 512);
 }
 
+function validNullableUserId(value) {
+  return value === null || (typeof value === 'string' && ID_PATTERN.test(value));
+}
+
 function validateTarget(value) {
   const fields = exactObject(value, TARGET_KEYS);
   if (fields === null || !ID_PATTERN.test(fields.$id) || !ID_PATTERN.test(fields.userId)
@@ -1132,7 +1136,7 @@ function validateUser(value, role, expectedEmail) {
   if (OBJECT_HAS_OWN(value, 'emailCanonical')
     && typeof value.emailCanonical !== 'string') invalid('TEST_IDENTITY_USER_OPTIONALS_INVALID');
   if (OBJECT_HAS_OWN(value, 'impersonatorUserId')
-    && typeof value.impersonatorUserId !== 'string') {
+    && !validNullableUserId(value.impersonatorUserId)) {
     invalid('TEST_IDENTITY_USER_OPTIONALS_INVALID');
   }
   if (OBJECT_HAS_OWN(value, 'impersonator') && typeof value.impersonator !== 'boolean') {
