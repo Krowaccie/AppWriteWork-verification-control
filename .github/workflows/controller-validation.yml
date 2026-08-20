@@ -148,3 +148,16 @@ jobs:
             "$image" \
             --input-type=module \
             -e "import { createA1SupervisorSession } from './host/a1-supervisor-client.mjs'; const paths=['/usr/local/bin/node','/usr/local/bin/npm','/usr/bin/git','/opt/appwritework/verification-a1/probe','/work/probe/command-temp','/work/probe/config-home','/work/probe/npm-cache','/work/probe/site-output']; for (const profile of ['bundle-catalog','root-npm-ci']) { const session=createA1SupervisorSession({args:['source-artifact-posix-supervisor.v1',profile,...paths],maxResponseBytes:16777216,mode:1}); try { const response=await session.request(Buffer.alloc(0)); session.closeInput(); const closed=await session.waitForClose(); console.log(JSON.stringify({close:closed,profile,start:response.start.toString('hex'),status:response.status})); } catch (error) { console.log(JSON.stringify({code:error?.code ?? 'UNKNOWN',profile,threw:true})); try { await session.terminate(); } catch {} } }"
+
+          docker run --rm \
+            --user 0 \
+            --cap-drop ALL \
+            --cap-add SYS_ADMIN \
+            --cap-add SYS_PTRACE \
+            --cap-add SETUID \
+            --cap-add SETGID \
+            --security-opt apparmor=unconfined \
+            --entrypoint node \
+            "$image" \
+            --input-type=module \
+            -e "import { createA1NetworkPolicyProbe } from './host/network-policy-probe.mjs'; const probe=createA1NetworkPolicyProbe(); for (const policy of [Object.freeze({mode:'deny'}),Object.freeze({host:'registry.npmjs.org',mode:'registry-only',port:443,protocol:'tls'})]) { const request=Object.freeze({policy,protocolVersion:'source-artifact-posix-network-probe.v1'}); console.log(JSON.stringify({apparmor:'unconfined',evidence:await probe.run(request)})); }"
