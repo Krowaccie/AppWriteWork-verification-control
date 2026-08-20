@@ -1750,6 +1750,23 @@ export async function main(argv = process.argv.slice(2), dependencies = {}) {
     const dependencyArgs = { environment, fetchImpl };
     if (Object.hasOwn(dependencies, 'controllerArtifactIo')) {
       dependencyArgs.controllerArtifactIo = dependencies.controllerArtifactIo;
+    } else {
+      const controllerArtifactDirectory = readEnvironmentValue(
+        environment,
+        'CONTROLLER_ARTIFACT_DIRECTORY',
+      );
+      if (controllerArtifactDirectory !== null) {
+        if (
+          !path.isAbsolute(controllerArtifactDirectory)
+          || controllerArtifactDirectory.includes('\0')
+        ) throw new TypeError('invalid controller artifact directory');
+        dependencyArgs.controllerArtifactIo = Object.freeze({
+          lstat,
+          readFile,
+          realpath,
+          root: controllerArtifactDirectory,
+        });
+      }
     }
     if (Object.hasOwn(dependencies, 'runContainedProcessImpl')) {
       dependencyArgs.runContainedProcessImpl = dependencies.runContainedProcessImpl;

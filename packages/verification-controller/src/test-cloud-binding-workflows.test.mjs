@@ -28,6 +28,34 @@ test('hosted workflow passes the exact verified directory to the controller CLI'
   assert.match(workflow, /--binding-directory "\$BINDING_DIRECTORY"/u);
 });
 
+test('hosted workflow stages only the proven controller artifact before tokenless reattestation', async () => {
+  for (const workflowPath of [
+    '.github/workflows/verify-test-cloud.yml',
+    'packages/verification-controller/workflows/verify-test-cloud.yml',
+  ]) {
+    const workflow = await readFile(workflowPath, 'utf8');
+    assert.match(workflow, /id: controller-proof/u);
+    assert.match(
+      workflow,
+      /uses: actions\/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131/u,
+    );
+    assert.match(
+      workflow,
+      /artifact-ids: \$\{\{ vars\.TRUSTED_CONTROLLER_ARTIFACT_ID \}\}/u,
+    );
+    assert.match(
+      workflow,
+      /run-id: \$\{\{ steps\.controller-proof\.outputs\.artifact_run_id \}\}/u,
+    );
+    assert.match(
+      workflow,
+      /CONTROLLER_ARTIFACT_DIRECTORY: \$\{\{ runner\.temp \}\}\\controller-artifact/u,
+    );
+    const finalStep = workflow.slice(workflow.indexOf('- name: Run the one-process staged controller'));
+    assert.doesNotMatch(finalStep, /CONTROLLER_ARTIFACT_READ_TOKEN|github\.token/u);
+  }
+});
+
 test('hosted workflow validates environment-scoped controller trust after job admission', async () => {
   for (const workflowPath of [
     '.github/workflows/verify-test-cloud.yml',

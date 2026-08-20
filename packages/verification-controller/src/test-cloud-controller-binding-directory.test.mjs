@@ -93,3 +93,42 @@ test('hosted CLI rejects a binding directory containing an extra file', async ()
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test('hosted CLI passes the staged controller artifact directory to local reattestation', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'test-cloud-controller-artifact-'));
+  try {
+    const directory = await bindingDirectory(root);
+    const controllerArtifactDirectory = path.join(root, 'controller-artifact');
+    await mkdir(controllerArtifactDirectory);
+    const stderr = stream();
+    let capturedDependencies;
+    const code = await main([
+      '--hosted', '--revision', SHA, '--source-run-id', '123',
+      '--source-run-attempt', '1', '--binding-directory', directory,
+    ], {
+      environment: { CONTROLLER_ARTIFACT_DIRECTORY: controllerArtifactDirectory },
+      inventory: { control: { primaryExecutionRetentionMaxSeconds: 86_400 } },
+      stdout: stream(),
+      stderr,
+      createHostedDependencies(args) {
+        capturedDependencies = args;
+        return Object.freeze({});
+      },
+      async runHostedController() {
+        return { status: 'PASS', value: {}, diagnostics: [] };
+      },
+    });
+
+    assert.equal(code, 0, stderr.read());
+    assert.equal(capturedDependencies.controllerArtifactIo.root, controllerArtifactDirectory);
+    assert.equal(typeof capturedDependencies.controllerArtifactIo.lstat, 'function');
+    assert.equal(typeof capturedDependencies.controllerArtifactIo.readFile, 'function');
+    assert.equal(typeof capturedDependencies.controllerArtifactIo.realpath, 'function');
+    assert.equal(
+      Object.hasOwn(capturedDependencies.environment, 'CONTROLLER_ARTIFACT_READ_TOKEN'),
+      false,
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
