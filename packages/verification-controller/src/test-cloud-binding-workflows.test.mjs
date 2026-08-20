@@ -34,19 +34,10 @@ test('hosted workflow stages only the proven controller artifact before tokenles
     'packages/verification-controller/workflows/verify-test-cloud.yml',
   ]) {
     const workflow = await readFile(workflowPath, 'utf8');
-    assert.match(workflow, /id: controller_proof/u);
-    assert.match(
-      workflow,
-      /uses: actions\/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131/u,
-    );
-    assert.match(
-      workflow,
-      /artifact-ids: \$\{\{ vars\.TRUSTED_CONTROLLER_ARTIFACT_ID \}\}/u,
-    );
-    assert.match(
-      workflow,
-      /run-id: \$\{\{ steps\.controller_proof\.outputs\.artifact_run_id \}\}/u,
-    );
+    assert.doesNotMatch(workflow, /actions\/download-artifact/u);
+    assert.match(workflow, /extractBoundedZipArchive/u);
+    assert.match(workflow, /CONTROLLER_ARTIFACT_READ_TOKEN/u);
+    assert.match(workflow, /flag: 'wx', mode: 0o600/u);
     assert.match(
       workflow,
       /CONTROLLER_ARTIFACT_DIRECTORY: \$\{\{ runner\.temp \}\}\\controller-artifact/u,
