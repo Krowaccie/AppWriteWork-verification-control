@@ -349,6 +349,7 @@ function hostedReadback({ initialSeed, controllerRevision, sourceRepositoryRevis
 }
 
 export function createAppwriteTestSetupBindings(args) {
+  let stage = 'INPUT';
   try {
     const input = exactObject(args, INPUT_KEYS);
     const live = input === null ? null : exactObject(input.liveProjection, LIVE_KEYS);
@@ -385,11 +386,14 @@ export function createAppwriteTestSetupBindings(args) {
       ))
     ) return blocked('APPWRITE_TEST_CONTROLLER_ARTIFACT_INVALID');
 
+    stage = 'BROWSER_POLICY';
     const policy = validateBrowserPolicy(input.browserRequestPolicy);
+    stage = 'RUNNER_VARIABLES';
     const variableDigests = variableDigestMap(
       live.expectedRunnerVariables,
       live.identityBindingsDigest,
     );
+    stage = 'SETUP_DOCUMENT';
     const setupReadback = {
       browserRequestPolicy: structuredClone(policy),
       controlDatabase: controlDatabase(),
@@ -408,6 +412,7 @@ export function createAppwriteTestSetupBindings(args) {
     };
     const setupReadbackJson = canonicalJson(setupReadback);
     const setupReadbackDigest = digestText(setupReadbackJson);
+    stage = 'SETUP_READBACK';
     const setupValidation = validateTestCloudSetupReadbackBytes({
       bytes: new TextEncoder().encode(setupReadbackJson),
       expectedDigest: setupReadbackDigest,
@@ -418,6 +423,7 @@ export function createAppwriteTestSetupBindings(args) {
       return blocked('APPWRITE_TEST_SETUP_READBACK_INVALID');
     }
 
+    stage = 'SETUP_ATTESTATION';
     const observation = {
       schemaVersion: 'appwrite-execution-observation-readback.v1',
       observationAccess: 'read-only',
@@ -462,6 +468,7 @@ export function createAppwriteTestSetupBindings(args) {
       maximumRetentionSeconds: RETENTION_SECONDS,
     }).status !== 'PASS') return blocked('APPWRITE_TEST_SETUP_ATTESTATION_INVALID');
 
+    stage = 'HOSTED_READBACK';
     const hosted = hostedReadback({
       initialSeed: input.initialSeed,
       controllerRevision: input.controllerRevision,
@@ -485,6 +492,7 @@ export function createAppwriteTestSetupBindings(args) {
       : observationQualification;
     if (hostedCheck.status !== 'PASS') return blocked('APPWRITE_TEST_HOSTED_READBACK_INVALID');
 
+    stage = 'HOSTED_ATTESTATION';
     const hostedAttestation = {
       executionObservationPolicyDigest,
       expiresAtEpochSeconds: input.nowEpochSeconds + ATTESTATION_LIFETIME_SECONDS,
@@ -506,6 +514,7 @@ export function createAppwriteTestSetupBindings(args) {
       expectedProviderSetupReadbackDigest: setupReadbackDigest,
     }).status !== 'PASS') return blocked('APPWRITE_TEST_HOSTED_ATTESTATION_INVALID');
 
+    stage = 'OUTPUT';
     const bindings = Object.fromEntries([
       ['TEST_CLOUD_SETUP_READBACK_JSON', setupReadbackJson],
       ['TEST_CLOUD_SETUP_READBACK_DIGEST', setupReadbackDigest],
@@ -538,6 +547,6 @@ export function createAppwriteTestSetupBindings(args) {
       },
     });
   } catch {
-    return blocked('APPWRITE_TEST_BINDING_INVALID');
+    return blocked(`APPWRITE_TEST_BINDING_${stage}_INVALID`);
   }
 }
