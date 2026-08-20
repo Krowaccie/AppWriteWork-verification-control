@@ -6,6 +6,6 @@ inputs:
     required: true
 runs:
   using: docker
-  image: 'docker://ghcr.io/krowaccie/appwritework-verification-a1@sha256:c7c308d88c503963c39976b267df515d522cbfdd3a652163a2b957691a936b4b'
+  image: 'docker://ghcr.io/krowaccie/appwritework-verification-a1@sha256:7b8f7c9cb802f0f6aa010084a50f56583af519acbb59990de7c8d5406943b776'
   args:
     - '${{ inputs.request }}'
