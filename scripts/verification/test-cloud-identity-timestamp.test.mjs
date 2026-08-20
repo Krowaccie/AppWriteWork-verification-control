@@ -36,18 +36,27 @@ async function loadTimestampValidator() {
   vm.runInNewContext(
     `${source.slice(patternStart, patternEnd)}\n`
       + `${source.slice(functionStart, functionEnd)}\n`
-      + 'globalThis.validator = isExactTimestamp;',
+      + 'globalThis.validators = { isExactTimestamp, isExactAccessedAtTimestamp };',
     context,
   );
-  return context.validator;
+  return context.validators;
 }
 
 test('identity timestamps accept exact Appwrite UTC ISO 8601 forms only', async () => {
-  const isExactTimestamp = await loadTimestampValidator();
+  const { isExactTimestamp, isExactAccessedAtTimestamp } =
+    await loadTimestampValidator();
 
   assert.equal(isExactTimestamp('2020-10-15T06:38:00.000+00:00'), true);
   assert.equal(isExactTimestamp('2020-10-15T06:38:00.000Z'), true);
+  assert.equal(isExactTimestamp(''), false);
   assert.equal(isExactTimestamp('2020-10-15T06:38:00.000+01:00'), false);
   assert.equal(isExactTimestamp('2020-02-31T06:38:00.000+00:00'), false);
   assert.equal(isExactTimestamp('2020-10-15T06:38:00.00+00:00'), false);
+
+  assert.equal(isExactAccessedAtTimestamp(''), true);
+  assert.equal(
+    isExactAccessedAtTimestamp('2020-10-15T06:38:00.000+00:00'),
+    true,
+  );
+  assert.equal(isExactAccessedAtTimestamp('not-accessed'), false);
 });

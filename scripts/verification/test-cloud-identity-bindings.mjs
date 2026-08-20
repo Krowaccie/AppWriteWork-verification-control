@@ -995,6 +995,10 @@ function isExactTimestamp(value) {
   return REFLECT_APPLY(CAPTURED_DATE_TO_ISO_STRING, date, []) === normalizedValue;
 }
 
+function isExactAccessedAtTimestamp(value) {
+  return value === '' || isExactTimestamp(value);
+}
+
 function isDenseArray(value, maximum) {
   if (!ARRAY_IS_ARRAY(value)
     || (maximum !== undefined && value.length > maximum)
@@ -1090,7 +1094,7 @@ function validateUser(value, role, expectedEmail) {
   }
   if (!isExactTimestamp(value.$createdAt) || !isExactTimestamp(value.$updatedAt)
     || !isExactTimestamp(value.registration) || !isExactTimestamp(value.passwordUpdate)
-    || !isExactTimestamp(value.accessedAt)) {
+    || !isExactAccessedAtTimestamp(value.accessedAt)) {
     invalid('TEST_IDENTITY_USER_TIMESTAMPS_INVALID');
   }
   if (!ID_PATTERN.test(value.$id)
