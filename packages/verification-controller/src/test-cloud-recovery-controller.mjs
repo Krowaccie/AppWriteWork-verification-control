@@ -43,6 +43,11 @@ const RECOVERY_HANDLE_SCOPES = Object.freeze([
 ]);
 const RECOVERY_STAGE_FAILURES = Object.freeze({
   'account-sessions': 'RECOVERY_ACCOUNT_SESSIONS_INVALID',
+  'account-sessions-delete': 'RECOVERY_ACCOUNT_SESSIONS_DELETE_INVALID',
+  'account-sessions-delete-commit': 'RECOVERY_ACCOUNT_SESSIONS_DELETE_COMMIT_INVALID',
+  'account-sessions-list': 'RECOVERY_ACCOUNT_SESSIONS_LIST_INVALID',
+  'account-sessions-list-commit': 'RECOVERY_ACCOUNT_SESSIONS_LIST_COMMIT_INVALID',
+  'account-sessions-open': 'RECOVERY_ACCOUNT_SESSIONS_OPEN_INVALID',
   'checkpoint-open': 'RECOVERY_CHECKPOINT_OPEN_INVALID',
   'checkpoint-read': 'RECOVERY_CHECKPOINT_READ_INVALID',
   'control-store': 'RECOVERY_CONTROL_STORE_INVALID',
@@ -165,7 +170,7 @@ async function invokeProduct(product, method, authorization) {
 async function recoverAccountSessions({ clock, context, product, request, store }) {
   let opened = await openRecoveryAccountSessionStage({ clock, context, request, store });
   let value = resultValue(opened);
-  if (value === null) return opened;
+  if (value === null) return describeRecoveryStageFailure('account-sessions-open', opened);
   if (Object.hasOwn(value, 'nextAuthority')) return pass(value.nextAuthority);
   const session = value.session;
   let action = Object.hasOwn(value, 'listHandle')
@@ -179,7 +184,9 @@ async function recoverAccountSessions({ clock, context, product, request, store 
         action.authorization,
       );
       const listedValue = resultValue(listed);
-      if (listedValue === null || !Object.hasOwn(listedValue, 'observation')) return listed;
+      if (listedValue === null || !Object.hasOwn(listedValue, 'observation')) {
+        return describeRecoveryStageFailure('account-sessions-list', listed);
+      }
       opened = await advanceRecoveryAccountSessionList({
         clock,
         context,
@@ -188,11 +195,14 @@ async function recoverAccountSessions({ clock, context, product, request, store 
         store,
       });
     } else {
-      await invokeProduct(
+      const deleted = await invokeProduct(
         product,
         'deleteBoundAccountSession',
         action.authorization,
       );
+      if (resultValue(deleted) === null) {
+        return describeRecoveryStageFailure('account-sessions-delete', deleted);
+      }
       opened = await advanceRecoveryAccountSessionDelete({
         clock,
         context,
@@ -202,7 +212,14 @@ async function recoverAccountSessions({ clock, context, product, request, store 
       });
     }
     value = resultValue(opened);
-    if (value === null) return opened;
+    if (value === null) {
+      return describeRecoveryStageFailure(
+        action.kind === 'list'
+          ? 'account-sessions-list-commit'
+          : 'account-sessions-delete-commit',
+        opened,
+      );
+    }
     if (Object.hasOwn(value, 'nextAuthority')) return pass(value.nextAuthority);
     if (Object.hasOwn(value, 'listHandle')) {
       action = { kind: 'list', authorization: value.listHandle };
