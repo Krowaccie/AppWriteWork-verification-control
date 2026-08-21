@@ -605,6 +605,7 @@ function rowProjection(value, expectedRowId, tableId) {
 function exactFunctionProjection(value, functionId) {
   const object = responseObject(value);
   const expected = FUNCTION_RECORDS.get(functionId);
+  const activeDeploymentId = object.deploymentId === '' ? null : object.deploymentId;
   if (
     expected === undefined
     || object.$id !== functionId
@@ -628,12 +629,12 @@ function exactFunctionProjection(value, functionId) {
     || !Array.isArray(object.scopes)
     || Object.keys(object.scopes).length !== object.scopes.length
     || !object.scopes.every((entry) => typeof entry === 'string')
-    || !(object.deploymentId === null || isProviderId(object.deploymentId))
+    || !(activeDeploymentId === null || isProviderId(activeDeploymentId))
   ) {
     throw new TypeError('invalid function response');
   }
   return {
-    activeDeploymentId: object.deploymentId,
+    activeDeploymentId,
     commands: object.commands,
     entrypoint: object.entrypoint,
     functionId,
