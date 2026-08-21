@@ -19,6 +19,8 @@ const REVISION = '6d796c14ceba6676c85e78b760f1cf6288e4564e';
 const RUN_ID = 'verify-6d796c14ceba-32106399617-1';
 const AUDIT_TABLE_ID = 'verification_audit_events';
 const INTENT_TABLE_ID = 'verification_intents';
+const LEASE_TABLE_ID = 'verification_leases';
+const LEASE_ROW_ID = 'appwrite_test_verification';
 const INTENT_ROW_ID = `h${'a'.repeat(35)}`;
 const LOGICAL_RETENTION_KEY = 'cleanupRunnerExecutionRetentionExpiresAt';
 const STORAGE_RETENTION_KEY = 'cleanupRunnerExecutionRetentionAt';
@@ -245,4 +247,53 @@ test('v2 intent readback removes the null v1 arm and restores the retention key'
   assert.equal(Object.hasOwn(result.value.data, 'providerResourceIds'), false);
   assert.equal(result.value.data[LOGICAL_RETENTION_KEY], null);
   assert.equal(Object.hasOwn(result.value.data, STORAGE_RETENTION_KEY), false);
+});
+
+test('lease readback canonicalizes Appwrite UTC datetime offsets', async () => {
+  const provider = {
+    leaseRowId: LEASE_ROW_ID,
+    acquiredAt: '2026-08-21T01:04:04.000+00:00',
+    renewedAt: '2026-08-21T01:04:04.000+00:00',
+    expiresAt: '2026-08-21T02:04:04.000+00:00',
+  };
+  const { fixture } = createHarness([
+    jsonResponse({ $id: LEASE_ROW_ID, ...provider }),
+  ]);
+
+  const result = await fixture.getRow({
+    tableId: LEASE_TABLE_ID,
+    rowId: LEASE_ROW_ID,
+  });
+
+  assert.equal(result.status, 'PASS');
+  assert.deepEqual(result.value.data, {
+    leaseRowId: LEASE_ROW_ID,
+    acquiredAt: '2026-08-21T01:04:04.000Z',
+    renewedAt: '2026-08-21T01:04:04.000Z',
+    expiresAt: '2026-08-21T02:04:04.000Z',
+  });
+});
+
+test('intent readback canonicalizes only qualified Appwrite UTC datetimes', async () => {
+  const provider = {
+    schemaVersion: 'verification-intent-snapshot.v2',
+    providerResourceIds: null,
+    providerAggregateJson: '{}',
+    providerAggregateDigest: `sha256:${'5'.repeat(64)}`,
+    retentionExpiresAt: '2026-08-21T02:04:04.000+00:00',
+    [STORAGE_RETENTION_KEY]: '2026-08-21T03:04:04.000+00:00',
+    createdAt: '2026-08-21T01:04:04.000+00:00',
+    updatedAt: 'invalid-provider-timestamp',
+  };
+  const { fixture } = createHarness([
+    jsonResponse({ $id: INTENT_ROW_ID, ...provider }),
+  ]);
+
+  const result = await fixture.getRow({ tableId: INTENT_TABLE_ID, rowId: INTENT_ROW_ID });
+
+  assert.equal(result.status, 'PASS');
+  assert.equal(result.value.data.retentionExpiresAt, '2026-08-21T02:04:04.000Z');
+  assert.equal(result.value.data[LOGICAL_RETENTION_KEY], '2026-08-21T03:04:04.000Z');
+  assert.equal(result.value.data.createdAt, '2026-08-21T01:04:04.000Z');
+  assert.equal(result.value.data.updatedAt, 'invalid-provider-timestamp');
 });
