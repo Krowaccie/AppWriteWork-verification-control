@@ -133,11 +133,12 @@ function createFixture() {
   };
 }
 
-test('function activation tolerates one bounded stale parent readback', async () => {
+test('function deployment tolerates bounded unavailable, transient terminal, and stale parent readback', async () => {
   const fixture = createFixture();
   const desired = new Map();
   let firstFunctionId = null;
   let unavailableDeploymentReadReturned = false;
+  let transientTerminalReadReturned = false;
   let staleReadReturned = false;
   let sleeps = 0;
   const clients = {
@@ -155,6 +156,13 @@ test('function activation tolerates one bounded stale parent readback', async ()
         ) {
           unavailableDeploymentReadReturned = true;
           return { status: 'BLOCKED', value: null };
+        }
+        if (
+          deploymentId === desired.get(firstFunctionId)
+          && !transientTerminalReadReturned
+        ) {
+          transientTerminalReadReturned = true;
+          return { status: 'PASS', value: { deploymentId, status: 'failed' } };
         }
         return { status: 'PASS', value: { deploymentId, status: 'ready' } };
       },
@@ -187,11 +195,56 @@ test('function activation tolerates one bounded stale parent readback', async ()
   assert.equal(result.status, 'PASS');
   assert.equal(result.value.length, inventory.productFunctions.length + 1);
   assert.equal(unavailableDeploymentReadReturned, true);
+  assert.equal(transientTerminalReadReturned, true);
   assert.equal(staleReadReturned, true);
-  assert.equal(sleeps, 2);
+  assert.equal(sleeps, 3);
 });
 
-test('site activation tolerates one bounded stale parent readback', async () => {
+test('function deployment reports a terminal state only after the bounded readback window', async () => {
+  const fixture = createFixture();
+  let creates = 0;
+  let activations = 0;
+  let sleeps = 0;
+  const clients = {
+    operator: {
+      async createFunctionDeployment({ functionId }) {
+        creates += 1;
+        return { status: 'PASS', value: { deploymentId: `deployment-${functionId}` } };
+      },
+      async getFunctionDeployment({ deploymentId }) {
+        return { status: 'PASS', value: { deploymentId, status: 'failed' } };
+      },
+      async activateFunctionDeployment() {
+        activations += 1;
+        return { status: 'PASS', value: { activeDeploymentId: 'unexpected' } };
+      },
+      async getFunction() {
+        throw new Error('parent readback must not run');
+      },
+    },
+  };
+  const clock = {
+    now: () => '2026-08-21T01:20:00.000Z',
+    async sleep() {
+      sleeps += 1;
+    },
+  };
+
+  const result = await deployTestFunctionArtifacts({
+    context: fixture.context,
+    artifactSet: fixture.artifactSet,
+    clients,
+    clock,
+  });
+
+  assert.equal(result.status, 'FAIL');
+  assert.equal(result.diagnostics[0].code, 'DEPLOYMENT_TERMINAL_FAILURE');
+  assert.equal(creates, 1);
+  assert.equal(activations, 0);
+  assert.equal(sleeps, 59);
+});
+
+test('site deployment tolerates bounded unavailable, transient terminal, and stale parent readback', async () => {
   const fixture = createFixture();
   const artifact = fixture.artifactSet.releaseEligibleArtifacts[0];
   const expectedIdentity = fixture.artifactSet.buildIdentity;
@@ -215,6 +268,7 @@ test('site activation tolerates one bounded stale parent readback', async () => 
   });
   assert.equal(readerResult.status, 'PASS');
   let unavailableDeploymentReadReturned = false;
+  let transientTerminalReadReturned = false;
   let staleReadReturned = false;
   let sleeps = 0;
   const deploymentId = 'deployment-site';
@@ -227,6 +281,10 @@ test('site activation tolerates one bounded stale parent readback', async () => 
         if (!unavailableDeploymentReadReturned) {
           unavailableDeploymentReadReturned = true;
           return { status: 'BLOCKED', value: null };
+        }
+        if (!transientTerminalReadReturned) {
+          transientTerminalReadReturned = true;
+          return { status: 'PASS', value: { deploymentId, status: 'failed' } };
         }
         return { status: 'PASS', value: { deploymentId, status: 'ready' } };
       },
@@ -261,6 +319,7 @@ test('site activation tolerates one bounded stale parent readback', async () => 
   assert.equal(result.status, 'PASS');
   assert.equal(result.value.activeDeploymentId, deploymentId);
   assert.equal(unavailableDeploymentReadReturned, true);
+  assert.equal(transientTerminalReadReturned, true);
   assert.equal(staleReadReturned, true);
-  assert.equal(sleeps, 2);
+  assert.equal(sleeps, 3);
 });

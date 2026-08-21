@@ -188,17 +188,19 @@ export function createTestSiteIdentityReader(args) {
 }
 
 async function pollDeployment(getDeployment, deploymentId, clock) {
+  let lastExactStatus = null;
   for (let attempt = 0; attempt < MAX_POLLS; attempt += 1) {
     const observed = await getDeployment(deploymentId);
     if (observed?.status !== 'PASS' || observed.value?.deploymentId !== deploymentId) {
       if (attempt < MAX_POLLS - 1) await clock.sleep(POLL_INTERVAL_MS);
       continue;
     }
-    if (observed.value.status === 'ready') return pass(observed.value);
-    if (['failed', 'canceled', 'cancelled'].includes(observed.value.status)) {
-      return failed('DEPLOYMENT_TERMINAL_FAILURE');
-    }
+    lastExactStatus = observed.value.status;
+    if (lastExactStatus === 'ready') return pass(observed.value);
     if (attempt < MAX_POLLS - 1) await clock.sleep(POLL_INTERVAL_MS);
+  }
+  if (['failed', 'canceled', 'cancelled'].includes(lastExactStatus)) {
+    return failed('DEPLOYMENT_TERMINAL_FAILURE');
   }
   return failed('DEPLOYMENT_TIMEOUT');
 }
