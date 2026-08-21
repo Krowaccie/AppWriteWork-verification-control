@@ -174,6 +174,17 @@ const INTENT_V2_STORAGE_ARM_KEYS = Object.freeze([
 ]);
 const INTENT_V1_STORAGE_ARM_KEYS = Object.freeze(['providerResourceIds']);
 const INTENT_RECOVERY_STORAGE_KEYS = Object.freeze(['recoveryCheckpointDigest']);
+const LEASE_DATETIME_STORAGE_KEYS = Object.freeze([
+  'acquiredAt',
+  'renewedAt',
+  'expiresAt',
+]);
+const INTENT_DATETIME_STORAGE_KEYS = Object.freeze([
+  'retentionExpiresAt',
+  INTENT_LOGICAL_RETENTION_KEY,
+  'createdAt',
+  'updatedAt',
+]);
 const RUNNER_VARIABLE_QUERY_PATH =
   '/functions/verification-runner-py/variables?queries%5B%5D=%7B%22method%22%3A%22limit%22%2C%22values%22%3A%5B17%5D%7D&total=true';
 const RUNNER_VARIABLE_AUTHORITY_PROPERTY = '__registerTestCloudRunnerVariableAuthorityV1__';
@@ -418,6 +429,29 @@ function stripNullStorageArm(data, keys) {
   return Object.fromEntries(Object.entries(data).filter(([key]) => !keys.includes(key)));
 }
 
+function canonicalizeStorageDatetimes(tableId, data) {
+  if (!isPlainObject(data)) return data;
+  const keys = tableId === LEASE_TABLE_ID
+    ? LEASE_DATETIME_STORAGE_KEYS
+    : tableId === INTENT_TABLE_ID
+      ? INTENT_DATETIME_STORAGE_KEYS
+      : [];
+  let changed = false;
+  const normalized = Object.fromEntries(Object.entries(data).map(([key, value]) => {
+    if (
+      keys.includes(key)
+      && typeof value === 'string'
+      && value.endsWith('+00:00')
+      && VARIABLE_TIMESTAMP_PATTERN.test(value)
+    ) {
+      changed = true;
+      return [key, `${value.slice(0, -6)}Z`];
+    }
+    return [key, value];
+  }));
+  return changed ? normalized : data;
+}
+
 function logicalRowData(tableId, data) {
   let logical = remapIntentRowData(
     tableId,
@@ -426,6 +460,7 @@ function logicalRowData(tableId, data) {
     INTENT_LOGICAL_RETENTION_KEY,
   );
   if (logical === null) return null;
+  logical = canonicalizeStorageDatetimes(tableId, logical);
   if (tableId === AUDIT_TABLE_ID) {
     return stripNullStorageArm(logical, AUDIT_RECOVERY_STORAGE_KEYS);
   }
