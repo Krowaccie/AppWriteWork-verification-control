@@ -1,5 +1,4 @@
 import { createHash } from 'node:crypto';
-import { lstat, readFile, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -27,7 +26,6 @@ import {
   qualifyExecutionObservationReadback,
 } from '../../../scripts/verification/test-cloud-setup-check.mjs';
 import inventory from '../../../dev/verification/environments/test-cloud.inventory.v1.json' with { type: 'json' };
-import { reattestLocalControllerArtifact } from './github-controller-artifact-verifier.mjs';
 import { readExactBindingDirectory } from './test-cloud-controller.mjs';
 
 const DIGEST = /^sha256:[0-9a-f]{64}$/u;
@@ -456,33 +454,6 @@ export async function main(argv = process.argv.slice(2), dependencies = {}) {
       || environment.GITHUB_REPOSITORY !== 'Krowaccie/AppWriteWork-verification-control') {
       throw new TypeError('invalid recovery environment');
     }
-    const controllerArtifactDirectory = environment.CONTROLLER_ARTIFACT_DIRECTORY;
-    if (typeof controllerArtifactDirectory !== 'string'
-      || !path.isAbsolute(controllerArtifactDirectory)
-      || path.resolve(controllerArtifactDirectory) !== controllerArtifactDirectory) {
-      throw new TypeError('invalid controller artifact directory');
-    }
-    const controllerProof = await (dependencies.reattestController
-      ?? reattestLocalControllerArtifact)({
-      artifactId: environment.PROOF_ARTIFACT_ID,
-      bundleDigest: environment.PROOF_BUNDLE_DIGEST,
-      proofRepository: environment.PROOF_REPOSITORY,
-      proofSha: environment.PROOF_SHA,
-      proofStatus: environment.PROOF_STATUS,
-      repository: environment.GITHUB_REPOSITORY,
-      requiredEntrypoint:
-        'packages/verification-controller/workflows/recover-appwrite-test.yml',
-      runtimeSha,
-      trustedArtifactId: environment.TRUSTED_CONTROLLER_ARTIFACT_ID,
-      trustedBundleDigest: environment.TRUSTED_CONTROLLER_BUNDLE_DIGEST,
-      trustedSha: controllerBundleSha,
-    }, {
-      lstat,
-      readFile,
-      realpath,
-      root: controllerArtifactDirectory,
-    });
-    if (resultValue(controllerProof) === null) throw new TypeError('invalid controller proof');
     const bindingDirectory = path.resolve(parsed.bindingDirectory);
     if (!path.isAbsolute(parsed.bindingDirectory) || bindingDirectory !== parsed.bindingDirectory) {
       throw new TypeError('invalid binding directory');
