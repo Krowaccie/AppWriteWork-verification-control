@@ -394,6 +394,15 @@ function recoveryHandle(secret) {
   return Object.freeze(handle);
 }
 
+export function createRecoveryTargetEnvironment() {
+  return Object.freeze({
+    endpoint: inventory.environment.endpoint,
+    origin: inventory.environment.publicOrigin,
+    projectId: inventory.environment.projectId,
+    siteId: inventory.environment.siteId,
+  });
+}
+
 function readHostedObservationQualification(bindings) {
   try {
     const text = bindings.TEST_CLOUD_HOSTED_SETUP_READBACK_JSON;
@@ -469,7 +478,7 @@ export async function main(argv = process.argv.slice(2), dependencies = {}) {
     const contextOutcome = createTestRecoveryEnvironmentContext({
       approvalRef,
       controllerBundleSha,
-      environment: inventory.environment,
+      environment: createRecoveryTargetEnvironment(),
       executionObservationQualification,
       originalWorkflowRunId: parsed.originalWorkflowRunId,
       recoveryHandle: handle,
