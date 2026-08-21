@@ -1888,7 +1888,8 @@ export function createProviderRecoveryControlStore(args = {}) {
         &&recoverableSourceLeaseState(sourceSnapshot.lease.state,sourceSnapshot.lease.cleanupDebt)
         &&proof.sourceIntents.length===0&&proof.currentIntents.length===0
         &&(proof.accountSessionIntent===null||proof.accountSessionIntent.state==='absent')
-        &&(proof.primaryExecutionIntent===null||proof.primaryExecutionIntent.state==='created');
+        &&(proof.primaryExecutionIntent===null
+          ||['planned','created'].includes(proof.primaryExecutionIntent.state));
       if(event.transition!=='lease.close'||event.previousLedgerDigest!==sourceSnapshot.lease.ledgerDigest
         ||event.runId!==sourceSnapshot.lease.ownerRunId
         ||event.leaseVersionBefore!==sourceSnapshot.lease.leaseVersion
@@ -1983,7 +1984,8 @@ export function createProviderRecoveryControlStore(args = {}) {
         &&recoverableSourceLeaseState(snapshot.lease.state,snapshot.lease.cleanupDebt)
         &&proof.sourceIntents.length===0&&proof.currentIntents.length===0
         &&(proof.accountSessionIntent===null||proof.accountSessionIntent.state==='absent')
-        &&(proof.primaryExecutionIntent===null||proof.primaryExecutionIntent.state==='created');
+        &&(proof.primaryExecutionIntent===null
+          ||['planned','created'].includes(proof.primaryExecutionIntent.state));
       if(!completedResourceClose&&!emptyResourceClose){
         return result('BLOCKED',null,'AUDIT_CHAIN_MISMATCH');
       }

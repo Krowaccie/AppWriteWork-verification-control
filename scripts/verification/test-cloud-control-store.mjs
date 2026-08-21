@@ -1715,7 +1715,7 @@ export async function closeRecoveryLease(input){
       &&recoverableSourceLeaseState(predecessor.lease.state,predecessor.lease.cleanupDebt)
       &&validIso(predecessor.lease.expiresAt)&&Date.parse(predecessor.lease.expiresAt)<=now*1000
       &&primaryExecutions.length<=1
-      &&(primaryExecutions.length===0||(primaryExecutions[0].state==='created'
+      &&(primaryExecutions.length===0||(['planned','created'].includes(primaryExecutions[0].state)
         &&validPrimaryExecutionSnapshot(primaryExecutions[0],PRIMARY_EXECUTION_RETENTION_MAX_SECONDS)));
     if(!completedResourceClose&&!emptyResourceClose)
       return blocked('AUDIT_CHAIN_MISMATCH');
