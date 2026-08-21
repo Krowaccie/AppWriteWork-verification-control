@@ -76,6 +76,16 @@ function ordinalCompare(left, right) { return left < right ? -1 : left > right ?
 const MESSAGES = Object.freeze({
   ARTIFACT_HANDOFF_INVALID: 'Artifact manifest does not match the exact deployable inventory.',
   TEST_CLOUD_PREFLIGHT_MISMATCH: 'Test-cloud recurring readback differs from protected setup attestation.',
+  TEST_CLOUD_PREFLIGHT_ATTESTATION_STALE: 'The protected setup attestation is stale.',
+  TEST_CLOUD_PREFLIGHT_AUTHORIZATION_INVALID: 'The protected preflight authorization is invalid.',
+  TEST_CLOUD_PREFLIGHT_CLIENTS_INVALID: 'The protected preflight clients are invalid.',
+  TEST_CLOUD_PREFLIGHT_FUNCTION_READBACK_INVALID: 'The protected Function readback is invalid.',
+  TEST_CLOUD_PREFLIGHT_INTERNAL_INVALID: 'The protected preflight operation is invalid.',
+  TEST_CLOUD_PREFLIGHT_LEASE_INVALID: 'The protected lease readback is invalid.',
+  TEST_CLOUD_PREFLIGHT_MANIFEST_INVALID: 'The protected artifact manifest is invalid.',
+  TEST_CLOUD_PREFLIGHT_PROJECTION_MISMATCH: 'The protected setup projection does not match.',
+  TEST_CLOUD_PREFLIGHT_RUNNER_CONFIGURATION_INVALID: 'The protected runner configuration is invalid.',
+  TEST_CLOUD_PREFLIGHT_SITE_READBACK_INVALID: 'The protected Site readback is invalid.',
   TEST_IDENTITY_BLOCKED: 'Test context or client identity is invalid.',
   TEST_SETUP_ATTESTATION_INVALID: 'Test-cloud setup attestation is invalid or untrusted.',
   TEST_SETUP_ATTESTATION_STALE: 'Test-cloud setup attestation is outside its validity window.',
@@ -411,11 +421,11 @@ export function isAuthenticTestCloudPreflightResult(value, context) {
 export async function preflightTestCloud(args) {
   try {
     if (arguments.length !== 1 || !exactObject(args, PREFLIGHT_INPUT_KEYS)) {
-      return blocked('TEST_SETUP_ATTESTATION_INVALID');
+      return blocked('TEST_CLOUD_PREFLIGHT_AUTHORIZATION_INVALID');
     }
     const { runtimeQualification, context, clients, manifest, setupAttestation, clock } = args;
     if (!authenticateTestCloudRuntimeActive(Object.freeze({ runtimeQualification }))) {
-      return blocked('TEST_SETUP_ATTESTATION_INVALID');
+      return blocked('TEST_CLOUD_PREFLIGHT_AUTHORIZATION_INVALID');
     }
     const binding = ATTESTATION_BINDINGS.get(setupAttestation);
     if (
@@ -425,30 +435,36 @@ export async function preflightTestCloud(args) {
       || binding.runtimeQualification !== runtimeQualification
       || !evidenceIsCurrent(binding)
       || typeof clock?.nowEpochSeconds !== 'function'
-    ) return blocked('TEST_SETUP_ATTESTATION_INVALID');
+    ) return blocked('TEST_CLOUD_PREFLIGHT_AUTHORIZATION_INVALID');
     const now = clock.nowEpochSeconds();
     if (
       !Number.isSafeInteger(now)
       || setupAttestation.issuedAtEpochSeconds > now
       || now < 0
       || now >= setupAttestation.expiresAtEpochSeconds
-    ) return blocked('TEST_SETUP_ATTESTATION_STALE');
-    if (!validateExactManifest(manifest, context)) return blocked('ARTIFACT_HANDOFF_INVALID');
+    ) return blocked('TEST_CLOUD_PREFLIGHT_ATTESTATION_STALE');
+    if (!validateExactManifest(manifest, context)) {
+      return blocked('TEST_CLOUD_PREFLIGHT_MANIFEST_INVALID');
+    }
     if (
       typeof clients?.operator?.getSite !== 'function'
       || typeof clients?.operator?.getFunction !== 'function'
       || typeof clients?.fixture?.getRow !== 'function'
-    ) return blocked('TEST_IDENTITY_BLOCKED');
+    ) return blocked('TEST_CLOUD_PREFLIGHT_CLIENTS_INVALID');
     const siteResult = await clients.operator.getSite({});
-    if (siteResult?.status !== 'PASS') return blocked('TEST_CLOUD_PREFLIGHT_MISMATCH');
+    if (siteResult?.status !== 'PASS') {
+      return blocked('TEST_CLOUD_PREFLIGHT_SITE_READBACK_INVALID');
+    }
     const functionRecords = [...EXPECTED_FUNCTIONS]
       .sort((left, right) => ordinalCompare(left.functionId, right.functionId));
     const functions = [];
     for (const record of functionRecords) {
       const read = await clients.operator.getFunction({ functionId: record.functionId });
-      if (read?.status !== 'PASS') return blocked('TEST_CLOUD_PREFLIGHT_MISMATCH');
+      if (read?.status !== 'PASS') {
+        return blocked('TEST_CLOUD_PREFLIGHT_FUNCTION_READBACK_INVALID');
+      }
       if (record.functionId === RUNNER.functionId && !exactRunnerConfiguration(read.value)) {
-        return blocked('TEST_CLOUD_PREFLIGHT_MISMATCH');
+        return blocked('TEST_CLOUD_PREFLIGHT_RUNNER_CONFIGURATION_INVALID');
       }
       functions.push(read.value);
     }
@@ -458,7 +474,7 @@ export async function preflightTestCloud(args) {
       || observed.functionConfigurationsDigest !== setupAttestation.functionConfigurationsDigest
       || observed.credentialScopeReadbackDigest !== setupAttestation.credentialScopeReadbackDigest
       || observed.fixedLeaseIdentityDigest !== setupAttestation.fixedLeaseIdentityDigest
-    ) return blocked('TEST_CLOUD_PREFLIGHT_MISMATCH');
+    ) return blocked('TEST_CLOUD_PREFLIGHT_PROJECTION_MISMATCH');
     const leaseResult = await clients.fixture.getRow({
       tableId: FIXED_LEASE_IDENTITY.tableId,
       rowId: FIXED_LEASE_IDENTITY.rowId,
@@ -467,7 +483,7 @@ export async function preflightTestCloud(args) {
       leaseResult?.status !== 'PASS'
       || leaseResult.value?.rowId !== FIXED_LEASE_IDENTITY.rowId
       || !idleLease(leaseResult.value.data)
-    ) return blocked('TEST_CLOUD_PREFLIGHT_MISMATCH');
+    ) return blocked('TEST_CLOUD_PREFLIGHT_LEASE_INVALID');
     const preflight = result('PASS', deepFreeze({
       site: siteResult.value,
       functions,
@@ -489,6 +505,6 @@ export async function preflightTestCloud(args) {
     PREFLIGHT_CONTEXTS.set(preflight, context);
     return preflight;
   } catch {
-    return blocked('TEST_CLOUD_PREFLIGHT_MISMATCH');
+    return blocked('TEST_CLOUD_PREFLIGHT_INTERNAL_INVALID');
   }
 }
