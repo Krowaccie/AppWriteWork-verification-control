@@ -647,7 +647,10 @@ function recoveryProviderProofFailureCode(error) {
     ['Recovery terminal intent proof is invalid.', 'RECOVERY_ACCOUNT_SESSION_PROOF_RECOVERY_EVENT_INVALID'],
     ['Recovery event snapshot is invalid.', 'RECOVERY_ACCOUNT_SESSION_PROOF_RECOVERY_EVENT_INVALID'],
     ['Recovery successor source proof is invalid.', 'RECOVERY_ACCOUNT_SESSION_PROOF_RECOVERY_EVENT_INVALID'],
-    ['Recovery source owner is invalid.', 'RECOVERY_ACCOUNT_SESSION_PROOF_LEASE_OWNER_INVALID'],
+    ['Recovery source owner run is invalid.', 'RECOVERY_ACCOUNT_SESSION_PROOF_LEASE_OWNER_RUN_INVALID'],
+    ['Recovery source owner debt is invalid.', 'RECOVERY_ACCOUNT_SESSION_PROOF_LEASE_OWNER_DEBT_INVALID'],
+    ['Recovery source owner workflow type is invalid.', 'RECOVERY_ACCOUNT_SESSION_PROOF_LEASE_OWNER_WORKFLOW_TYPE_INVALID'],
+    ['Recovery source owner workflow is invalid.', 'RECOVERY_ACCOUNT_SESSION_PROOF_LEASE_OWNER_WORKFLOW_INVALID'],
     ['Recovery lease state is invalid.', 'RECOVERY_ACCOUNT_SESSION_PROOF_LEASE_RECOVERY_STATE_INVALID'],
     ['Recovery projection evidence is invalid.', 'RECOVERY_ACCOUNT_SESSION_PROOF_PROJECTION_INVALID'],
   ]);
@@ -1415,11 +1418,17 @@ function reconstructProviderRecoveryProof(snapshot, recoveryContext) {
     predecessorRecoveryEvent = entry.event;
   }
 
-  if (activeRun !== snapshot.lease.ownerRunId
-    || snapshot.lease.cleanupDebt !== true
-    || typeof snapshot.lease.ownerWorkflowRunId !== 'string'
-    || snapshot.lease.ownerWorkflowRunId !== recoveryContext.sourceWorkflowRunId) {
-    throw new TypeError('Recovery source owner is invalid.');
+  if (activeRun !== snapshot.lease.ownerRunId) {
+    throw new TypeError('Recovery source owner run is invalid.');
+  }
+  if (snapshot.lease.cleanupDebt !== true) {
+    throw new TypeError('Recovery source owner debt is invalid.');
+  }
+  if (typeof snapshot.lease.ownerWorkflowRunId !== 'string') {
+    throw new TypeError('Recovery source owner workflow type is invalid.');
+  }
+  if (snapshot.lease.ownerWorkflowRunId !== recoveryContext.sourceWorkflowRunId) {
+    throw new TypeError('Recovery source owner workflow is invalid.');
   }
   if (!recoveryStarted) {
     if (ordinaryLeaseState !== 'cleanup-debt' || snapshot.lease.state !== 'cleanup-debt') {
