@@ -70,6 +70,25 @@ test('account-session open classifies source, snapshot, intent, binding, and lea
   }
 });
 
+test('provider account-session source separates remote reads from proof reconstruction', async () => {
+  const source = await readFile(
+    'scripts/verification/test-cloud-provider-control-store.mjs',
+    'utf8',
+  );
+  for (const code of [
+    'RECOVERY_ACCOUNT_SESSION_PROVIDER_READ_INVALID',
+    'RECOVERY_ACCOUNT_SESSION_PROVIDER_PROOF_INVALID',
+  ]) {
+    assert.match(source, new RegExp(`'${code}'`, 'u'));
+    const nested = {
+      status: 'BLOCKED',
+      value: null,
+      diagnostics: [{ code, safeMessage: 'safe', retryable: false }],
+    };
+    assert.equal(describeRecoveryStageFailure('account-sessions-open', nested), nested);
+  }
+});
+
 test('recovery CLI rejects malformed authority before filesystem or network access', async () => {
   let called = false;
   const dependencies = {

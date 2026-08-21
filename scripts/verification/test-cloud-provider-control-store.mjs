@@ -1810,23 +1810,28 @@ export function createProviderRecoveryControlStore(args = {}) {
       return result('BLOCKED', null, 'TEST_CLOUD_SETUP_INCOMPLETE');
     }
     operation.consumed = true;
+    let snapshot;
     try {
-      const snapshot = await readRecoverySnapshotValue();
+      snapshot = await readRecoverySnapshotValue();
+    } catch {
+      return result('BLOCKED', null, 'RECOVERY_ACCOUNT_SESSION_PROVIDER_READ_INVALID');
+    }
+    try {
       const proof = reconstructProviderRecoveryProof(snapshot, args.context);
       const sourceIntent = proof.accountSessionIntent;
       if(sourceIntent?.state==='absent'){
         return result('PASS',{snapshot,nextRequest:mintReadOperation()});
       }
       if (proof.predecessorRecoveryEvent !== null || sourceIntent?.state !== 'created') {
-        return result('BLOCKED', null, 'AUDIT_CHAIN_MISMATCH');
+        return result('BLOCKED', null, 'RECOVERY_ACCOUNT_SESSION_PROVIDER_PROOF_INVALID');
       }
       return result('PASS', {
         snapshot,
         nextRequest:mintReadOperation(),
         createAbsenceOperation:makeAccountSessionAbsenceOperationFactory(snapshot, sourceIntent),
       });
-    } catch (error) {
-      return recoveryFailure(error);
+    } catch {
+      return result('BLOCKED', null, 'RECOVERY_ACCOUNT_SESSION_PROVIDER_PROOF_INVALID');
     }
   }
 
