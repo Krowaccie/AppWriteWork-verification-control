@@ -202,6 +202,16 @@ async function pollDeployment(getDeployment, deploymentId, clock) {
   return failed('DEPLOYMENT_TIMEOUT');
 }
 
+async function pollActiveDeployment(getParent, deploymentId, clock) {
+  for (let attempt = 0; attempt < MAX_POLLS; attempt += 1) {
+    const observed = await getParent();
+    if (observed?.status !== 'PASS') return failed('DEPLOYMENT_ACTIVATION_MISMATCH');
+    if (observed.value?.activeDeploymentId === deploymentId) return pass(observed.value);
+    if (attempt < MAX_POLLS - 1) await clock.sleep(POLL_INTERVAL_MS);
+  }
+  return failed('DEPLOYMENT_ACTIVATION_MISMATCH');
+}
+
 function observation(kind, logicalTarget, deploymentId, transportDigest) {
   return Object.freeze({
     kind,
@@ -350,10 +360,12 @@ export async function deployTestFunctionArtifacts({ context, artifactSet, client
     if (activated?.status !== 'PASS' || activated.value?.activeDeploymentId !== deploymentId) {
       return failed('DEPLOYMENT_ACTIVATION_MISMATCH');
     }
-    const parent = await operator.getFunction({ functionId });
-    if (parent?.status !== 'PASS' || parent.value?.activeDeploymentId !== deploymentId) {
-      return failed('DEPLOYMENT_ACTIVATION_MISMATCH');
-    }
+    const parent = await pollActiveDeployment(
+      () => operator.getFunction({ functionId }),
+      deploymentId,
+      clock,
+    );
+    if (parent.status !== 'PASS') return parent;
     observations.push(observation(
       'function', artifact.logicalTarget, deploymentId, artifact.transportDigest,
     ));
@@ -403,10 +415,12 @@ export async function deployTestSiteArtifact({
   if (activated?.status !== 'PASS' || activated.value?.activeDeploymentId !== deploymentId) {
     return failed('DEPLOYMENT_ACTIVATION_MISMATCH');
   }
-  const parent = await operator.getSite({});
-  if (parent?.status !== 'PASS' || parent.value?.activeDeploymentId !== deploymentId) {
-    return failed('DEPLOYMENT_ACTIVATION_MISMATCH');
-  }
+  const parent = await pollActiveDeployment(
+    () => operator.getSite({}),
+    deploymentId,
+    clock,
+  );
+  if (parent.status !== 'PASS') return parent;
   const readback = await siteIdentityReader.read();
   if (readback?.status !== 'PASS') return blocked('SITE_IDENTITY_READBACK_FAILED');
   const actual = readback.value;
