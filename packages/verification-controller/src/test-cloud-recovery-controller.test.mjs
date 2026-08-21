@@ -19,13 +19,22 @@ test('recovery maps the inventory public origin to the closed environment contra
 });
 
 test('recovery replaces ambiguous internals with a fixed safe stage diagnostic', () => {
-  const outcome = describeRecoveryStageFailure('account-sessions', {
-    status: 'BLOCKED',
-    value: null,
-    diagnostics: [{ code: 'AUDIT_CHAIN_MISMATCH' }],
-  });
-  assert.equal(outcome.status, 'BLOCKED');
-  assert.equal(outcome.diagnostics[0].code, 'RECOVERY_ACCOUNT_SESSIONS_INVALID');
+  const cases = {
+    'account-sessions-open': 'RECOVERY_ACCOUNT_SESSIONS_OPEN_INVALID',
+    'account-sessions-list': 'RECOVERY_ACCOUNT_SESSIONS_LIST_INVALID',
+    'account-sessions-list-commit': 'RECOVERY_ACCOUNT_SESSIONS_LIST_COMMIT_INVALID',
+    'account-sessions-delete': 'RECOVERY_ACCOUNT_SESSIONS_DELETE_INVALID',
+    'account-sessions-delete-commit': 'RECOVERY_ACCOUNT_SESSIONS_DELETE_COMMIT_INVALID',
+  };
+  for (const [stage, expected] of Object.entries(cases)) {
+    const outcome = describeRecoveryStageFailure(stage, {
+      status: 'BLOCKED',
+      value: null,
+      diagnostics: [{ code: 'AUDIT_CHAIN_MISMATCH' }],
+    });
+    assert.equal(outcome.status, 'BLOCKED');
+    assert.equal(outcome.diagnostics[0].code, expected);
+  }
 });
 
 test('recovery CLI rejects malformed authority before filesystem or network access', async () => {
