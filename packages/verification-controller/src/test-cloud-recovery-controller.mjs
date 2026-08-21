@@ -505,18 +505,21 @@ function readHostedObservationQualification(bindings) {
 
 function parseHostedArgs(argv) {
   if (!Array.isArray(argv)
-    || argv.length !== 6
+    || argv.length !== 8
     || argv[0] !== '--hosted'
     || argv[1] !== '--original-workflow-run-id'
     || !POSITIVE_ID.test(argv[2] ?? '')
-    || argv[3] !== '--binding-directory'
-    || typeof argv[4] !== 'string'
-    || argv[4].length < 1
-    || argv[4].includes('\0')
-    || argv[5] !== '--execute') return null;
+    || argv[3] !== '--source-workflow-run-id'
+    || !POSITIVE_ID.test(argv[4] ?? '')
+    || argv[5] !== '--binding-directory'
+    || typeof argv[6] !== 'string'
+    || argv[6].length < 1
+    || argv[6].includes('\0')
+    || argv[7] !== '--execute') return null;
   return Object.freeze({
     originalWorkflowRunId: argv[2],
-    bindingDirectory: argv[4],
+    sourceWorkflowRunId: argv[4],
+    bindingDirectory: argv[6],
   });
 }
 
@@ -563,6 +566,7 @@ export async function main(argv = process.argv.slice(2), dependencies = {}) {
       executionObservationQualification,
       originalWorkflowRunId: parsed.originalWorkflowRunId,
       recoveryHandle: handle,
+      sourceWorkflowRunId: parsed.sourceWorkflowRunId,
     });
     const context = resultValue(contextOutcome);
     if (context === null) throw new TypeError('invalid recovery context');

@@ -1418,7 +1418,7 @@ function reconstructProviderRecoveryProof(snapshot, recoveryContext) {
   if (activeRun !== snapshot.lease.ownerRunId
     || snapshot.lease.cleanupDebt !== true
     || typeof snapshot.lease.ownerWorkflowRunId !== 'string'
-    || snapshot.lease.ownerWorkflowRunId !== recoveryContext.originalWorkflowRunId) {
+    || snapshot.lease.ownerWorkflowRunId !== recoveryContext.sourceWorkflowRunId) {
     throw new TypeError('Recovery source owner is invalid.');
   }
   if (!recoveryStarted) {
