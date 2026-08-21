@@ -129,6 +129,21 @@ test('provider account-session source separates remote reads from proof reconstr
   }
 });
 
+test('provider recovery reads projections only from the current authoritative lease cycle', async () => {
+  const source = await readFile(
+    'scripts/verification/test-cloud-provider-control-store.mjs',
+    'utf8',
+  );
+  assert.match(source, /const auditTrail = reversedTrail\.reverse\(\);/u);
+  assert.match(source, /findLastIndex\(\(\{ event \}\) => \(/u);
+  assert.match(source, /event\.transition === 'lease\.acquire'/u);
+  assert.match(source, /auditTrail\.slice\(authoritativeLeaseStart\)/u);
+  assert.doesNotMatch(
+    source,
+    /if \(event\.runId === authoritativeRunId\) intentIds\.add\(event\.intentId\);/u,
+  );
+});
+
 test('recovery keeps the failed controller run separate from the source lease owner', async () => {
   const [controller, environment, controlStore, providerStore, workflow] = await Promise.all([
     readFile('packages/verification-controller/src/test-cloud-recovery-controller.mjs', 'utf8'),

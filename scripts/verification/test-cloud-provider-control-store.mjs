@@ -1666,7 +1666,6 @@ export function createProviderRecoveryControlStore(args = {}) {
     const lease = await getRecoveryLease();
     const reversedTrail = [];
     const seenDigests = new Set();
-    const intentIds = new Set();
     let authoritativeRunId=lease.ownerRunId;
     let auditDigest = lease.ledgerDigest;
     let expectedLeaseVersionAfter = lease.leaseVersion;
@@ -1690,13 +1689,24 @@ export function createProviderRecoveryControlStore(args = {}) {
         if (snapshot === null || snapshot.intentId !== event.intentId) {
           mismatch('AUDIT_CHAIN_MISMATCH');
         }
-        if (event.runId === authoritativeRunId) intentIds.add(event.intentId);
       }
       reversedTrail.push(deepFreeze({ digest: auditDigest, event, snapshot }));
       expectedLeaseVersionAfter = event.leaseVersionBefore;
       auditDigest = event.previousLedgerDigest;
     }
     if (expectedLeaseVersionAfter !== 0) mismatch('AUDIT_CHAIN_MISMATCH');
+
+    const auditTrail = reversedTrail.reverse();
+    const authoritativeLeaseStart = auditTrail.findLastIndex(({ event }) => (
+      event.runId === authoritativeRunId && event.transition === 'lease.acquire'
+    ));
+    if (authoritativeLeaseStart === -1) mismatch('AUDIT_CHAIN_MISMATCH');
+    const intentIds = new Set();
+    for (const { event } of auditTrail.slice(authoritativeLeaseStart)) {
+      if (event.runId === authoritativeRunId && event.intentId !== null) {
+        intentIds.add(event.intentId);
+      }
+    }
 
     const intentProjections = [];
     for (const intentId of [...intentIds].sort()) {
@@ -1707,7 +1717,7 @@ export function createProviderRecoveryControlStore(args = {}) {
     }
     return deepFreeze({
       lease,
-      auditTrail: reversedTrail.reverse(),
+      auditTrail,
       intentProjections,
     });
   }
