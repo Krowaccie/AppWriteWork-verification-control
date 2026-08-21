@@ -156,6 +156,19 @@ test('recovery admits an expired active lease without weakening the cleanup-debt
   assert.match(controlStore, /Date\.parse\(reconstruction\.lease\.expiresAt\)>now\*1000/u);
 });
 
+test('recovery closes an empty fixture set without opening the 42-step checkpoint', async () => {
+  const [controller, controlStore, providerStore] = await Promise.all([
+    readFile('packages/verification-controller/src/test-cloud-recovery-controller.mjs', 'utf8'),
+    readFile('scripts/verification/test-cloud-control-store.mjs', 'utf8'),
+    readFile('scripts/verification/test-cloud-provider-control-store.mjs', 'utf8'),
+  ]);
+  assert.match(providerStore, /missingMask === '111'\) return \[\]/u);
+  assert.match(controlStore, /emptyResourceSet\s*:\s*true/u);
+  assert.match(controller, /openedValue\.emptyResourceSet === true/u);
+  assert.match(controlStore, /predecessor\.sourceIntents\.length===0/u);
+  assert.match(providerStore, /proof\.sourceIntents\.length===0/u);
+});
+
 test('recovery CLI rejects malformed authority before filesystem or network access', async () => {
   let called = false;
   const dependencies = {
