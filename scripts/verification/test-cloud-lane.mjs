@@ -113,6 +113,12 @@ const SAFE_OPERATION_DIAGNOSTIC_CODES = new Set([
   'TEST_CLOUD_PREFLIGHT_INTERNAL_INVALID',
   'SITE_IDENTITY_MISMATCH',
   'SITE_IDENTITY_READBACK_FAILED',
+  'CLEANUP_READ_FAILED',
+  'CLEANUP_OWNERSHIP_MISMATCH',
+  'CLEANUP_DELETE_FAILED',
+  'CLEANUP_DELETE_READBACK_FAILED',
+  'CLEANUP_INTENT_COMMIT_FAILED',
+  'CLEANUP_EXECUTION_EXCEPTION',
 ]);
 const E2E_PASS_KEYS = Object.freeze(['capability', 'lease', 'passed']);
 const E2E_FAILURE_STATE_KEYS = Object.freeze(['capability', 'lease']);
@@ -169,6 +175,12 @@ function safeMessage(code) {
     E2E_FAILED: 'The trusted test-cloud browser scenarios failed.',
     CLEANUP_DEBT: 'Cleanup absence could not be proved.',
     CLEANUP_EXECUTION_FAILED: 'Cleanup execution did not reach a valid terminal state.',
+    CLEANUP_READ_FAILED: 'Cleanup could not read the current resource projection.',
+    CLEANUP_OWNERSHIP_MISMATCH: 'Cleanup found a resource outside the expected ownership boundary.',
+    CLEANUP_DELETE_FAILED: 'Cleanup could not delete an owned test resource.',
+    CLEANUP_DELETE_READBACK_FAILED: 'Cleanup could not prove deletion by readback.',
+    CLEANUP_INTENT_COMMIT_FAILED: 'Cleanup could not commit the terminal intent state.',
+    CLEANUP_EXECUTION_EXCEPTION: 'Cleanup stopped at a bounded internal execution boundary.',
     CLEANUP_ABSENCE_PROOF_FAILED: 'Cleanup ran but resource absence could not be proved.',
     CLEANUP_LEASE_CLOSE_FAILED: 'Cleanup absence was proved but the lease could not be closed.',
     EVIDENCE_WRITE_BLOCKED: 'The closed test-cloud evidence could not be written.',
@@ -853,9 +865,11 @@ export async function runTestCloudLane(args) {
       functionDeployments: functionDeployments ?? [],
       siteDeployment,
     });
-    if (
-      cleaned.status !== 'PASS'
-      || !isPlainObject(cleaned.value)
+    const cleanedFailure = stageFailure(cleaned, 'CLEANUP_EXECUTION_FAILED', true);
+    if (cleanedFailure !== null) {
+      cleanupFailure = cleanedFailure;
+    } else if (
+      !isPlainObject(cleaned.value)
       || cleaned.value.lease === undefined
       || cleaned.value.capability === undefined
       || !Array.isArray(cleaned.value.intents)

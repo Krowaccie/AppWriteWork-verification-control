@@ -491,7 +491,7 @@ async function markAbsent({context,store,lease,capability,intent,clock}){const n
 
 export async function cleanupRun({context,store,provider,lease,capability,intents,clock}) {
   if (!isAuthenticTestEnvironmentContext(context) || !Array.isArray(intents)
-      || typeof provider?.readExact !== 'function' || typeof provider?.deleteExact !== 'function') return blocked('CLEANUP_AMBIGUOUS');
+      || typeof provider?.readExact !== 'function' || typeof provider?.deleteExact !== 'function') return blocked('CLEANUP_EXECUTION_EXCEPTION');
   let currentLease=lease,currentCap=capability; const result=[...intents];
   const persistDebt=async(code)=>{const debt=await markCleanupDebt({context,store,lease:currentLease,capability:currentCap,clock});return debt.status==='PASS'?blocked(code):debt;};
   try {
@@ -502,17 +502,17 @@ export async function cleanupRun({context,store,provider,lease,capability,intent
       const read=await provider.readExact(intent);
       if (read?.status!==404) {
         if (read?.status!==200||read.ownerMarker!==intent.ownerMarker||read.environmentDigest!==context.environmentDigest)
-          return persistDebt(read?.status===200?'OWNERSHIP_MISMATCH':'CLEANUP_AMBIGUOUS');
+          return persistDebt(read?.status===200?'CLEANUP_OWNERSHIP_MISMATCH':'CLEANUP_READ_FAILED');
         const deleted=await provider.deleteExact(intent);
-        if (deleted?.status!==204&&deleted?.status!==404) return persistDebt('CLEANUP_AMBIGUOUS');
-        if ((await provider.readExact(intent))?.status!==404) return persistDebt('CLEANUP_AMBIGUOUS');
+        if (deleted?.status!==204&&deleted?.status!==404) return persistDebt('CLEANUP_DELETE_FAILED');
+        if ((await provider.readExact(intent))?.status!==404) return persistDebt('CLEANUP_DELETE_READBACK_FAILED');
       }
       const absent=await markAbsent({context,store,lease:currentLease,capability:currentCap,intent,clock});
-      if (absent.status!=='PASS') return persistDebt('CLEANUP_AMBIGUOUS');
+      if (absent.status!=='PASS') return persistDebt('CLEANUP_INTENT_COMMIT_FAILED');
       result[index]=absent.value.intent;currentLease=absent.value.lease;currentCap=absent.value.capability;
     }
     return pass(freeze({intents:result,lease:currentLease,capability:currentCap}));
-  } catch { return persistDebt('CLEANUP_AMBIGUOUS'); }
+  } catch { return persistDebt('CLEANUP_EXECUTION_EXCEPTION'); }
 }
 
 export async function verifyRunAbsent({context,provider,intents}){try{if(!isAuthenticTestEnvironmentContext(context)||!Array.isArray(intents))return blocked('CLEANUP_AMBIGUOUS');for(const intent of intents){if(intent.lifecycleClass==='provider-retained-observation')continue;if(intent.state!=='absent')return blocked('CLEANUP_AMBIGUOUS');if(typeof provider?.readExact==='function'){const r=await provider.readExact(intent);if(r?.status!==404)return blocked('CLEANUP_AMBIGUOUS');}}return pass(freeze({absenceProven:true}));}catch{return blocked('CLEANUP_AMBIGUOUS');}}

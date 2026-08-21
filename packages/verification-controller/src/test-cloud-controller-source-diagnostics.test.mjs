@@ -164,7 +164,10 @@ test('preserves only allowlisted identity-shape diagnostics at preflight', () =>
 });
 
 test('ordinary lane reports the exact cleanup phase without exposing provider details', async () => {
-  const source = await readFile('scripts/verification/test-cloud-lane.mjs', 'utf8');
+  const [source, fixtures] = await Promise.all([
+    readFile('scripts/verification/test-cloud-lane.mjs', 'utf8'),
+    readFile('scripts/verification/test-cloud-fixtures.mjs', 'utf8'),
+  ]);
   for (const code of [
     'CLEANUP_EXECUTION_FAILED',
     'CLEANUP_ABSENCE_PROOF_FAILED',
@@ -183,5 +186,20 @@ test('ordinary lane reports the exact cleanup phase without exposing provider de
   assert.match(
     source,
     /cleanupFailure = result\('BLOCKED', null, 'CLEANUP_LEASE_CLOSE_FAILED'\);/u,
+  );
+  for (const code of [
+    'CLEANUP_READ_FAILED',
+    'CLEANUP_OWNERSHIP_MISMATCH',
+    'CLEANUP_DELETE_FAILED',
+    'CLEANUP_DELETE_READBACK_FAILED',
+    'CLEANUP_INTENT_COMMIT_FAILED',
+    'CLEANUP_EXECUTION_EXCEPTION',
+  ]) {
+    assert.match(source, new RegExp(`'${code}'`, 'u'));
+    assert.match(fixtures, new RegExp(`'${code}'`, 'u'));
+  }
+  assert.match(
+    source,
+    /stageFailure\(cleaned, 'CLEANUP_EXECUTION_FAILED', true\)/u,
   );
 });
