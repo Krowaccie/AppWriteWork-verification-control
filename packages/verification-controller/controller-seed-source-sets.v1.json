@@ -113,6 +113,7 @@
         "packages/verification-controller/src/github-deployment-reader.mjs",
         "packages/verification-controller/src/github-deployment-writer.mjs",
         "packages/verification-controller/src/github-production-readonly-transport.mjs",
+        "packages/verification-controller/src/prepare-controller-artifact.mjs",
         "packages/verification-controller/src/production-readonly-adapter.mjs",
         "packages/verification-controller/src/production-readonly-appwrite.mjs",
         "packages/verification-controller/src/production-readonly-browser.mjs",
@@ -134,6 +135,7 @@
         "packages/verification-controller/src/test-cloud-controller.mjs",
         "packages/verification-controller/src/test-cloud-fixture-clock.mjs",
         "packages/verification-controller/src/test-cloud-playwright-facade.mjs",
+        "packages/verification-controller/src/test-cloud-recovery-controller.mjs",
         "packages/verification-controller/src/test-cloud-scenario-driver.mjs",
         "packages/verification-controller/src/verified-production-handoff.mjs",
         "packages/verification-controller/src/verified-release-record-handoff.mjs",
@@ -141,6 +143,7 @@
         "packages/verification-controller/workflows/collect-appwrite-test-readback.yml",
         "packages/verification-controller/workflows/production-readonly.yml",
         "packages/verification-controller/workflows/publish-controller-bundle.yml",
+        "packages/verification-controller/workflows/recover-appwrite-test.yml",
         "packages/verification-controller/workflows/release-production.yml",
         "packages/verification-controller/workflows/verify-test-cloud.yml",
         "scripts/verification/artifact-manifest.mjs",
@@ -191,6 +194,10 @@
         {
           "source": "packages/verification-controller/workflows/publish-controller-bundle.yml",
           "destination": ".github/workflows/publish-controller-bundle.yml"
+        },
+        {
+          "source": "packages/verification-controller/workflows/recover-appwrite-test.yml",
+          "destination": ".github/workflows/recover-appwrite-test.yml"
         },
         {
           "source": "packages/verification-controller/workflows/verify-test-cloud.yml",

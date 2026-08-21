@@ -1229,6 +1229,14 @@ export async function openRecoveryAccountSessionStage(input){
       ||intent.runId!==reconstruction.lease.ownerRunId
       ||intent.environmentDigest!==reconstruction.lease.environmentDigest
       ||reconstruction.lease.ownerWorkflowRunId!==fields.context.originalWorkflowRunId)return blocked('AUDIT_CHAIN_MISMATCH');
+    const freshDebt=reconstruction.lease.state==='cleanup-debt'
+      &&reconstruction.checkpoint===null;
+    const resumableRecovery=reconstruction.lease.state==='recovering'
+      &&reconstruction.checkpoint!==null&&intent.state==='absent';
+    if((!freshDebt&&!resumableRecovery)||reconstruction.lease.cleanupDebt!==true
+      ||!validIso(reconstruction.lease.expiresAt)
+      ||Date.parse(reconstruction.lease.expiresAt)>now*1000)
+      return blocked('LEASE_VERSION_MISMATCH');
     if(absentRead!==null){
       if(intent.state!=='absent')return blocked('AUDIT_CHAIN_MISMATCH');
       return pass(freeze({nextAuthority:read.nextRequest,
@@ -1653,4 +1661,266 @@ export async function closeRecoveryLease(input){
     if(binding!==null){binding.invalid=true;binding.createCommitOperation=null;}
     return blocked('AUDIT_CHAIN_MISMATCH');
   }
+}
+
+function recoverySuccessorProgressDigest(predecessor,candidate,transition){
+  return digest({domain:'verification-recovery-progress-link.v1',payload:{
+    schemaVersion:RECOVERY_CHECKPOINT_SCHEMA_VERSION,
+    priorRecoveryProgressDigest:predecessor.recoveryProgressDigest,
+    transition,catalogPosition:recoveryPositionEvidence(predecessor),
+    targetBindingDigest:predecessor.targetBindingDigest,
+    providerObservationDigest:candidate.providerObservationDigest,
+  }});
+}
+
+function recoveryTerminalIntentDigests(checkpoint,logicalResource,cleanupCursor){
+  const cleanupProgressDigest=digest({
+    domain:'verification-recovery-terminal-cleanup-progress.v1',payload:{
+      schemaVersion:RECOVERY_CHECKPOINT_SCHEMA_VERSION,
+      sourceIntentSetDigest:checkpoint.sourceIntentSetDigest,
+      logicalResource,cleanupCursor,recoveryProgressDigest:checkpoint.recoveryProgressDigest,
+    },
+  });
+  const cleanupProofDigest=digest({
+    domain:'verification-recovery-terminal-cleanup-proof.v1',payload:{
+      schemaVersion:RECOVERY_CHECKPOINT_SCHEMA_VERSION,
+      logicalResource,cleanupCursor,cleanupProgressDigest,
+      providerObservationDigest:checkpoint.providerObservationDigest,
+    },
+  });
+  return freeze({cleanupProgressDigest,cleanupProofDigest});
+}
+
+function recoveryResourcesProofDigest(checkpoint){
+  return digest({domain:'verification-recovery-resources-proof.v1',payload:{
+    schemaVersion:RECOVERY_CHECKPOINT_SCHEMA_VERSION,
+    resourceOrder:QUALIFIED_CLEANUP_PROTOCOL.resourceOrder,
+    recoveryProgressDigest:checkpoint.recoveryProgressDigest,
+    currentIntentSetDigest:checkpoint.currentIntentSetDigest,
+  }});
+}
+
+function recoveryNextPosition(binding,prefixLength,intentDispositionCursor){
+  const position=deriveRecoveryPosition({prefixLength,intentDispositionCursor});
+  return freeze({
+    prefixLength,intentDispositionCursor,
+    logicalResource:position.logicalResource,stepId:position.stepId,
+    phase:position.phase,action:position.action,
+    targetBindingDigest:recoveryTargetBindingDigest(
+      binding.reconstruction.sourceIntents,prefixLength,intentDispositionCursor,
+    ),
+  });
+}
+
+function recoveryCandidateBase(binding,predecessor,transition,position,overrides){
+  let candidate={
+    ...copy(predecessor),
+    priorCheckpointDigest:createRecoveryCheckpointDigest(predecessor),
+    eventOrdinal:predecessor.eventOrdinal+1,
+    prefixLength:position.prefixLength,
+    intentDispositionCursor:position.intentDispositionCursor,
+    logicalResource:position.logicalResource,
+    stepId:position.stepId,
+    phase:position.phase,
+    action:position.action,
+    targetBindingDigest:position.targetBindingDigest,
+    ...overrides,
+  };
+  candidate.recoveryProgressDigest=recoverySuccessorProgressDigest(
+    predecessor,candidate,transition,
+  );
+  return candidate;
+}
+
+function recoveryCheckpointBinding(input){
+  const fields=recoveryFields(input,['context','session','store']);
+  if(fields===null||!isAuthenticTestRecoveryEnvironmentContext(fields.context)
+    ||!isAuthenticProviderRecoveryControlStore(fields.store,fields.context))return null;
+  const binding=RECOVERY_SESSIONS.get(fields.session);
+  return exactRecoverySession(binding,fields.context,fields.store)
+    ?{fields,binding}:null;
+}
+
+function recoveryCheckpointProductDescriptor(binding,checkpoint){
+  if(checkpoint.prefixLength===42||checkpoint.checkpointState==='resources-complete'){
+    return freeze({readMethod:null,mutationMethod:null,extraQueryMethods:freeze([])});
+  }
+  const query=RECOVERY_PRODUCT_QUERY_STEPS[checkpoint.stepId];
+  if(query!==undefined){
+    return freeze({
+      readMethod:query.method,mutationMethod:null,
+      extraQueryMethods:freeze((RECOVERY_PRODUCT_EXTRA_QUERY_STEPS[checkpoint.stepId]??[])
+        .map(({method})=>method)),
+    });
+  }
+  const match=/\.(P[0-5]|G[0-4]|V[0-2])$/.exec(checkpoint.stepId)
+    ??(/\.viewerShare$/.test(checkpoint.stepId)?[null,'S1']:null)
+    ??(/\.editorShare$/.test(checkpoint.stepId)?[null,'S0']:null);
+  if(match===null)throw new TypeError('recovery product descriptor');
+  const target=recoveryProductMemberTarget(binding,match[1]);
+  const readMethod=target.kind==='row'?'getBoundRow':'getBoundFile';
+  const mutationMethod=checkpoint.action==='delete-and-prove-absent'
+    ?target.kind==='row'?'deleteBoundRow':'deleteBoundFile'
+    :checkpoint.action==='converge-owner-only'
+      ?target.kind==='row'?'convergeBoundRowOwnerPermissions':'convergeBoundFileOwnerPermissions'
+      :null;
+  if(mutationMethod===null)throw new TypeError('recovery product descriptor');
+  return freeze({readMethod,mutationMethod,extraQueryMethods:freeze([])});
+}
+
+export async function readRecoveryCheckpointStage(input){
+  try{
+    const bound=recoveryCheckpointBinding(input);
+    if(bound===null)return blocked('AUDIT_CHAIN_MISMATCH');
+    const read=await readRecoveryCheckpointSnapshot(input);
+    if(read?.status!=='PASS'||read.value===null||typeof read.value!=='object'
+      ||Array.isArray(read.value)||!Object.hasOwn(read.value,'snapshot'))return read;
+    const binding=RECOVERY_SESSIONS.get(input.session);
+    if(!exactRecoverySession(binding,input.context,input.store)
+      ||binding.reconstruction.checkpoint===null)return blocked('AUDIT_CHAIN_MISMATCH');
+    const checkpoint=binding.reconstruction.checkpoint;
+    const capabilities=recoveryReadCapability(binding,checkpoint);
+    return pass(freeze({
+      snapshot:read.value.snapshot,checkpoint:copy(checkpoint),
+      ...recoveryCheckpointProductDescriptor(binding,checkpoint),
+      ...capabilities,
+    }));
+  }catch{return blocked('AUDIT_CHAIN_MISMATCH');}
+}
+
+export async function commitRecoveryMutationIssue(input){
+  try{
+    const fields=recoveryFields(input,[
+      'context','desiredProjectionDigest','preWriteProjectionDigest','session','store',
+    ]);
+    if(fields===null||!DIGEST.test(fields.preWriteProjectionDigest)
+      ||!DIGEST.test(fields.desiredProjectionDigest))return blocked('AUDIT_CHAIN_MISMATCH');
+    const bound=recoveryCheckpointBinding({
+      context:fields.context,session:fields.session,store:fields.store,
+    });
+    if(bound===null)return blocked('AUDIT_CHAIN_MISMATCH');
+    const predecessor=bound.binding.reconstruction.checkpoint;
+    if(predecessor===null||predecessor.prefixLength>=42
+      ||!['ready','blocked'].includes(predecessor.checkpointState))
+      return blocked('AUDIT_CHAIN_MISMATCH');
+    const retry=predecessor.checkpointState==='blocked';
+    const position=recoveryNextPosition(bound.binding,
+      predecessor.prefixLength,predecessor.intentDispositionCursor);
+    const candidate=recoveryCandidateBase(bound.binding,predecessor,
+      'recovery.mutation_issued',position,{
+        checkpointState:'write-issued',attemptOrdinal:retry?2:1,
+        preWriteProjectionDigest:retry
+          ?predecessor.preWriteProjectionDigest:fields.preWriteProjectionDigest,
+        desiredProjectionDigest:retry
+          ?predecessor.desiredProjectionDigest:fields.desiredProjectionDigest,
+        providerObservationDigest:null,cleanupProofDigest:null,
+      });
+    return commitRecoveryCheckpoint({checkpoint:validateRecoveryCheckpoint(candidate),
+      context:fields.context,session:fields.session,store:fields.store,
+      transition:'recovery.mutation_issued'});
+  }catch{return blocked('AUDIT_CHAIN_MISMATCH');}
+}
+
+export async function commitRecoveryStepObservation(input){
+  try{
+    const fields=recoveryFields(input,[
+      'clock','context','providerObservationDigest','session','store',
+    ]);
+    if(fields===null||!DIGEST.test(fields.providerObservationDigest)
+      ||recoveryFields(fields.clock,['nowEpochSeconds'])===null)
+      return blocked('AUDIT_CHAIN_MISMATCH');
+    const bound=recoveryCheckpointBinding({
+      context:fields.context,session:fields.session,store:fields.store,
+    });
+    if(bound===null)return blocked('AUDIT_CHAIN_MISMATCH');
+    const predecessor=bound.binding.reconstruction.checkpoint;
+    if(predecessor===null||predecessor.prefixLength>=42
+      ||!['ready','write-issued'].includes(predecessor.checkpointState))
+      return blocked('AUDIT_CHAIN_MISMATCH');
+    const mutation=predecessor.checkpointState==='write-issued';
+    const desired=mutation
+      &&fields.providerObservationDigest===predecessor.desiredProjectionDigest;
+    let transition,position,overrides,intentSuccessor=null;
+    if(mutation&&!desired){
+      transition=predecessor.attemptOrdinal===1
+        &&fields.providerObservationDigest===predecessor.preWriteProjectionDigest
+        ?'recovery.mutation_not_committed':'recovery.step_blocked';
+      position=recoveryNextPosition(bound.binding,
+        predecessor.prefixLength,predecessor.intentDispositionCursor);
+      overrides={checkpointState:'blocked',attemptOrdinal:predecessor.attemptOrdinal,
+        preWriteProjectionDigest:predecessor.preWriteProjectionDigest,
+        desiredProjectionDigest:predecessor.desiredProjectionDigest,
+        providerObservationDigest:fields.providerObservationDigest,cleanupProofDigest:null};
+    }else{
+      const absent=predecessor.stepId.endsWith('.absent');
+      transition=absent?'intent.recovery_absent':'recovery.step_committed';
+      const nextPrefix=predecessor.prefixLength+1;
+      const nextCursor=predecessor.intentDispositionCursor+(absent?1:0);
+      position=recoveryNextPosition(bound.binding,nextPrefix,nextCursor);
+      overrides={checkpointState:'ready',attemptOrdinal:null,
+        preWriteProjectionDigest:null,desiredProjectionDigest:null,
+        providerObservationDigest:fields.providerObservationDigest,cleanupProofDigest:null};
+      if(absent){
+        let candidate=recoveryCandidateBase(bound.binding,predecessor,transition,position,{
+          ...overrides,currentIntentSetDigest:predecessor.currentIntentSetDigest,
+        });
+        const priorIntents=bound.binding.reconstruction.currentIntents.map(copy);
+        const prior=priorIntents[predecessor.intentDispositionCursor];
+        if(prior===undefined||prior.resourceType!==predecessor.logicalResource)
+          return blocked('AUDIT_CHAIN_MISMATCH');
+        const cleanupCursor=CLEANUP_RESOURCE_LIMITS[prior.resourceType].cleanupCursor;
+        const terminalDigests=recoveryTerminalIntentDigests(
+          candidate,prior.resourceType,cleanupCursor,
+        );
+        const now=fields.clock.nowEpochSeconds();
+        if(!Number.isSafeInteger(now)||now<0)return blocked('AUDIT_CHAIN_MISMATCH');
+        const updatedAt=new Date(Math.max(now*1000,Date.parse(prior.updatedAt))).toISOString();
+        const placeholder=`sha256:${'0'.repeat(64)}`;
+        let terminal=freeze({...copy(prior),state:'absent',intentVersion:prior.intentVersion+1,
+          cleanupCursor,...terminalDigests,recoveryCheckpointDigest:placeholder,updatedAt});
+        const currentIntents=priorIntents.map((intent,index)=>
+          index===predecessor.intentDispositionCursor?terminal:intent);
+        candidate.currentIntentSetDigest=createRecoveryCurrentIntentSetDigest({
+          intents:currentIntents,recoveryTerminalIndex:predecessor.intentDispositionCursor,
+        });
+        candidate=validateRecoveryCheckpoint(candidate);
+        terminal=freeze({...terminal,
+          recoveryCheckpointDigest:createRecoveryCheckpointDigest(candidate)});
+        currentIntents[predecessor.intentDispositionCursor]=terminal;
+        if(createRecoveryCurrentIntentSetDigest({intents:currentIntents,
+          recoveryTerminalIndex:predecessor.intentDispositionCursor})
+          !==candidate.currentIntentSetDigest)return blocked('AUDIT_CHAIN_MISMATCH');
+        intentSuccessor=terminal;
+        overrides={...overrides,currentIntentSetDigest:candidate.currentIntentSetDigest};
+      }
+    }
+    const candidate=validateRecoveryCheckpoint(recoveryCandidateBase(
+      bound.binding,predecessor,transition,position,overrides,
+    ));
+    const request={checkpoint:candidate,context:fields.context,
+      session:fields.session,store:fields.store,transition};
+    if(intentSuccessor!==null)request.intentSuccessor=intentSuccessor;
+    return commitRecoveryCheckpoint(request);
+  }catch{return blocked('AUDIT_CHAIN_MISMATCH');}
+}
+
+export async function commitRecoveryResourcesComplete(input){
+  try{
+    const bound=recoveryCheckpointBinding(input);
+    if(bound===null)return blocked('AUDIT_CHAIN_MISMATCH');
+    const predecessor=bound.binding.reconstruction.checkpoint;
+    if(predecessor===null||predecessor.prefixLength!==42
+      ||predecessor.checkpointState!=='ready')return blocked('AUDIT_CHAIN_MISMATCH');
+    const position=recoveryNextPosition(bound.binding,42,3);
+    let candidate=recoveryCandidateBase(bound.binding,predecessor,
+      'recovery.resources_completed',position,{
+        checkpointState:'resources-complete',attemptOrdinal:null,
+        preWriteProjectionDigest:null,desiredProjectionDigest:null,
+        providerObservationDigest:null,cleanupProofDigest:null,
+      });
+    candidate.cleanupProofDigest=recoveryResourcesProofDigest(candidate);
+    candidate=validateRecoveryCheckpoint(candidate);
+    return commitRecoveryCheckpoint({checkpoint:candidate,context:input.context,
+      session:input.session,store:input.store,transition:'recovery.resources_completed'});
+  }catch{return blocked('AUDIT_CHAIN_MISMATCH');}
 }

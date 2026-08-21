@@ -1,0 +1,189 @@
+name: Recover Appwrite Test
+
+on:
+  workflow_dispatch:
+    inputs:
+      revision:
+        description: Exact successful Verify Main source revision.
+        required: true
+        type: string
+      source_run_id:
+        description: Exact successful Verify Main workflow run ID.
+        required: true
+        type: string
+      source_run_attempt:
+        description: Exact successful Verify Main workflow run attempt.
+        required: true
+        type: string
+      original_workflow_run_id:
+        description: Failed Verify Test Cloud workflow run that owns the expired lease.
+        required: true
+        type: string
+      original_controller_sha:
+        description: Exact controller SHA used by the failed workflow and its binding artifact.
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: appwrite-test-verification
+  cancel-in-progress: false
+
+jobs:
+  recover:
+    runs-on: windows-2025
+    timeout-minutes: 30
+    environment: appwrite-test
+    if: github.repository == 'Krowaccie/AppWriteWork-verification-control'
+    steps:
+      - name: Validate immutable recovery controller revision
+        shell: pwsh
+        env:
+          TRUSTED_CONTROLLER_SHA: ${{ vars.TRUSTED_CONTROLLER_SHA }}
+          WORKFLOW_HEAD_SHA: ${{ github.sha }}
+          ORIGINAL_CONTROLLER_SHA: ${{ inputs.original_controller_sha }}
+          ORIGINAL_WORKFLOW_RUN_ID: ${{ inputs.original_workflow_run_id }}
+          SOURCE_REVISION: ${{ inputs.revision }}
+          SOURCE_RUN_ID: ${{ inputs.source_run_id }}
+          SOURCE_RUN_ATTEMPT: ${{ inputs.source_run_attempt }}
+          CURRENT_WORKFLOW_RUN_ID: ${{ github.run_id }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          foreach ($value in @($env:TRUSTED_CONTROLLER_SHA, $env:WORKFLOW_HEAD_SHA, $env:ORIGINAL_CONTROLLER_SHA, $env:SOURCE_REVISION)) {
+            if ($value -cnotmatch '^[0-9a-f]{40}$') { throw 'BLOCKED RECOVERY_SCOPE_INVALID' }
+          }
+          foreach ($value in @($env:ORIGINAL_WORKFLOW_RUN_ID, $env:SOURCE_RUN_ID, $env:SOURCE_RUN_ATTEMPT)) {
+            if ($value -cnotmatch '^[1-9][0-9]*$') { throw 'BLOCKED RECOVERY_SCOPE_INVALID' }
+          }
+          if ($env:WORKFLOW_HEAD_SHA -cne $env:TRUSTED_CONTROLLER_SHA) {
+            throw 'BLOCKED CONTROLLER_REVISION_MISMATCH'
+          }
+          if ($env:ORIGINAL_WORKFLOW_RUN_ID -ceq $env:CURRENT_WORKFLOW_RUN_ID) {
+            throw 'BLOCKED RECOVERY_RUN_ACTIVE'
+          }
+
+      - name: Checkout only the trusted recovery controller
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          ref: ${{ vars.TRUSTED_CONTROLLER_SHA }}
+          persist-credentials: false
+
+      - name: Set up exact Node.js runtime
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '24.11.1'
+          package-manager-cache: false
+
+      - name: Verify exact Node.js and npm versions
+        shell: bash
+        run: |
+          test "$(node --version)" = "v24.11.1"
+          test "$(npm --version)" = "11.6.2"
+
+      - name: Validate the failed owning workflow
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          ORIGINAL_CONTROLLER_SHA: ${{ inputs.original_controller_sha }}
+          ORIGINAL_WORKFLOW_RUN_ID: ${{ inputs.original_workflow_run_id }}
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          const response = await fetch(
+            `https://api.github.com/repos/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.ORIGINAL_WORKFLOW_RUN_ID}`,
+            {
+              method: 'GET',
+              redirect: 'error',
+              headers: {
+                Accept: 'application/vnd.github+json',
+                Authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
+                'User-Agent': 'appwritework-verification-controller',
+                'X-GitHub-Api-Version': '2022-11-28',
+              },
+            },
+          );
+          if (response.status !== 200) throw new Error('BLOCKED RECOVERY_APPROVAL_INVALID');
+          const run = await response.json();
+          if (
+            run.id !== Number(process.env.ORIGINAL_WORKFLOW_RUN_ID)
+            || run.name !== 'Verify Test Cloud'
+            || run.workflow_id !== 336735803
+            || run.event !== 'workflow_dispatch'
+            || run.status !== 'completed'
+            || run.conclusion !== 'failure'
+            || run.head_sha !== process.env.ORIGINAL_CONTROLLER_SHA
+            || run.repository?.full_name !== process.env.GITHUB_REPOSITORY
+          ) throw new Error('BLOCKED RECOVERY_APPROVAL_INVALID');
+          NODE
+
+      - name: Prove and stage the exact immutable recovery controller artifact
+        shell: bash
+        env:
+          CONTROLLER_ARTIFACT_READ_TOKEN: ${{ github.token }}
+          CONTROLLER_ARTIFACT_DIRECTORY: ${{ runner.temp }}\controller-artifact
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_SHA: ${{ github.sha }}
+          REQUIRED_CONTROLLER_ENTRYPOINT: packages/verification-controller/workflows/recover-appwrite-test.yml
+          TRUSTED_CONTROLLER_SHA: ${{ vars.TRUSTED_CONTROLLER_SHA }}
+          TRUSTED_CONTROLLER_ARTIFACT_ID: ${{ vars.TRUSTED_CONTROLLER_ARTIFACT_ID }}
+          TRUSTED_CONTROLLER_BUNDLE_DIGEST: ${{ vars.TRUSTED_CONTROLLER_BUNDLE_DIGEST }}
+        run: |
+          set -euo pipefail
+          node packages/verification-controller/src/prepare-controller-artifact.mjs \
+            --output "$CONTROLLER_ARTIFACT_DIRECTORY"
+
+      - name: Install the exact trusted controller dependencies
+        shell: bash
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Verify exact pre-failure Appwrite Test binding artifact
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          CONTROLLER_REVISION: ${{ inputs.original_controller_sha }}
+          SOURCE_REPOSITORY_REVISION: ${{ inputs.revision }}
+          RUNNER_REVISION: ${{ vars.VERIFICATION_RUNNER_REVISION }}
+          BINDING_ARTIFACT_ID: ${{ vars.TRUSTED_TEST_CLOUD_BINDING_ARTIFACT_ID }}
+          BINDING_ARTIFACT_DIGEST: ${{ vars.TRUSTED_TEST_CLOUD_BINDING_ARTIFACT_DIGEST }}
+          BINDING_VERIFIER_INPUT: ${{ runner.temp }}\test-cloud-binding-verifier-input.json
+          BINDING_DIRECTORY: ${{ runner.temp }}\test-cloud-bindings
+        run: |
+          $ErrorActionPreference = 'Stop'
+          node --input-type=module -e @'
+          import { writeFile } from 'node:fs/promises';
+          import { canonicalJson } from './scripts/verification/canonical-json.mjs';
+          const input = {
+            artifactId: process.env.BINDING_ARTIFACT_ID,
+            bundleDigest: process.env.BINDING_ARTIFACT_DIGEST,
+            initialSeed: false,
+            runnerRevision: process.env.RUNNER_REVISION,
+            sourceRepositoryRevision: process.env.SOURCE_REPOSITORY_REVISION,
+            trustedSha: process.env.CONTROLLER_REVISION,
+          };
+          await writeFile(process.env.BINDING_VERIFIER_INPUT, `${canonicalJson(input)}\n`, { flag: 'wx' });
+          '@
+          node packages/verification-controller/src/test-cloud-binding-artifact-verifier.mjs --input $env:BINDING_VERIFIER_INPUT --output $env:BINDING_DIRECTORY
+
+      - name: Recover only the expired Appwrite Test lease
+        shell: bash
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_SHA: ${{ github.sha }}
+          TRUSTED_CONTROLLER_SHA: ${{ vars.TRUSTED_CONTROLLER_SHA }}
+          TRUSTED_CONTROLLER_ARTIFACT_ID: ${{ vars.TRUSTED_CONTROLLER_ARTIFACT_ID }}
+          TRUSTED_CONTROLLER_BUNDLE_DIGEST: ${{ vars.TRUSTED_CONTROLLER_BUNDLE_DIGEST }}
+          CONTROLLER_ARTIFACT_DIRECTORY: ${{ runner.temp }}\controller-artifact
+          BINDING_DIRECTORY: ${{ runner.temp }}\test-cloud-bindings
+          APPWRITE_TEST_RECOVERY_API_KEY: ${{ secrets.APPWRITE_TEST_RECOVERY_API_KEY }}
+        run: |
+          set -euo pipefail
+          node packages/verification-controller/src/test-cloud-recovery-controller.mjs \
+            --hosted \
+            --original-workflow-run-id "${{ inputs.original_workflow_run_id }}" \
+            --binding-directory "$BINDING_DIRECTORY" \
+            --execute

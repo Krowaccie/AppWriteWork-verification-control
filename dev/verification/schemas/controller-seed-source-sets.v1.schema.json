@@ -62,8 +62,24 @@
             "relocations": {
               "const": [
                 {
+                  "source": "packages/verification-controller/package-lock.json",
+                  "destination": "package-lock.json"
+                },
+                {
+                  "source": "packages/verification-controller/package.json",
+                  "destination": "package.json"
+                },
+                {
+                  "source": "packages/verification-controller/workflows/collect-appwrite-test-readback.yml",
+                  "destination": ".github/workflows/collect-appwrite-test-readback.yml"
+                },
+                {
                   "source": "packages/verification-controller/workflows/publish-controller-bundle.yml",
                   "destination": ".github/workflows/publish-controller-bundle.yml"
+                },
+                {
+                  "source": "packages/verification-controller/workflows/recover-appwrite-test.yml",
+                  "destination": ".github/workflows/recover-appwrite-test.yml"
                 },
                 {
                   "source": "packages/verification-controller/workflows/verify-test-cloud.yml",

@@ -32,6 +32,10 @@
       "sha256": "UNMATERIALIZED"
     },
     {
+      "path": "packages/verification-controller/src/prepare-controller-artifact.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
       "path": "packages/verification-controller/src/release-production.mjs",
       "sha256": "UNMATERIALIZED"
     },
@@ -48,6 +52,10 @@
       "sha256": "UNMATERIALIZED"
     },
     {
+      "path": "packages/verification-controller/src/test-cloud-recovery-controller.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
       "path": "packages/verification-controller/workflows/collect-appwrite-test-readback.yml",
       "sha256": "UNMATERIALIZED"
     },
@@ -57,6 +65,10 @@
     },
     {
       "path": "packages/verification-controller/workflows/publish-controller-bundle.yml",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "packages/verification-controller/workflows/recover-appwrite-test.yml",
       "sha256": "UNMATERIALIZED"
     },
     {
@@ -162,6 +174,10 @@
       "sha256": "UNMATERIALIZED"
     },
     {
+      "path": "packages/verification-controller/src/prepare-controller-artifact.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
       "path": "packages/verification-controller/src/production-exact-sha-git-adapter.mjs",
       "sha256": "UNMATERIALIZED"
     },
@@ -250,6 +266,10 @@
       "sha256": "UNMATERIALIZED"
     },
     {
+      "path": "packages/verification-controller/src/test-cloud-recovery-controller.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
       "path": "packages/verification-controller/src/test-cloud-scenario-driver.mjs",
       "sha256": "UNMATERIALIZED"
     },
@@ -275,6 +295,10 @@
     },
     {
       "path": "packages/verification-controller/workflows/publish-controller-bundle.yml",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "packages/verification-controller/workflows/recover-appwrite-test.yml",
       "sha256": "UNMATERIALIZED"
     },
     {
