@@ -37,6 +37,19 @@ test('recovery replaces ambiguous internals with a fixed safe stage diagnostic',
   }
 });
 
+test('recovery preserves an already fixed nested stage diagnostic', () => {
+  const nested = {
+    status: 'BLOCKED',
+    value: null,
+    diagnostics: [{
+      code: 'RECOVERY_ACCOUNT_SESSIONS_OPEN_INVALID',
+      safeMessage: 'Appwrite Test recovery was blocked.',
+      retryable: false,
+    }],
+  };
+  assert.equal(describeRecoveryStageFailure('account-sessions', nested), nested);
+});
+
 test('recovery CLI rejects malformed authority before filesystem or network access', async () => {
   let called = false;
   const dependencies = {
