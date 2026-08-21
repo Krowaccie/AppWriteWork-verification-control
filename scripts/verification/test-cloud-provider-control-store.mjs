@@ -648,6 +648,13 @@ function recoveryProviderProofFailureCode(error) {
     ['Recovery source primary-graph intent is duplicated.', 'RECOVERY_ACCOUNT_SESSION_PROOF_PRIMARY_GRAPH_DUPLICATED'],
     ['Recovery source primary-project intent is missing.', 'RECOVERY_ACCOUNT_SESSION_PROOF_PRIMARY_PROJECT_MISSING'],
     ['Recovery source primary-project intent is duplicated.', 'RECOVERY_ACCOUNT_SESSION_PROOF_PRIMARY_PROJECT_DUPLICATED'],
+    ['Recovery source missing resource set is 001.', 'RECOVERY_ACCOUNT_SESSION_PROOF_MISSING_PROJECT'],
+    ['Recovery source missing resource set is 010.', 'RECOVERY_ACCOUNT_SESSION_PROOF_MISSING_GRAPH'],
+    ['Recovery source missing resource set is 011.', 'RECOVERY_ACCOUNT_SESSION_PROOF_MISSING_GRAPH_PROJECT'],
+    ['Recovery source missing resource set is 100.', 'RECOVERY_ACCOUNT_SESSION_PROOF_MISSING_SHARE'],
+    ['Recovery source missing resource set is 101.', 'RECOVERY_ACCOUNT_SESSION_PROOF_MISSING_SHARE_PROJECT'],
+    ['Recovery source missing resource set is 110.', 'RECOVERY_ACCOUNT_SESSION_PROOF_MISSING_SHARE_GRAPH'],
+    ['Recovery source missing resource set is 111.', 'RECOVERY_ACCOUNT_SESSION_PROOF_MISSING_ALL_RESOURCES'],
     ['Recovery source intent position is invalid.', 'RECOVERY_ACCOUNT_SESSION_PROOF_INTENT_SET_POSITION_INVALID'],
     ['Recovery source intent run is invalid.', 'RECOVERY_ACCOUNT_SESSION_PROOF_INTENT_SET_RUN_INVALID'],
     ['Recovery source intent environment is invalid.', 'RECOVERY_ACCOUNT_SESSION_PROOF_INTENT_SET_ENVIRONMENT_INVALID'],
@@ -1283,6 +1290,24 @@ function recoverableCurrentLeaseState(state, cleanupDebt) {
     || (state === 'recovering' && cleanupDebt === true);
 }
 
+function recoverySourceIntentSet(latest) {
+  const matches = QUALIFIED_CLEANUP_PROTOCOL.resourceOrder.map((resourceType) => (
+    [...latest.values()].filter((intent) => intent.resourceType === resourceType)
+  ));
+  for (let index = 0; index < matches.length; index += 1) {
+    if (matches[index].length > 1) {
+      throw new TypeError(
+        `Recovery source ${QUALIFIED_CLEANUP_PROTOCOL.resourceOrder[index]} intent is duplicated.`,
+      );
+    }
+  }
+  const missingMask = matches.map((items) => items.length === 0 ? '1' : '0').join('');
+  if (missingMask !== '000') {
+    throw new TypeError(`Recovery source missing resource set is ${missingMask}.`);
+  }
+  return matches.map(([intent]) => intent);
+}
+
 function reconstructProviderRecoveryProof(snapshot, recoveryContext) {
   let activeRun = null;
   let ordinaryLeaseState = 'idle';
@@ -1393,16 +1418,7 @@ function reconstructProviderRecoveryProof(snapshot, recoveryContext) {
       recoveryStarted = true;
       sourceAuditHeadDigest = entry.event.previousLedgerDigest;
       sourceLeaseVersion = entry.event.leaseVersionBefore;
-      sourceIntents = QUALIFIED_CLEANUP_PROTOCOL.resourceOrder.map((resourceType) => {
-        const matches = [...latest.values()].filter((intent) => intent.resourceType === resourceType);
-        if (matches.length === 0) {
-          throw new TypeError(`Recovery source ${resourceType} intent is missing.`);
-        }
-        if (matches.length > 1) {
-          throw new TypeError(`Recovery source ${resourceType} intent is duplicated.`);
-        }
-        return matches[0];
-      });
+      sourceIntents = recoverySourceIntentSet(latest);
       const genesisPosition = providerRecoveryGenesisPosition(sourceIntents);
       if (accountSessionObserved) {
         throw new TypeError('Recovery source account-session evidence is invalid.');
@@ -1470,16 +1486,7 @@ function reconstructProviderRecoveryProof(snapshot, recoveryContext) {
     }
     sourceAuditHeadDigest = snapshot.lease.ledgerDigest;
     sourceLeaseVersion = snapshot.lease.leaseVersion;
-    sourceIntents = QUALIFIED_CLEANUP_PROTOCOL.resourceOrder.map((resourceType) => {
-      const matches = [...latest.values()].filter((intent) => intent.resourceType === resourceType);
-      if (matches.length === 0) {
-        throw new TypeError(`Recovery source ${resourceType} intent is missing.`);
-      }
-      if (matches.length > 1) {
-        throw new TypeError(`Recovery source ${resourceType} intent is duplicated.`);
-      }
-      return matches[0];
-    });
+    sourceIntents = recoverySourceIntentSet(latest);
     const genesisPosition = providerRecoveryGenesisPosition(sourceIntents);
     if (accountSessionObserved) {
       throw new TypeError('Recovery source account-session evidence is invalid.');
