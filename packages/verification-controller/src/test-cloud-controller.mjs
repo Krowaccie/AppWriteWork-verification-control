@@ -1847,7 +1847,7 @@ function hostedArgs(argv) {
   });
 }
 
-async function readExactBindingDirectory(directory, io = { lstat, readFile, readdir, realpath }) {
+export async function readExactBindingDirectory(directory, io = { lstat, readFile, readdir, realpath }) {
   if (typeof directory !== 'string' || !path.isAbsolute(directory) || directory.includes('\0')) {
     throw new TypeError('invalid binding directory');
   }
