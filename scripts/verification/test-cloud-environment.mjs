@@ -35,6 +35,7 @@ const RECOVERY_ARGUMENT_KEYS = Object.freeze([
   'executionObservationQualification',
   'originalWorkflowRunId',
   'recoveryHandle',
+  'sourceWorkflowRunId',
 ]);
 const RECOVERY_CONTEXT_KEYS = Object.freeze([
   'approvalRef',
@@ -45,6 +46,7 @@ const RECOVERY_CONTEXT_KEYS = Object.freeze([
   'projectId',
   'publicOrigin',
   'siteId',
+  'sourceWorkflowRunId',
 ]);
 const ENVIRONMENT_KEYS = Object.freeze(['endpoint', 'origin', 'projectId', 'siteId']);
 const HANDLE_KEYS = Object.freeze(['credentialClass', 'readSecret', 'scopes', 'variableName']);
@@ -542,6 +544,8 @@ export function createTestRecoveryEnvironmentContext(args) {
       || typeof fields.controllerBundleSha !== 'string'
       || !FULL_GIT_SHA_PATTERN.test(fields.controllerBundleSha)
       || !validRecoveryApprovalRef(fields.approvalRef, fields.originalWorkflowRunId)
+      || typeof fields.sourceWorkflowRunId !== 'string'
+      || !POSITIVE_DECIMAL_PATTERN.test(fields.sourceWorkflowRunId)
       || !validRecoveryHandle(fields.recoveryHandle)
     ) return blocked('TEST_RECOVERY_SCOPE_INVALID');
 
@@ -559,6 +563,7 @@ export function createTestRecoveryEnvironmentContext(args) {
       controllerBundleSha: fields.controllerBundleSha,
       approvalRef: fields.approvalRef,
       originalWorkflowRunId: fields.originalWorkflowRunId,
+      sourceWorkflowRunId: fields.sourceWorkflowRunId,
     };
     const contextKeys = Object.keys(context).sort(ordinalCompare);
     if (contextKeys.some((key, index) => key !== RECOVERY_CONTEXT_KEYS[index])) {

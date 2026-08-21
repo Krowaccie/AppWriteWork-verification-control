@@ -1256,7 +1256,7 @@ export async function openRecoveryAccountSessionStage(input){
     if(intent===null)return blocked('RECOVERY_ACCOUNT_SESSION_INTENT_MISSING');
     if(intent.runId!==reconstruction.lease.ownerRunId
       ||intent.environmentDigest!==reconstruction.lease.environmentDigest
-      ||reconstruction.lease.ownerWorkflowRunId!==fields.context.originalWorkflowRunId)
+      ||reconstruction.lease.ownerWorkflowRunId!==fields.context.sourceWorkflowRunId)
       return blocked('RECOVERY_ACCOUNT_SESSION_BINDING_INVALID');
     const freshDebt=reconstruction.lease.state==='cleanup-debt'
       &&reconstruction.checkpoint===null;
@@ -1311,7 +1311,7 @@ export async function openRecoveryCheckpoint(input){
     if(read===null||typeof read.createCommitOperation!=='function')return blocked('AUDIT_CHAIN_MISMATCH');
     let reconstruction=reconstructRecoverySnapshot(read.snapshot);
     if(reconstruction===null
-      ||reconstruction.lease.ownerWorkflowRunId!==fields.context.originalWorkflowRunId)
+      ||reconstruction.lease.ownerWorkflowRunId!==fields.context.sourceWorkflowRunId)
       return blocked('AUDIT_CHAIN_MISMATCH');
     let nextRequest=read.nextRequest;
     if(reconstruction.checkpoint===null){

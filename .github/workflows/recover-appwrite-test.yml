@@ -16,7 +16,7 @@ on:
         required: true
         type: string
       original_workflow_run_id:
-        description: Failed Verify Test Cloud workflow run that owns the expired lease.
+        description: Failed Verify Test Cloud workflow run that authorizes recovery.
         required: true
         type: string
       original_controller_sha:
@@ -178,5 +178,6 @@ jobs:
           node packages/verification-controller/src/test-cloud-recovery-controller.mjs \
             --hosted \
             --original-workflow-run-id "${{ inputs.original_workflow_run_id }}" \
+            --source-workflow-run-id "${{ inputs.source_run_id }}" \
             --binding-directory "$BINDING_DIRECTORY" \
             --execute

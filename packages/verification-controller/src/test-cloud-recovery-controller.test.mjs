@@ -107,6 +107,23 @@ test('provider account-session source separates remote reads from proof reconstr
   }
 });
 
+test('recovery keeps the failed controller run separate from the source lease owner', async () => {
+  const [controller, environment, controlStore, providerStore, workflow] = await Promise.all([
+    readFile('packages/verification-controller/src/test-cloud-recovery-controller.mjs', 'utf8'),
+    readFile('scripts/verification/test-cloud-environment.mjs', 'utf8'),
+    readFile('scripts/verification/test-cloud-control-store.mjs', 'utf8'),
+    readFile('scripts/verification/test-cloud-provider-control-store.mjs', 'utf8'),
+    readFile('.github/workflows/recover-appwrite-test.yml', 'utf8'),
+  ]);
+  assert.match(controller, /--source-workflow-run-id/u);
+  assert.match(controller, /sourceWorkflowRunId: parsed\.sourceWorkflowRunId/u);
+  assert.match(environment, /'sourceWorkflowRunId'/u);
+  assert.match(controlStore, /ownerWorkflowRunId!==fields\.context\.sourceWorkflowRunId/u);
+  assert.match(providerStore, /ownerWorkflowRunId !== recoveryContext\.sourceWorkflowRunId/u);
+  assert.doesNotMatch(providerStore, /ownerWorkflowRunId !== recoveryContext\.originalWorkflowRunId/u);
+  assert.match(workflow, /--source-workflow-run-id "\$\{\{ inputs\.source_run_id \}\}"/u);
+});
+
 test('recovery CLI rejects malformed authority before filesystem or network access', async () => {
   let called = false;
   const dependencies = {
