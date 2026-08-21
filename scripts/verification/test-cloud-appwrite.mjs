@@ -910,7 +910,7 @@ function makeOperator(handle, context, fetchDependency) {
       return request({
         method: 'POST',
         path: `/sites/${encodePath(context.siteId)}/deployments`,
-        expectedStatus: 201,
+        expectedStatus: 202,
         formBody,
         project(value) {
           const projected = deploymentProjection(value);
@@ -987,7 +987,7 @@ function makeOperator(handle, context, fetchDependency) {
       return request({
         method: 'POST',
         path: `/functions/${encodePath(fields.functionId)}/deployments`,
-        expectedStatus: 201,
+        expectedStatus: 202,
         formBody,
         project(value) {
           const projected = deploymentProjection(value);
