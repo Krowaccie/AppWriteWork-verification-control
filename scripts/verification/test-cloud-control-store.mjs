@@ -1223,7 +1223,14 @@ export async function openRecoveryAccountSessionStage(input){
     const absentRead=createdRead===null
       ?recoveryStorePassValue(outcome,['nextRequest','snapshot']):null;
     const read=createdRead??absentRead;
-    if(read===null)return blocked('RECOVERY_ACCOUNT_SESSION_SOURCE_INVALID');
+    if(read===null){
+      const sourceCode=outcome?.diagnostics?.length===1?outcome.diagnostics[0]?.code:null;
+      if(['RECOVERY_ACCOUNT_SESSION_PROVIDER_READ_INVALID',
+        'RECOVERY_ACCOUNT_SESSION_PROVIDER_PROOF_INVALID'].includes(sourceCode)){
+        return blocked(sourceCode);
+      }
+      return blocked('RECOVERY_ACCOUNT_SESSION_SOURCE_INVALID');
+    }
     const reconstruction=reconstructRecoverySnapshot(read.snapshot);
     const intent=reconstruction?.accountSessionIntent;
     if(reconstruction===null)return blocked('RECOVERY_ACCOUNT_SESSION_SNAPSHOT_INVALID');
