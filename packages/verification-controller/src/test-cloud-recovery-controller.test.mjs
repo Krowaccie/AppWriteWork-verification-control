@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
 
@@ -48,6 +49,25 @@ test('recovery preserves an already fixed nested stage diagnostic', () => {
     }],
   };
   assert.equal(describeRecoveryStageFailure('account-sessions', nested), nested);
+});
+
+test('account-session open classifies source, snapshot, intent, binding, and lease failures', async () => {
+  const source = await readFile('scripts/verification/test-cloud-control-store.mjs', 'utf8');
+  for (const code of [
+    'RECOVERY_ACCOUNT_SESSION_SOURCE_INVALID',
+    'RECOVERY_ACCOUNT_SESSION_SNAPSHOT_INVALID',
+    'RECOVERY_ACCOUNT_SESSION_INTENT_MISSING',
+    'RECOVERY_ACCOUNT_SESSION_BINDING_INVALID',
+    'RECOVERY_ACCOUNT_SESSION_LEASE_INVALID',
+  ]) {
+    assert.match(source, new RegExp(`blocked\\('${code}'\\)`, 'u'));
+    const nested = {
+      status: 'BLOCKED',
+      value: null,
+      diagnostics: [{ code, safeMessage: 'safe', retryable: false }],
+    };
+    assert.equal(describeRecoveryStageFailure('account-sessions-open', nested), nested);
+  }
 });
 
 test('recovery CLI rejects malformed authority before filesystem or network access', async () => {

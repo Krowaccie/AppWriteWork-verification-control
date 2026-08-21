@@ -1213,22 +1213,25 @@ export async function openRecoveryAccountSessionStage(input){
     const fields=recoveryFields(input,['clock','context','request','store']);
     if(fields===null||!isAuthenticTestRecoveryEnvironmentContext(fields.context)
       ||!isAuthenticProviderRecoveryControlStore(fields.store,fields.context)
-      ||recoveryFields(fields.clock,['nowEpochSeconds'])===null)return blocked('AUDIT_CHAIN_MISMATCH');
+      ||recoveryFields(fields.clock,['nowEpochSeconds'])===null)
+      return blocked('RECOVERY_ACCOUNT_SESSION_BINDING_INVALID');
     const now=fields.clock.nowEpochSeconds();
-    if(!Number.isSafeInteger(now)||now<0)return blocked('AUDIT_CHAIN_MISMATCH');
+    if(!Number.isSafeInteger(now)||now<0)return blocked('RECOVERY_ACCOUNT_SESSION_LEASE_INVALID');
     const outcome=await fields.store.readRecoveryAccountSessionSource(fields.request);
     const createdRead=recoveryStorePassValue(outcome,
       ['createAbsenceOperation','nextRequest','snapshot']);
     const absentRead=createdRead===null
       ?recoveryStorePassValue(outcome,['nextRequest','snapshot']):null;
     const read=createdRead??absentRead;
-    if(read===null)return blocked('AUDIT_CHAIN_MISMATCH');
+    if(read===null)return blocked('RECOVERY_ACCOUNT_SESSION_SOURCE_INVALID');
     const reconstruction=reconstructRecoverySnapshot(read.snapshot);
     const intent=reconstruction?.accountSessionIntent;
-    if(reconstruction===null||intent===null
-      ||intent.runId!==reconstruction.lease.ownerRunId
+    if(reconstruction===null)return blocked('RECOVERY_ACCOUNT_SESSION_SNAPSHOT_INVALID');
+    if(intent===null)return blocked('RECOVERY_ACCOUNT_SESSION_INTENT_MISSING');
+    if(intent.runId!==reconstruction.lease.ownerRunId
       ||intent.environmentDigest!==reconstruction.lease.environmentDigest
-      ||reconstruction.lease.ownerWorkflowRunId!==fields.context.originalWorkflowRunId)return blocked('AUDIT_CHAIN_MISMATCH');
+      ||reconstruction.lease.ownerWorkflowRunId!==fields.context.originalWorkflowRunId)
+      return blocked('RECOVERY_ACCOUNT_SESSION_BINDING_INVALID');
     const freshDebt=reconstruction.lease.state==='cleanup-debt'
       &&reconstruction.checkpoint===null;
     const resumableRecovery=reconstruction.lease.state==='recovering'
@@ -1236,16 +1239,17 @@ export async function openRecoveryAccountSessionStage(input){
     if((!freshDebt&&!resumableRecovery)||reconstruction.lease.cleanupDebt!==true
       ||!validIso(reconstruction.lease.expiresAt)
       ||Date.parse(reconstruction.lease.expiresAt)>now*1000)
-      return blocked('LEASE_VERSION_MISMATCH');
+      return blocked('RECOVERY_ACCOUNT_SESSION_LEASE_INVALID');
     if(absentRead!==null){
-      if(intent.state!=='absent')return blocked('AUDIT_CHAIN_MISMATCH');
+      if(intent.state!=='absent')return blocked('RECOVERY_ACCOUNT_SESSION_BINDING_INVALID');
       return pass(freeze({nextAuthority:read.nextRequest,
         sessionAbsenceDigest:RECOVERY_ACCOUNT_SESSION_ABSENCE_DIGEST,
         measurements:freeze({knownProductCalls:0,maximumProductCalls:10,
           knownStoreCalls:1,maximumStoreCalls:2})}));
     }
     if(reconstruction.checkpoint!==null||intent.state!=='created'
-      ||typeof read.createAbsenceOperation!=='function')return blocked('AUDIT_CHAIN_MISMATCH');
+      ||typeof read.createAbsenceOperation!=='function')
+      return blocked('RECOVERY_ACCOUNT_SESSION_BINDING_INVALID');
     const binding={context:fields.context,store:fields.store,reconstruction,nextRequest:read.nextRequest,
       createCommitOperation:null,createAbsenceOperation:read.createAbsenceOperation,
       generation:0,invalid:false,
@@ -1265,7 +1269,7 @@ export async function openRecoveryAccountSessionStage(input){
     const listHandle=mintRecoveryAccountSessionAuthorization(binding,'list',
       {userId:ownerUserId,sessionIds:ids},'initial-list');
     return pass(freeze({session,listHandle}));
-  }catch{return blocked('AUDIT_CHAIN_MISMATCH');}
+  }catch{return blocked('RECOVERY_ACCOUNT_SESSION_BINDING_INVALID');}
 }
 
 export async function openRecoveryCheckpoint(input){
