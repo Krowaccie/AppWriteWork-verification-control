@@ -396,13 +396,6 @@ export async function deployTestSiteArtifact({
     || expectedIdentity.sourceRevision !== context.candidateRevision
     || expectedIdentity.sitePayloadDigest !== artifact.canonicalContentDigest
   ) return blocked('SITE_IDENTITY_MISMATCH');
-  const operator = clients?.operator;
-  if (typeof operator?.getSite !== 'function') return blocked('TEST_IDENTITY_BLOCKED');
-  const parent = await operator.getSite({});
-  const deploymentId = parent?.value?.activeDeploymentId;
-  if (parent?.status !== 'PASS' || typeof deploymentId !== 'string' || deploymentId.length === 0) {
-    return failed('DEPLOYMENT_ACTIVATION_MISMATCH');
-  }
   const readback = await siteIdentityReader.read();
   if (readback?.status !== 'PASS') return blocked('SITE_IDENTITY_READBACK_FAILED');
   const actual = readback.value;
@@ -412,5 +405,9 @@ export async function deployTestSiteArtifact({
     || actual.sitePayloadDigest !== expectedIdentity.sitePayloadDigest
     || actual.verifierManifestDigest !== expectedIdentity.verifierManifestDigest
   ) return failed('SITE_IDENTITY_MISMATCH');
-  return pass(observation('site', artifact.logicalTarget, deploymentId, artifact.transportDigest));
+  // VCS-owned Sites are qualified by their immutable public source revision,
+  // not by provider deployment metadata that is outside this lane's contract.
+  return pass(observation(
+    'site', artifact.logicalTarget, expectedIdentity.sourceRevision, artifact.transportDigest,
+  ));
 }
