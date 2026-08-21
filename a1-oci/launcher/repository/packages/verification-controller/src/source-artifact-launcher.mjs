@@ -72,7 +72,7 @@ const isUint8Array = utilTypes.isUint8Array;
 const FULL_REVISION = /^[0-9a-f]{40}$/u;
 const DIGEST = /^sha256:[0-9a-f]{64}$/u;
 const EXPECTED_PROVIDER_CONTRACT_DIGEST =
-  'sha256:eaa6c314b13daa4c56a75bfc29eb8b3c66b7315ad6f114475db4d5f9aee75cd8';
+  'sha256:71901b60028cfd680fee8d75254305a27fdbebb07e6d862d69dfe087c6a56ebc';
 const RUN_ID = /^[1-9][0-9]*$/u;
 const CONSTRUCTOR_KEYS = objectFreeze([
   'filesystem',

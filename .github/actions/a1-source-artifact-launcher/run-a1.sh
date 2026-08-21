@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-readonly image='ghcr.io/krowaccie/appwritework-verification-a1@sha256:e846b592b9a745aa48d2415dbc3066d4fccddba26a16002ef8eac6d94bdb791d'
+readonly image='ghcr.io/krowaccie/appwritework-verification-a1@sha256:a752173ccf4649dd5e453990a40ea2e6f4b61dbd1da6ae018e3424cab70645b4'
 readonly workspace="${GITHUB_WORKSPACE:-}"
 readonly runner_temp="${RUNNER_TEMP:-}"
 
