@@ -46,6 +46,8 @@ const RECOVERY_STAGE_FAILURES = Object.freeze({
   'account-session-intent': 'RECOVERY_ACCOUNT_SESSION_INTENT_MISSING',
   'account-session-lease': 'RECOVERY_ACCOUNT_SESSION_LEASE_INVALID',
   'account-session-provider-proof': 'RECOVERY_ACCOUNT_SESSION_PROVIDER_PROOF_INVALID',
+  'account-session-provider-intent-missing': 'RECOVERY_ACCOUNT_SESSION_PROVIDER_INTENT_MISSING',
+  'account-session-provider-intent-state': 'RECOVERY_ACCOUNT_SESSION_PROVIDER_INTENT_STATE_INVALID',
   'account-session-provider-read': 'RECOVERY_ACCOUNT_SESSION_PROVIDER_READ_INVALID',
   'account-session-snapshot': 'RECOVERY_ACCOUNT_SESSION_SNAPSHOT_INVALID',
   'account-session-source': 'RECOVERY_ACCOUNT_SESSION_SOURCE_INVALID',

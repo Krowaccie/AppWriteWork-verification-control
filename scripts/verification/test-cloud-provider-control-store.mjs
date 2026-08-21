@@ -1819,11 +1819,14 @@ export function createProviderRecoveryControlStore(args = {}) {
     try {
       const proof = reconstructProviderRecoveryProof(snapshot, args.context);
       const sourceIntent = proof.accountSessionIntent;
+      if(sourceIntent===null){
+        return result('BLOCKED',null,'RECOVERY_ACCOUNT_SESSION_PROVIDER_INTENT_MISSING');
+      }
       if(sourceIntent?.state==='absent'){
         return result('PASS',{snapshot,nextRequest:mintReadOperation()});
       }
-      if (proof.predecessorRecoveryEvent !== null || sourceIntent?.state !== 'created') {
-        return result('BLOCKED', null, 'RECOVERY_ACCOUNT_SESSION_PROVIDER_PROOF_INVALID');
+      if (proof.predecessorRecoveryEvent !== null || sourceIntent.state !== 'created') {
+        return result('BLOCKED', null, 'RECOVERY_ACCOUNT_SESSION_PROVIDER_INTENT_STATE_INVALID');
       }
       return result('PASS', {
         snapshot,

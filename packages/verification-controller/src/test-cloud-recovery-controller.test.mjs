@@ -78,6 +78,8 @@ test('provider account-session source separates remote reads from proof reconstr
   for (const code of [
     'RECOVERY_ACCOUNT_SESSION_PROVIDER_READ_INVALID',
     'RECOVERY_ACCOUNT_SESSION_PROVIDER_PROOF_INVALID',
+    'RECOVERY_ACCOUNT_SESSION_PROVIDER_INTENT_MISSING',
+    'RECOVERY_ACCOUNT_SESSION_PROVIDER_INTENT_STATE_INVALID',
   ]) {
     assert.match(source, new RegExp(`'${code}'`, 'u'));
     const nested = {
