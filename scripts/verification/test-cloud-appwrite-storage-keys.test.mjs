@@ -17,6 +17,7 @@ const ENDPOINT = 'https://fra.cloud.appwrite.io/v1';
 const PROJECT_ID = '69137c5d003952a36d4c';
 const REVISION = '6d796c14ceba6676c85e78b760f1cf6288e4564e';
 const RUN_ID = 'verify-6d796c14ceba-32106399617-1';
+const AUDIT_TABLE_ID = 'verification_audit_events';
 const INTENT_TABLE_ID = 'verification_intents';
 const INTENT_ROW_ID = `h${'a'.repeat(35)}`;
 const LOGICAL_RETENTION_KEY = 'cleanupRunnerExecutionRetentionExpiresAt';
@@ -129,4 +130,119 @@ test('intent transaction operations use the bounded storage alias', async () => 
   const wire = JSON.parse(calls[1].options.body);
   assert.equal(wire.operations[0].data[STORAGE_RETENTION_KEY], RETENTION_TIMESTAMP);
   assert.equal(Object.hasOwn(wire.operations[0].data, LOGICAL_RETENTION_KEY), false);
+});
+
+test('ordinary audit readback removes only the null recovery storage arm', async () => {
+  const rowId = `h${'b'.repeat(35)}`;
+  const ordinary = {
+    schemaVersion: 'verification-audit-event.v1',
+    previousLedgerDigest: `sha256:${'1'.repeat(64)}`,
+    runId: RUN_ID,
+    leaseVersionBefore: 0,
+    leaseVersionAfter: 1,
+    transition: 'lease.acquire',
+    intentId: null,
+    intentProjectionDigest: null,
+    recoveryCheckpointDigest: null,
+    recoveryCheckpointJson: null,
+    recoveryPreviousCheckpointDigest: null,
+  };
+  const { fixture } = createHarness([
+    jsonResponse({ $id: rowId, ...ordinary }),
+  ]);
+
+  const result = await fixture.getRow({ tableId: AUDIT_TABLE_ID, rowId });
+
+  assert.equal(result.status, 'PASS');
+  assert.deepEqual(result.value.data, Object.fromEntries(
+    Object.entries(ordinary).filter(([key]) => !key.startsWith('recovery')),
+  ));
+});
+
+test('recovery audit readback retains a populated recovery storage arm', async () => {
+  const rowId = `h${'c'.repeat(35)}`;
+  const recovery = {
+    schemaVersion: 'verification-audit-event.v1',
+    previousLedgerDigest: `sha256:${'1'.repeat(64)}`,
+    runId: RUN_ID,
+    leaseVersionBefore: 1,
+    leaseVersionAfter: 2,
+    transition: 'recovery.checkpoint_started',
+    intentId: null,
+    intentProjectionDigest: null,
+    recoveryCheckpointDigest: `sha256:${'2'.repeat(64)}`,
+    recoveryCheckpointJson: '{}',
+    recoveryPreviousCheckpointDigest: `sha256:${'3'.repeat(64)}`,
+  };
+  const { fixture } = createHarness([
+    jsonResponse({ $id: rowId, ...recovery }),
+  ]);
+
+  const result = await fixture.getRow({ tableId: AUDIT_TABLE_ID, rowId });
+
+  assert.equal(result.status, 'PASS');
+  assert.deepEqual(result.value.data, recovery);
+});
+
+test('v1 intent readback removes the null v2 storage arm', async () => {
+  const provider = {
+    schemaVersion: 'verification-intent-snapshot.v1',
+    providerResourceIds: [],
+    providerAggregateJson: null,
+    providerAggregateDigest: null,
+    cleanupCursor: null,
+    cleanupProgressDigest: null,
+    cleanupProofDigest: null,
+    cleanupRunnerExecutionPlanDigest: null,
+    cleanupRunnerExecutionCursor: null,
+    cleanupRunnerExecutionSlotsJson: null,
+    cleanupRunnerExecutionRecordDigest: null,
+    [STORAGE_RETENTION_KEY]: null,
+    observationDigest: null,
+  };
+  const { fixture } = createHarness([
+    jsonResponse({ $id: INTENT_ROW_ID, ...provider }),
+  ]);
+
+  const result = await fixture.getRow({
+    tableId: INTENT_TABLE_ID,
+    rowId: INTENT_ROW_ID,
+  });
+
+  assert.equal(result.status, 'PASS');
+  assert.deepEqual(result.value.data, {
+    schemaVersion: provider.schemaVersion,
+    providerResourceIds: [],
+    observationDigest: null,
+  });
+});
+
+test('v2 intent readback removes the null v1 arm and restores the retention key', async () => {
+  const provider = {
+    schemaVersion: 'verification-intent-snapshot.v2',
+    providerResourceIds: null,
+    providerAggregateJson: '{}',
+    providerAggregateDigest: `sha256:${'4'.repeat(64)}`,
+    cleanupCursor: null,
+    cleanupProgressDigest: null,
+    cleanupProofDigest: null,
+    cleanupRunnerExecutionPlanDigest: null,
+    cleanupRunnerExecutionCursor: null,
+    cleanupRunnerExecutionSlotsJson: null,
+    cleanupRunnerExecutionRecordDigest: null,
+    [STORAGE_RETENTION_KEY]: null,
+  };
+  const { fixture } = createHarness([
+    jsonResponse({ $id: INTENT_ROW_ID, ...provider }),
+  ]);
+
+  const result = await fixture.getRow({
+    tableId: INTENT_TABLE_ID,
+    rowId: INTENT_ROW_ID,
+  });
+
+  assert.equal(result.status, 'PASS');
+  assert.equal(Object.hasOwn(result.value.data, 'providerResourceIds'), false);
+  assert.equal(result.value.data[LOGICAL_RETENTION_KEY], null);
+  assert.equal(Object.hasOwn(result.value.data, STORAGE_RETENTION_KEY), false);
 });

@@ -155,6 +155,25 @@ const VARIABLE_TIMESTAMP_PATTERN =
   /^(?!0000)[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}(?:Z|\+00:00)$/;
 const INTENT_LOGICAL_RETENTION_KEY = 'cleanupRunnerExecutionRetentionExpiresAt';
 const INTENT_STORAGE_RETENTION_KEY = 'cleanupRunnerExecutionRetentionAt';
+const AUDIT_RECOVERY_STORAGE_KEYS = Object.freeze([
+  'recoveryCheckpointDigest',
+  'recoveryCheckpointJson',
+  'recoveryPreviousCheckpointDigest',
+]);
+const INTENT_V2_STORAGE_ARM_KEYS = Object.freeze([
+  'providerAggregateJson',
+  'providerAggregateDigest',
+  'cleanupCursor',
+  'cleanupProgressDigest',
+  'cleanupProofDigest',
+  'cleanupRunnerExecutionPlanDigest',
+  'cleanupRunnerExecutionCursor',
+  'cleanupRunnerExecutionSlotsJson',
+  'cleanupRunnerExecutionRecordDigest',
+  INTENT_LOGICAL_RETENTION_KEY,
+]);
+const INTENT_V1_STORAGE_ARM_KEYS = Object.freeze(['providerResourceIds']);
+const INTENT_RECOVERY_STORAGE_KEYS = Object.freeze(['recoveryCheckpointDigest']);
 const RUNNER_VARIABLE_QUERY_PATH =
   '/functions/verification-runner-py/variables?queries%5B%5D=%7B%22method%22%3A%22limit%22%2C%22values%22%3A%5B17%5D%7D&total=true';
 const RUNNER_VARIABLE_AUTHORITY_PROPERTY = '__registerTestCloudRunnerVariableAuthorityV1__';
@@ -391,13 +410,32 @@ function storageRowData(tableId, data) {
   );
 }
 
+function stripNullStorageArm(data, keys) {
+  if (!isPlainObject(data)) return data;
+  const present = keys.filter((key) => Object.hasOwn(data, key));
+  if (present.length === 0) return data;
+  if (present.length !== keys.length || present.some((key) => data[key] !== null)) return data;
+  return Object.fromEntries(Object.entries(data).filter(([key]) => !keys.includes(key)));
+}
+
 function logicalRowData(tableId, data) {
-  return remapIntentRowData(
+  let logical = remapIntentRowData(
     tableId,
     data,
     INTENT_STORAGE_RETENTION_KEY,
     INTENT_LOGICAL_RETENTION_KEY,
   );
+  if (logical === null) return null;
+  if (tableId === AUDIT_TABLE_ID) {
+    return stripNullStorageArm(logical, AUDIT_RECOVERY_STORAGE_KEYS);
+  }
+  if (tableId !== INTENT_TABLE_ID || !isPlainObject(logical)) return logical;
+  if (logical.schemaVersion === 'verification-intent-snapshot.v1') {
+    logical = stripNullStorageArm(logical, INTENT_V2_STORAGE_ARM_KEYS);
+  } else if (logical.schemaVersion === 'verification-intent-snapshot.v2') {
+    logical = stripNullStorageArm(logical, INTENT_V1_STORAGE_ARM_KEYS);
+  }
+  return stripNullStorageArm(logical, INTENT_RECOVERY_STORAGE_KEYS);
 }
 
 async function readBoundedBytes(response) {
