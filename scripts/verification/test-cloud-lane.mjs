@@ -168,6 +168,9 @@ function safeMessage(code) {
     RUNNER_QUALIFICATION_FAILED: 'The trusted runner qualification failed.',
     E2E_FAILED: 'The trusted test-cloud browser scenarios failed.',
     CLEANUP_DEBT: 'Cleanup absence could not be proved.',
+    CLEANUP_EXECUTION_FAILED: 'Cleanup execution did not reach a valid terminal state.',
+    CLEANUP_ABSENCE_PROOF_FAILED: 'Cleanup ran but resource absence could not be proved.',
+    CLEANUP_LEASE_CLOSE_FAILED: 'Cleanup absence was proved but the lease could not be closed.',
     EVIDENCE_WRITE_BLOCKED: 'The closed test-cloud evidence could not be written.',
   };
   return messages[code] ?? 'The test-cloud lane was blocked.';
@@ -857,7 +860,7 @@ export async function runTestCloudLane(args) {
       || cleaned.value.capability === undefined
       || !Array.isArray(cleaned.value.intents)
     ) {
-      cleanupFailure = result('BLOCKED', null, 'CLEANUP_DEBT');
+      cleanupFailure = result('BLOCKED', null, 'CLEANUP_EXECUTION_FAILED');
     } else {
       leaseState = {
         lease: cleaned.value.lease,
@@ -870,7 +873,7 @@ export async function runTestCloudLane(args) {
         intents: cleaned.value.intents,
       });
       if (absent.status !== 'PASS' || absent.value?.absenceProven !== true) {
-        cleanupFailure = result('BLOCKED', null, 'CLEANUP_DEBT');
+        cleanupFailure = result('BLOCKED', null, 'CLEANUP_ABSENCE_PROOF_FAILED');
       } else {
         const closed = await invoke(args.clients.closeLease, {
           controller: args.controller,
@@ -878,7 +881,7 @@ export async function runTestCloudLane(args) {
           ...leaseState,
         });
         if (closed.status !== 'PASS') {
-          cleanupFailure = result('BLOCKED', null, 'CLEANUP_DEBT');
+          cleanupFailure = result('BLOCKED', null, 'CLEANUP_LEASE_CLOSE_FAILED');
         }
       }
     }
