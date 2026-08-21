@@ -297,9 +297,81 @@ test('site verification reuses the active VCS deployment without mutating Appwri
     clock,
     siteIdentityReader: readerResult.value,
     expectedIdentity,
+    expectedSourceTreeDigest: fixture.artifactSet.artifactManifest.sourceTreeDigest,
   });
 
   assert.equal(result.status, 'PASS');
   assert.equal(result.value.deploymentId, expectedIdentity.sourceRevision);
   assert.equal(result.value.activeDeploymentId, expectedIdentity.sourceRevision);
+});
+
+test('site verification accepts the exact native VCS build identity without claiming the hosted tarball', async () => {
+  const fixture = createFixture();
+  const artifact = fixture.artifactSet.releaseEligibleArtifacts[0];
+  const expectedIdentity = fixture.artifactSet.buildIdentity;
+  const identityUrl = `${fixture.context.publicOrigin}/build-identity.json`;
+  const publicContentDigest = `sha256:${'2'.repeat(64)}`;
+  const vcsIdentity = {
+    schemaVersion: 1,
+    identityKind: 'git-revision',
+    candidateRevision: expectedIdentity.sourceRevision,
+    candidateSourceTreeDigest: fixture.artifactSet.artifactManifest.sourceTreeDigest,
+    contentDigest: publicContentDigest,
+    verificationManifestDigest: expectedIdentity.verifierManifestDigest,
+  };
+  const readerResult = createTestSiteIdentityReader({
+    context: fixture.context,
+    async fetchTrusted(url) {
+      assert.equal(url, identityUrl);
+      const response = new Response(JSON.stringify(vcsIdentity), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+      return {
+        status: response.status,
+        redirected: false,
+        url: identityUrl,
+        headers: response.headers,
+        body: response.body,
+      };
+    },
+  });
+  assert.equal(readerResult.status, 'PASS');
+
+  const result = await deployTestSiteArtifact({
+    context: fixture.context,
+    artifact,
+    clients: Object.freeze({}),
+    clock: {
+      now: () => '2026-08-21T01:20:00.000Z',
+      async sleep() {
+        throw new Error('site VCS readback must not poll or sleep');
+      },
+    },
+    siteIdentityReader: readerResult.value,
+    expectedIdentity,
+    expectedSourceTreeDigest: fixture.artifactSet.artifactManifest.sourceTreeDigest,
+  });
+
+  assert.equal(result.status, 'PASS');
+  assert.equal(result.value.deploymentId, expectedIdentity.sourceRevision);
+  assert.equal(result.value.artifactTransportDigest, publicContentDigest);
+  assert.notEqual(result.value.artifactTransportDigest, artifact.transportDigest);
+
+  const mismatchedTree = await deployTestSiteArtifact({
+    context: fixture.context,
+    artifact,
+    clients: Object.freeze({}),
+    clock: {
+      now: () => '2026-08-21T01:20:00.000Z',
+      async sleep() {
+        throw new Error('site VCS readback must not poll or sleep');
+      },
+    },
+    siteIdentityReader: readerResult.value,
+    expectedIdentity,
+    expectedSourceTreeDigest: `sha256:${'3'.repeat(64)}`,
+  });
+  assert.equal(mismatchedTree.status, 'FAIL');
+  assert.equal(mismatchedTree.diagnostics[0].code, 'SITE_IDENTITY_MISMATCH');
 });

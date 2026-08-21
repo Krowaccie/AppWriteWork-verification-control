@@ -10,6 +10,16 @@ import { isAuthenticTestEnvironmentContext } from './test-cloud-environment.mjs'
 const MAX_IDENTITY_BYTES = 16_384;
 const POLL_INTERVAL_MS = 1_000;
 const MAX_POLLS = 60;
+const FULL_REVISION = /^[0-9a-f]{40}$/;
+const DIGEST = /^sha256:[0-9a-f]{64}$/;
+const VCS_IDENTITY_KEYS = Object.freeze([
+  'candidateRevision',
+  'candidateSourceTreeDigest',
+  'contentDigest',
+  'identityKind',
+  'schemaVersion',
+  'verificationManifestDigest',
+].sort());
 const FUNCTION_IDS = new Map(inventory.productFunctions.map((entry) => [
   entry.logicalId, entry.functionId,
 ]));
@@ -102,6 +112,30 @@ function isJsonMediaType(value) {
     && /^application\/json(?:[\t ]*;[\t ]*[!#$%&'*+.^_`|~0-9A-Za-z-]+[\t ]*=[\t ]*(?:[!#$%&'*+.^_`|~0-9A-Za-z-]+|"[^"\r\n]*"))*[\t ]*$/u.test(value);
 }
 
+function createVcsSiteBuildIdentity(value) {
+  try {
+    if (!exactKeys(value, VCS_IDENTITY_KEYS)) return null;
+    if (
+      value.schemaVersion !== 1
+      || value.identityKind !== 'git-revision'
+      || !FULL_REVISION.test(value.candidateRevision)
+      || !DIGEST.test(value.candidateSourceTreeDigest)
+      || !DIGEST.test(value.contentDigest)
+      || !DIGEST.test(value.verificationManifestDigest)
+    ) return null;
+    return Object.freeze({
+      candidateRevision: value.candidateRevision,
+      candidateSourceTreeDigest: value.candidateSourceTreeDigest,
+      contentDigest: value.contentDigest,
+      identityKind: value.identityKind,
+      schemaVersion: value.schemaVersion,
+      verificationManifestDigest: value.verificationManifestDigest,
+    });
+  } catch {
+    return null;
+  }
+}
+
 async function readBounded(response) {
   const declaredLength = response.headers.get('content-length');
   if (declaredLength !== null) {
@@ -170,10 +204,13 @@ export function createTestSiteIdentityReader(args) {
           ) return blocked('SITE_IDENTITY_READBACK_FAILED');
           const text = new TextDecoder('utf-8', { fatal: true }).decode(await readBounded(response));
           const parsed = JSON.parse(text);
-          if (!validateHostedSiteBuildIdentity(parsed).ok) {
-            return blocked('SITE_IDENTITY_READBACK_FAILED');
+          if (validateHostedSiteBuildIdentity(parsed).ok) {
+            return pass(createHostedSiteBuildIdentity(parsed));
           }
-          return pass(createHostedSiteBuildIdentity(parsed));
+          const vcsIdentity = createVcsSiteBuildIdentity(parsed);
+          return vcsIdentity === null
+            ? blocked('SITE_IDENTITY_READBACK_FAILED')
+            : pass(vcsIdentity);
         } catch {
           return blocked('SITE_IDENTITY_READBACK_FAILED');
         }
@@ -383,6 +420,7 @@ export async function deployTestSiteArtifact({
   clock,
   siteIdentityReader,
   expectedIdentity,
+  expectedSourceTreeDigest,
 }) {
   if (
     !isAuthenticTestEnvironmentContext(context)
@@ -395,19 +433,33 @@ export async function deployTestSiteArtifact({
     !validateHostedSiteBuildIdentity(expectedIdentity).ok
     || expectedIdentity.sourceRevision !== context.candidateRevision
     || expectedIdentity.sitePayloadDigest !== artifact.canonicalContentDigest
+    || !DIGEST.test(expectedSourceTreeDigest)
   ) return blocked('SITE_IDENTITY_MISMATCH');
   const readback = await siteIdentityReader.read();
   if (readback?.status !== 'PASS') return blocked('SITE_IDENTITY_READBACK_FAILED');
   const actual = readback.value;
-  if (
-    actual.schemaVersion !== expectedIdentity.schemaVersion
-    || actual.sourceRevision !== expectedIdentity.sourceRevision
-    || actual.sitePayloadDigest !== expectedIdentity.sitePayloadDigest
-    || actual.verifierManifestDigest !== expectedIdentity.verifierManifestDigest
-  ) return failed('SITE_IDENTITY_MISMATCH');
+  let observedDigest;
+  if (validateHostedSiteBuildIdentity(actual).ok) {
+    if (
+      actual.schemaVersion !== expectedIdentity.schemaVersion
+      || actual.sourceRevision !== expectedIdentity.sourceRevision
+      || actual.sitePayloadDigest !== expectedIdentity.sitePayloadDigest
+      || actual.verifierManifestDigest !== expectedIdentity.verifierManifestDigest
+    ) return failed('SITE_IDENTITY_MISMATCH');
+    observedDigest = artifact.transportDigest;
+  } else {
+    const vcsIdentity = createVcsSiteBuildIdentity(actual);
+    if (
+      vcsIdentity === null
+      || vcsIdentity.candidateRevision !== expectedIdentity.sourceRevision
+      || vcsIdentity.candidateSourceTreeDigest !== expectedSourceTreeDigest
+      || vcsIdentity.verificationManifestDigest !== expectedIdentity.verifierManifestDigest
+    ) return failed('SITE_IDENTITY_MISMATCH');
+    observedDigest = vcsIdentity.contentDigest;
+  }
   // VCS-owned Sites are qualified by their immutable public source revision,
   // not by provider deployment metadata that is outside this lane's contract.
   return pass(observation(
-    'site', artifact.logicalTarget, expectedIdentity.sourceRevision, artifact.transportDigest,
+    'site', artifact.logicalTarget, expectedIdentity.sourceRevision, observedDigest,
   ));
 }
