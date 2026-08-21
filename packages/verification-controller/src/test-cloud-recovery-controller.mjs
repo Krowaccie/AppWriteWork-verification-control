@@ -105,6 +105,14 @@ function resultValue(outcome) {
 
 export function describeRecoveryStageFailure(stage, outcome) {
   if (resultValue(outcome) !== null) return outcome;
+  const diagnosticCode = exactObject(outcome, RESULT_KEYS)
+    && outcome.status === 'BLOCKED'
+    && outcome.value === null
+    && Array.isArray(outcome.diagnostics)
+    && outcome.diagnostics.length === 1
+    ? outcome.diagnostics[0]?.code
+    : null;
+  if (Object.values(RECOVERY_STAGE_FAILURES).includes(diagnosticCode)) return outcome;
   return blocked(RECOVERY_STAGE_FAILURES[stage] ?? 'RECOVERY_SCOPE_INVALID');
 }
 
