@@ -1887,7 +1887,7 @@ export function createProviderRecoveryControlStore(args = {}) {
       const emptyResourceClose=proof.predecessorRecoveryEvent===null
         &&recoverableSourceLeaseState(sourceSnapshot.lease.state,sourceSnapshot.lease.cleanupDebt)
         &&proof.sourceIntents.length===0&&proof.currentIntents.length===0
-        &&proof.accountSessionIntent?.state==='absent'
+        &&(proof.accountSessionIntent===null||proof.accountSessionIntent.state==='absent')
         &&(proof.primaryExecutionIntent===null||proof.primaryExecutionIntent.state==='created');
       if(event.transition!=='lease.close'||event.previousLedgerDigest!==sourceSnapshot.lease.ledgerDigest
         ||event.runId!==sourceSnapshot.lease.ownerRunId
@@ -1922,7 +1922,10 @@ export function createProviderRecoveryControlStore(args = {}) {
       const proof = reconstructProviderRecoveryProof(snapshot, args.context);
       const sourceIntent = proof.accountSessionIntent;
       if(sourceIntent===null){
-        return result('BLOCKED',null,'RECOVERY_ACCOUNT_SESSION_PROVIDER_INTENT_MISSING');
+        if(proof.sourceIntents.length!==0||proof.predecessorRecoveryEvent!==null){
+          return result('BLOCKED',null,'RECOVERY_ACCOUNT_SESSION_PROVIDER_INTENT_MISSING');
+        }
+        return result('PASS',{snapshot,nextRequest:mintReadOperation()});
       }
       if(sourceIntent?.state==='absent'){
         return result('PASS',{snapshot,nextRequest:mintReadOperation()});
@@ -1979,7 +1982,7 @@ export function createProviderRecoveryControlStore(args = {}) {
       const emptyResourceClose=proof.predecessorRecoveryEvent===null
         &&recoverableSourceLeaseState(snapshot.lease.state,snapshot.lease.cleanupDebt)
         &&proof.sourceIntents.length===0&&proof.currentIntents.length===0
-        &&proof.accountSessionIntent?.state==='absent'
+        &&(proof.accountSessionIntent===null||proof.accountSessionIntent.state==='absent')
         &&(proof.primaryExecutionIntent===null||proof.primaryExecutionIntent.state==='created');
       if(!completedResourceClose&&!emptyResourceClose){
         return result('BLOCKED',null,'AUDIT_CHAIN_MISMATCH');

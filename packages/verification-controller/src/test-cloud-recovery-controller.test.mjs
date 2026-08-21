@@ -167,6 +167,10 @@ test('recovery closes an empty fixture set without opening the 42-step checkpoin
   assert.match(controller, /openedValue\.emptyResourceSet === true/u);
   assert.match(controlStore, /predecessor\.sourceIntents\.length===0/u);
   assert.match(providerStore, /proof\.sourceIntents\.length===0/u);
+  assert.match(controlStore,
+    /intent===null&&reconstruction\.sourceIntents\.length===0/u);
+  assert.match(providerStore,
+    /if\(sourceIntent===null\)\{\s*if\(proof\.sourceIntents\.length!==0/u);
 });
 
 test('recovery CLI rejects malformed authority before filesystem or network access', async () => {
