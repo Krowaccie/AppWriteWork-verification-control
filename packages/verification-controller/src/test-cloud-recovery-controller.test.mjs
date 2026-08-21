@@ -4,6 +4,7 @@ import test from 'node:test';
 
 import {
   createRecoveryTargetEnvironment,
+  describeRecoveryStageFailure,
   main,
   runTestCloudRecoveryStateMachine,
 } from './test-cloud-recovery-controller.mjs';
@@ -15,6 +16,16 @@ test('recovery maps the inventory public origin to the closed environment contra
     projectId: '69137c5d003952a36d4c',
     siteId: '694579860016df0d2d3c',
   });
+});
+
+test('recovery replaces ambiguous internals with a fixed safe stage diagnostic', () => {
+  const outcome = describeRecoveryStageFailure('account-sessions', {
+    status: 'BLOCKED',
+    value: null,
+    diagnostics: [{ code: 'AUDIT_CHAIN_MISMATCH' }],
+  });
+  assert.equal(outcome.status, 'BLOCKED');
+  assert.equal(outcome.diagnostics[0].code, 'RECOVERY_ACCOUNT_SESSIONS_INVALID');
 });
 
 test('recovery CLI rejects malformed authority before filesystem or network access', async () => {
