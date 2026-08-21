@@ -642,7 +642,12 @@ function recoveryProviderProofFailureCode(error) {
     ['Recovery source account-session intent is duplicated.', 'RECOVERY_ACCOUNT_SESSION_PROOF_SESSION_INVALID'],
     ['Recovery event run is invalid.', 'RECOVERY_ACCOUNT_SESSION_PROOF_RECOVERY_EVENT_INVALID'],
     ['Recovery source lease state is invalid.', 'RECOVERY_ACCOUNT_SESSION_PROOF_LEASE_SOURCE_STATE_INVALID'],
-    ['Recovery source intent cardinality is invalid.', 'RECOVERY_ACCOUNT_SESSION_PROOF_INTENT_SET_CARDINALITY_INVALID'],
+    ['Recovery source primary-share intent is missing.', 'RECOVERY_ACCOUNT_SESSION_PROOF_PRIMARY_SHARE_MISSING'],
+    ['Recovery source primary-share intent is duplicated.', 'RECOVERY_ACCOUNT_SESSION_PROOF_PRIMARY_SHARE_DUPLICATED'],
+    ['Recovery source primary-graph intent is missing.', 'RECOVERY_ACCOUNT_SESSION_PROOF_PRIMARY_GRAPH_MISSING'],
+    ['Recovery source primary-graph intent is duplicated.', 'RECOVERY_ACCOUNT_SESSION_PROOF_PRIMARY_GRAPH_DUPLICATED'],
+    ['Recovery source primary-project intent is missing.', 'RECOVERY_ACCOUNT_SESSION_PROOF_PRIMARY_PROJECT_MISSING'],
+    ['Recovery source primary-project intent is duplicated.', 'RECOVERY_ACCOUNT_SESSION_PROOF_PRIMARY_PROJECT_DUPLICATED'],
     ['Recovery source intent position is invalid.', 'RECOVERY_ACCOUNT_SESSION_PROOF_INTENT_SET_POSITION_INVALID'],
     ['Recovery source intent run is invalid.', 'RECOVERY_ACCOUNT_SESSION_PROOF_INTENT_SET_RUN_INVALID'],
     ['Recovery source intent environment is invalid.', 'RECOVERY_ACCOUNT_SESSION_PROOF_INTENT_SET_ENVIRONMENT_INVALID'],
@@ -1390,8 +1395,11 @@ function reconstructProviderRecoveryProof(snapshot, recoveryContext) {
       sourceLeaseVersion = entry.event.leaseVersionBefore;
       sourceIntents = QUALIFIED_CLEANUP_PROTOCOL.resourceOrder.map((resourceType) => {
         const matches = [...latest.values()].filter((intent) => intent.resourceType === resourceType);
-        if (matches.length !== 1) {
-          throw new TypeError('Recovery source intent cardinality is invalid.');
+        if (matches.length === 0) {
+          throw new TypeError(`Recovery source ${resourceType} intent is missing.`);
+        }
+        if (matches.length > 1) {
+          throw new TypeError(`Recovery source ${resourceType} intent is duplicated.`);
         }
         return matches[0];
       });
@@ -1464,8 +1472,11 @@ function reconstructProviderRecoveryProof(snapshot, recoveryContext) {
     sourceLeaseVersion = snapshot.lease.leaseVersion;
     sourceIntents = QUALIFIED_CLEANUP_PROTOCOL.resourceOrder.map((resourceType) => {
       const matches = [...latest.values()].filter((intent) => intent.resourceType === resourceType);
-      if (matches.length !== 1) {
-        throw new TypeError('Recovery source intent cardinality is invalid.');
+      if (matches.length === 0) {
+        throw new TypeError(`Recovery source ${resourceType} intent is missing.`);
+      }
+      if (matches.length > 1) {
+        throw new TypeError(`Recovery source ${resourceType} intent is duplicated.`);
       }
       return matches[0];
     });
