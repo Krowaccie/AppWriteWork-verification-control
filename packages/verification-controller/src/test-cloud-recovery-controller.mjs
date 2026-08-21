@@ -41,6 +41,18 @@ const RECOVERY_HANDLE_SCOPES = Object.freeze([
   'files.read',
   'files.write',
 ]);
+const RECOVERY_STAGE_FAILURES = Object.freeze({
+  'account-sessions': 'RECOVERY_ACCOUNT_SESSIONS_INVALID',
+  'checkpoint-open': 'RECOVERY_CHECKPOINT_OPEN_INVALID',
+  'checkpoint-read': 'RECOVERY_CHECKPOINT_READ_INVALID',
+  'control-store': 'RECOVERY_CONTROL_STORE_INVALID',
+  'lease-close': 'RECOVERY_LEASE_CLOSE_INVALID',
+  'mutation-issue': 'RECOVERY_MUTATION_ISSUE_INVALID',
+  'mutation-observation': 'RECOVERY_MUTATION_OBSERVATION_INVALID',
+  'mutation-retry': 'RECOVERY_MUTATION_RETRY_INVALID',
+  'resources-commit': 'RECOVERY_RESOURCES_COMMIT_INVALID',
+  'step-observation': 'RECOVERY_STEP_OBSERVATION_INVALID',
+});
 const encoder = new TextEncoder();
 
 function pass(value) {
@@ -84,6 +96,11 @@ function resultValue(outcome) {
     && !Array.isArray(outcome.value)
     ? outcome.value
     : null;
+}
+
+export function describeRecoveryStageFailure(stage, outcome) {
+  if (resultValue(outcome) !== null) return outcome;
+  return blocked(RECOVERY_STAGE_FAILURES[stage] ?? 'RECOVERY_SCOPE_INVALID');
 }
 
 function digest(value) {
@@ -275,7 +292,7 @@ export async function runTestCloudRecoveryStateMachine(args) {
       recoveryControlClient: args.clients.control,
     });
     const createdValue = resultValue(created);
-    if (createdValue === null) return created;
+    if (createdValue === null) return describeRecoveryStageFailure('control-store', created);
     const store = createdValue.store;
     const sessions = await recoverAccountSessions({
       clock: args.clock,
@@ -285,7 +302,7 @@ export async function runTestCloudRecoveryStateMachine(args) {
       store,
     });
     const sessionsValue = resultValue(sessions);
-    if (sessionsValue === null) return sessions;
+    if (sessionsValue === null) return describeRecoveryStageFailure('account-sessions', sessions);
     const opened = await openRecoveryCheckpoint({
       clock: args.clock,
       context: args.context,
@@ -293,7 +310,7 @@ export async function runTestCloudRecoveryStateMachine(args) {
       store,
     });
     const openedValue = resultValue(opened);
-    if (openedValue === null) return opened;
+    if (openedValue === null) return describeRecoveryStageFailure('checkpoint-open', opened);
     const session = openedValue.session;
 
     for (let ordinal = 0; ordinal < 256; ordinal += 1) {
@@ -303,15 +320,18 @@ export async function runTestCloudRecoveryStateMachine(args) {
         store,
       });
       const stage = resultValue(staged);
-      if (stage === null) return staged;
+      if (stage === null) return describeRecoveryStageFailure('checkpoint-read', staged);
       const checkpoint = stage.checkpoint;
       if (checkpoint.checkpointState === 'resources-complete') {
-        return closeRecoveryLease({
+        const closed = await closeRecoveryLease({
           clock: args.clock,
           context: args.context,
           session,
           store,
         });
+        return resultValue(closed) === null
+          ? describeRecoveryStageFailure('lease-close', closed)
+          : closed;
       }
       if (checkpoint.checkpointState === 'ready' && checkpoint.prefixLength === 42) {
         const completed = await commitRecoveryResourcesComplete({
@@ -319,7 +339,9 @@ export async function runTestCloudRecoveryStateMachine(args) {
           session,
           store,
         });
-        if (resultValue(completed) === null) return completed;
+        if (resultValue(completed) === null) {
+          return describeRecoveryStageFailure('resources-commit', completed);
+        }
         continue;
       }
       if (checkpoint.checkpointState === 'ready') {
@@ -332,7 +354,9 @@ export async function runTestCloudRecoveryStateMachine(args) {
             stage,
             store,
           });
-          if (resultValue(committed) === null) return committed;
+          if (resultValue(committed) === null) {
+            return describeRecoveryStageFailure('step-observation', committed);
+          }
           continue;
         }
         const issued = await issueRecoveryMutation({
@@ -343,7 +367,9 @@ export async function runTestCloudRecoveryStateMachine(args) {
           store,
         });
         const issuedValue = resultValue(issued);
-        if (issuedValue === null || !Object.hasOwn(issuedValue, 'mutationPermit')) return issued;
+        if (issuedValue === null || !Object.hasOwn(issuedValue, 'mutationPermit')) {
+          return describeRecoveryStageFailure('mutation-issue', issued);
+        }
         await invokeProduct(args.clients.product, stage.mutationMethod, issuedValue.mutationPermit);
         continue;
       }
@@ -356,7 +382,9 @@ export async function runTestCloudRecoveryStateMachine(args) {
           stage,
           store,
         });
-        if (resultValue(observed) === null) return observed;
+        if (resultValue(observed) === null) {
+          return describeRecoveryStageFailure('mutation-observation', observed);
+        }
         continue;
       }
       if (checkpoint.checkpointState === 'blocked'
@@ -370,7 +398,9 @@ export async function runTestCloudRecoveryStateMachine(args) {
           store,
         });
         const retriedValue = resultValue(retried);
-        if (retriedValue === null || !Object.hasOwn(retriedValue, 'mutationPermit')) return retried;
+        if (retriedValue === null || !Object.hasOwn(retriedValue, 'mutationPermit')) {
+          return describeRecoveryStageFailure('mutation-retry', retried);
+        }
         await invokeProduct(args.clients.product, stage.mutationMethod, retriedValue.mutationPermit);
         continue;
       }
