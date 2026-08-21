@@ -1291,19 +1291,26 @@ export async function openRecoveryAccountSessionStage(input){
     const reconstruction=reconstructRecoverySnapshot(read.snapshot);
     const intent=reconstruction?.accountSessionIntent;
     if(reconstruction===null)return blocked('RECOVERY_ACCOUNT_SESSION_SNAPSHOT_INVALID');
-    if(intent===null)return blocked('RECOVERY_ACCOUNT_SESSION_INTENT_MISSING');
-    if(intent.runId!==reconstruction.lease.ownerRunId
-      ||intent.environmentDigest!==reconstruction.lease.environmentDigest
-      ||reconstruction.lease.ownerWorkflowRunId!==fields.context.sourceWorkflowRunId)
+    if(reconstruction.lease.ownerWorkflowRunId!==fields.context.sourceWorkflowRunId)
       return blocked('RECOVERY_ACCOUNT_SESSION_BINDING_INVALID');
     const freshDebt=reconstruction.checkpoint===null
       &&recoverableSourceLeaseState(reconstruction.lease.state,reconstruction.lease.cleanupDebt);
     const resumableRecovery=reconstruction.lease.state==='recovering'
-      &&reconstruction.checkpoint!==null&&intent.state==='absent';
+      &&reconstruction.checkpoint!==null&&intent?.state==='absent';
     if((!freshDebt&&!resumableRecovery)
       ||!validIso(reconstruction.lease.expiresAt)
       ||Date.parse(reconstruction.lease.expiresAt)>now*1000)
       return blocked('RECOVERY_ACCOUNT_SESSION_LEASE_INVALID');
+    if(intent===null&&reconstruction.sourceIntents.length===0){
+      return pass(freeze({nextAuthority:read.nextRequest,
+        sessionAbsenceDigest:RECOVERY_ACCOUNT_SESSION_ABSENCE_DIGEST,
+        measurements:freeze({knownProductCalls:0,maximumProductCalls:0,
+          knownStoreCalls:1,maximumStoreCalls:1})}));
+    }
+    if(intent===null)return blocked('RECOVERY_ACCOUNT_SESSION_INTENT_MISSING');
+    if(intent.runId!==reconstruction.lease.ownerRunId
+      ||intent.environmentDigest!==reconstruction.lease.environmentDigest)
+      return blocked('RECOVERY_ACCOUNT_SESSION_BINDING_INVALID');
     if(absentRead!==null){
       if(intent.state!=='absent')return blocked('RECOVERY_ACCOUNT_SESSION_BINDING_INVALID');
       return pass(freeze({nextAuthority:read.nextRequest,
@@ -1704,7 +1711,7 @@ export async function closeRecoveryLease(input){
       &&validPrimaryExecutionSnapshot(primaryExecutions[0],PRIMARY_EXECUTION_RETENTION_MAX_SECONDS);
     const emptyResourceClose=predecessor.checkpoint===null&&predecessor.recoveryEvent===null
       &&predecessor.sourceIntents.length===0&&predecessor.currentIntents.length===0
-      &&predecessor.accountSessionIntent?.state==='absent'
+      &&(predecessor.accountSessionIntent===null||predecessor.accountSessionIntent.state==='absent')
       &&recoverableSourceLeaseState(predecessor.lease.state,predecessor.lease.cleanupDebt)
       &&validIso(predecessor.lease.expiresAt)&&Date.parse(predecessor.lease.expiresAt)<=now*1000
       &&primaryExecutions.length<=1
