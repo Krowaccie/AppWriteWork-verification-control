@@ -267,7 +267,6 @@ test('site verification reuses the active VCS deployment without mutating Appwri
     },
   });
   assert.equal(readerResult.status, 'PASS');
-  const deploymentId = 'deployment-site';
   const clients = {
     operator: {
       async createSiteDeployment() {
@@ -280,7 +279,7 @@ test('site verification reuses the active VCS deployment without mutating Appwri
         throw new Error('site deployment activation must remain provider-owned');
       },
       async getSite() {
-        return { status: 'PASS', value: { activeDeploymentId: deploymentId } };
+        throw new Error('site identity proof must not depend on provider deployment metadata');
       },
     },
   };
@@ -301,5 +300,6 @@ test('site verification reuses the active VCS deployment without mutating Appwri
   });
 
   assert.equal(result.status, 'PASS');
-  assert.equal(result.value.activeDeploymentId, deploymentId);
+  assert.equal(result.value.deploymentId, expectedIdentity.sourceRevision);
+  assert.equal(result.value.activeDeploymentId, expectedIdentity.sourceRevision);
 });
