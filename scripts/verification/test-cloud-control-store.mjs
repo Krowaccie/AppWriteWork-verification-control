@@ -1226,7 +1226,9 @@ export async function openRecoveryAccountSessionStage(input){
     if(read===null){
       const sourceCode=outcome?.diagnostics?.length===1?outcome.diagnostics[0]?.code:null;
       if(['RECOVERY_ACCOUNT_SESSION_PROVIDER_READ_INVALID',
-        'RECOVERY_ACCOUNT_SESSION_PROVIDER_PROOF_INVALID'].includes(sourceCode)){
+        'RECOVERY_ACCOUNT_SESSION_PROVIDER_PROOF_INVALID',
+        'RECOVERY_ACCOUNT_SESSION_PROVIDER_INTENT_MISSING',
+        'RECOVERY_ACCOUNT_SESSION_PROVIDER_INTENT_STATE_INVALID'].includes(sourceCode)){
         return blocked(sourceCode);
       }
       return blocked('RECOVERY_ACCOUNT_SESSION_SOURCE_INVALID');
