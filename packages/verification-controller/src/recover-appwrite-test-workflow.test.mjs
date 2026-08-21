@@ -16,15 +16,22 @@ test('recovery workflow copies are exact and remain manual-only', async () => {
   assert.match(root, /concurrency:\r?\n  group: appwrite-test-verification/u);
 });
 
-test('recovery workflow proves the failed owner, old binding, and new controller separately', async () => {
+test('recovery workflow proves the failed owner, old binding, and protected signed controller separately', async () => {
   const workflow = await readFile(paths[0], 'utf8');
+  const controller = await readFile(
+    'packages/verification-controller/src/test-cloud-recovery-controller.mjs',
+    'utf8',
+  );
   assert.match(workflow, /run\.workflow_id !== 336735803/u);
   assert.match(workflow, /run\.conclusion !== 'failure'/u);
   assert.match(workflow, /CONTROLLER_REVISION: \$\{\{ inputs\.original_controller_sha \}\}/u);
   assert.match(workflow, /TRUSTED_CONTROLLER_SHA: \$\{\{ vars\.TRUSTED_CONTROLLER_SHA \}\}/u);
-  assert.match(workflow, /prepare-controller-artifact\.mjs/u);
+  assert.match(workflow, /git\/ref\/heads\/main/u);
+  assert.match(workflow, /commit\.commit\?\.verification\?\.verified !== true/u);
+  assert.doesNotMatch(workflow, /prepare-controller-artifact\.mjs|TRUSTED_CONTROLLER_ARTIFACT_ID|TRUSTED_CONTROLLER_BUNDLE_DIGEST/u);
   assert.match(workflow, /test-cloud-binding-artifact-verifier\.mjs/u);
   assert.match(workflow, /test-cloud-recovery-controller\.mjs/u);
+  assert.doesNotMatch(controller, /reattestLocalControllerArtifact|CONTROLLER_ARTIFACT_DIRECTORY/u);
 });
 
 test('recovery credential is exposed only to the final recovery step', async () => {
