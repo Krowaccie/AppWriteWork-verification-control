@@ -144,6 +144,18 @@ test('provider recovery reads projections only from the current authoritative le
   );
 });
 
+test('recovery resumes after account-session absence before the resource checkpoint opens', async () => {
+  const source = await readFile('scripts/verification/test-cloud-control-store.mjs', 'utf8');
+  assert.match(
+    source,
+    /const resumableRecovery=reconstruction\.lease\.state==='recovering'\s*&&intent\?\.state==='absent';/u,
+  );
+  assert.doesNotMatch(
+    source,
+    /const resumableRecovery=[^;]*reconstruction\.checkpoint!==null/u,
+  );
+});
+
 test('recovery keeps the failed controller run separate from the source lease owner', async () => {
   const [controller, environment, controlStore, providerStore, workflow] = await Promise.all([
     readFile('packages/verification-controller/src/test-cloud-recovery-controller.mjs', 'utf8'),

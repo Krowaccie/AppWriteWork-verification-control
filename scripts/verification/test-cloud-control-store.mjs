@@ -1299,7 +1299,7 @@ export async function openRecoveryAccountSessionStage(input){
     const freshDebt=reconstruction.checkpoint===null
       &&recoverableSourceLeaseState(reconstruction.lease.state,reconstruction.lease.cleanupDebt);
     const resumableRecovery=reconstruction.lease.state==='recovering'
-      &&reconstruction.checkpoint!==null&&intent?.state==='absent';
+      &&intent?.state==='absent';
     if((!freshDebt&&!resumableRecovery)
       ||!validIso(reconstruction.lease.expiresAt)
       ||Date.parse(reconstruction.lease.expiresAt)>now*1000)
