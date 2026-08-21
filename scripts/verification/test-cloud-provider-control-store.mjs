@@ -642,7 +642,11 @@ function recoveryProviderProofFailureCode(error) {
     ['Recovery source account-session intent is duplicated.', 'RECOVERY_ACCOUNT_SESSION_PROOF_SESSION_INVALID'],
     ['Recovery event run is invalid.', 'RECOVERY_ACCOUNT_SESSION_PROOF_RECOVERY_EVENT_INVALID'],
     ['Recovery source lease state is invalid.', 'RECOVERY_ACCOUNT_SESSION_PROOF_LEASE_SOURCE_STATE_INVALID'],
-    ['Recovery source intent set is invalid.', 'RECOVERY_ACCOUNT_SESSION_PROOF_INTENT_SET_INVALID'],
+    ['Recovery source intent cardinality is invalid.', 'RECOVERY_ACCOUNT_SESSION_PROOF_INTENT_SET_CARDINALITY_INVALID'],
+    ['Recovery source intent position is invalid.', 'RECOVERY_ACCOUNT_SESSION_PROOF_INTENT_SET_POSITION_INVALID'],
+    ['Recovery source intent run is invalid.', 'RECOVERY_ACCOUNT_SESSION_PROOF_INTENT_SET_RUN_INVALID'],
+    ['Recovery source intent environment is invalid.', 'RECOVERY_ACCOUNT_SESSION_PROOF_INTENT_SET_ENVIRONMENT_INVALID'],
+    ['Recovery source account-session evidence is invalid.', 'RECOVERY_ACCOUNT_SESSION_PROOF_INTENT_SET_ACCOUNT_SESSION_INVALID'],
     ['Recovery genesis proof is invalid.', 'RECOVERY_ACCOUNT_SESSION_PROOF_RECOVERY_EVENT_INVALID'],
     ['Recovery terminal intent proof is invalid.', 'RECOVERY_ACCOUNT_SESSION_PROOF_RECOVERY_EVENT_INVALID'],
     ['Recovery event snapshot is invalid.', 'RECOVERY_ACCOUNT_SESSION_PROOF_RECOVERY_EVENT_INVALID'],
@@ -1386,15 +1390,24 @@ function reconstructProviderRecoveryProof(snapshot, recoveryContext) {
       sourceLeaseVersion = entry.event.leaseVersionBefore;
       sourceIntents = QUALIFIED_CLEANUP_PROTOCOL.resourceOrder.map((resourceType) => {
         const matches = [...latest.values()].filter((intent) => intent.resourceType === resourceType);
-        if (matches.length !== 1) throw new TypeError('Recovery source intent set is invalid.');
+        if (matches.length !== 1) {
+          throw new TypeError('Recovery source intent cardinality is invalid.');
+        }
         return matches[0];
       });
       const genesisPosition = providerRecoveryGenesisPosition(sourceIntents);
-      if (accountSessionObserved
-        || genesisPosition === null || sourceIntents.some((intent) => (
-        intent.runId !== activeRun
-        || intent.environmentDigest !== snapshot.lease.environmentDigest
-      ))) throw new TypeError('Recovery source intent set is invalid.');
+      if (accountSessionObserved) {
+        throw new TypeError('Recovery source account-session evidence is invalid.');
+      }
+      if (genesisPosition === null) {
+        throw new TypeError('Recovery source intent position is invalid.');
+      }
+      if (sourceIntents.some((intent) => intent.runId !== activeRun)) {
+        throw new TypeError('Recovery source intent run is invalid.');
+      }
+      if (sourceIntents.some((intent) => (
+        intent.environmentDigest !== snapshot.lease.environmentDigest
+      ))) throw new TypeError('Recovery source intent environment is invalid.');
       currentIntents = sourceIntents.map(safeCopy);
       const proof = { environmentDigest: snapshot.lease.environmentDigest, sourceAuditHeadDigest,
         sourceLeaseVersion, sourceIntents, genesisPosition };
@@ -1451,14 +1464,21 @@ function reconstructProviderRecoveryProof(snapshot, recoveryContext) {
     sourceLeaseVersion = snapshot.lease.leaseVersion;
     sourceIntents = QUALIFIED_CLEANUP_PROTOCOL.resourceOrder.map((resourceType) => {
       const matches = [...latest.values()].filter((intent) => intent.resourceType === resourceType);
-      if (matches.length !== 1) throw new TypeError('Recovery source intent set is invalid.');
+      if (matches.length !== 1) {
+        throw new TypeError('Recovery source intent cardinality is invalid.');
+      }
       return matches[0];
     });
     const genesisPosition = providerRecoveryGenesisPosition(sourceIntents);
-    if (accountSessionObserved
-      || genesisPosition === null || sourceIntents.some((intent) => (
+    if (accountSessionObserved) {
+      throw new TypeError('Recovery source account-session evidence is invalid.');
+    }
+    if (genesisPosition === null) {
+      throw new TypeError('Recovery source intent position is invalid.');
+    }
+    if (sourceIntents.some((intent) => (
       intent.environmentDigest !== snapshot.lease.environmentDigest
-    ))) throw new TypeError('Recovery source intent set is invalid.');
+    ))) throw new TypeError('Recovery source intent environment is invalid.');
     currentIntents = sourceIntents.map(safeCopy);
   } else if (!['active', 'cleanup-debt'].includes(ordinaryLeaseState)
     || snapshot.lease.state !== 'recovering'
