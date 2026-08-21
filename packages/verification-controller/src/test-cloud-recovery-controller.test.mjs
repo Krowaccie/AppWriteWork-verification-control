@@ -127,6 +127,19 @@ test('recovery keeps the failed controller run separate from the source lease ow
   assert.match(workflow, /--source-workflow-run-id "\$\{\{ inputs\.source_run_id \}\}"/u);
 });
 
+test('recovery admits an expired active lease without weakening the cleanup-debt pair', async () => {
+  const [controlStore, providerStore] = await Promise.all([
+    readFile('scripts/verification/test-cloud-control-store.mjs', 'utf8'),
+    readFile('scripts/verification/test-cloud-provider-control-store.mjs', 'utf8'),
+  ]);
+  for (const source of [controlStore, providerStore]) {
+    assert.match(source, /state === 'active' && cleanupDebt === false/u);
+    assert.match(source, /state === 'cleanup-debt' && cleanupDebt === true/u);
+    assert.match(source, /state === 'recovering' && cleanupDebt === true/u);
+  }
+  assert.match(controlStore, /Date\.parse\(reconstruction\.lease\.expiresAt\)>now\*1000/u);
+});
+
 test('recovery CLI rejects malformed authority before filesystem or network access', async () => {
   let called = false;
   const dependencies = {

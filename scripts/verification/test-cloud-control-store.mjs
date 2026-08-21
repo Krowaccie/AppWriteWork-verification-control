@@ -905,6 +905,16 @@ function exactRecoverySourceBindings(checkpoint,reconstruction,currentIntents){
       checkpoint.prefixLength,checkpoint.intentDispositionCursor);
 }
 
+function recoverableSourceLeaseState(state, cleanupDebt) {
+  return (state === 'active' && cleanupDebt === false)
+    || (state === 'cleanup-debt' && cleanupDebt === true);
+}
+
+function recoverableCurrentLeaseState(state, cleanupDebt) {
+  return recoverableSourceLeaseState(state, cleanupDebt)
+    || (state === 'recovering' && cleanupDebt === true);
+}
+
 function reconstructRecoverySnapshot(snapshot){
   try{
     const root=recoveryFields(snapshot,RECOVERY_SNAPSHOT_KEYS);
@@ -915,7 +925,7 @@ function reconstructRecoverySnapshot(snapshot){
       ||lease.leaseRowId!=='appwrite_test_verification'||!Number.isSafeInteger(lease.leaseVersion)
       ||lease.leaseVersion<0||!DIGEST.test(lease.ledgerDigest)||!DIGEST.test(lease.environmentDigest)
       ||typeof lease.ownerRunId!=='string'||typeof lease.ownerWorkflowRunId!=='string'
-      ||lease.cleanupDebt!==true)return null;
+      ||!recoverableCurrentLeaseState(lease.state,lease.cleanupDebt))return null;
     let expectedPrevious=GENESIS_LEDGER_DIGEST,expectedVersion=0,activeRun=null;
     let ordinaryLeaseState='idle';
     let resourceMap=new Map(),ordinaryLatest=new Map(),ordinaryCleanupRoots=new Map();
@@ -1002,6 +1012,7 @@ function reconstructRecoverySnapshot(snapshot){
         }
       }else{
         if(!recoveryStarted){
+          if(!['active','cleanup-debt'].includes(ordinaryLeaseState))return null;
           recoveryStarted=true;sourceAuditHeadDigest=expectedPrevious;
           sourceLeaseVersion=event.leaseVersionBefore;
           sourceIntents=QUALIFIED_CLEANUP_PROTOCOL.resourceOrder.map((resourceType)=>{
@@ -1061,8 +1072,10 @@ function reconstructRecoverySnapshot(snapshot){
         ||sourceIntents.some((intent)=>intent.runId!==activeRun
           ||intent.environmentDigest!==lease.environmentDigest))return null;
       currentIntents=sourceIntents.map(copy);
-      if(ordinaryLeaseState!==lease.state||lease.state!=='cleanup-debt')return null;
-    }else if(lease.state!=='recovering'||ordinaryLeaseState!=='cleanup-debt')return null;
+      if(ordinaryLeaseState!==lease.state
+        ||!recoverableSourceLeaseState(lease.state,lease.cleanupDebt))return null;
+    }else if(lease.state!=='recovering'||lease.cleanupDebt!==true
+      ||!['active','cleanup-debt'].includes(ordinaryLeaseState))return null;
     const projectionMap=new Map(),projectionIds=new Set();let priorProjectionId=null;
     for(const rawProjection of intentProjections){
       const item=recoveryFields(rawProjection,RECOVERY_PROJECTION_KEYS);
@@ -1262,11 +1275,11 @@ export async function openRecoveryAccountSessionStage(input){
       ||intent.environmentDigest!==reconstruction.lease.environmentDigest
       ||reconstruction.lease.ownerWorkflowRunId!==fields.context.sourceWorkflowRunId)
       return blocked('RECOVERY_ACCOUNT_SESSION_BINDING_INVALID');
-    const freshDebt=reconstruction.lease.state==='cleanup-debt'
-      &&reconstruction.checkpoint===null;
+    const freshDebt=reconstruction.checkpoint===null
+      &&recoverableSourceLeaseState(reconstruction.lease.state,reconstruction.lease.cleanupDebt);
     const resumableRecovery=reconstruction.lease.state==='recovering'
       &&reconstruction.checkpoint!==null&&intent.state==='absent';
-    if((!freshDebt&&!resumableRecovery)||reconstruction.lease.cleanupDebt!==true
+    if((!freshDebt&&!resumableRecovery)
       ||!validIso(reconstruction.lease.expiresAt)
       ||Date.parse(reconstruction.lease.expiresAt)>now*1000)
       return blocked('RECOVERY_ACCOUNT_SESSION_LEASE_INVALID');

@@ -1264,6 +1264,16 @@ function providerRecoveryGenesisPosition(sourceIntents) {
   }
 }
 
+function recoverableSourceLeaseState(state, cleanupDebt) {
+  return (state === 'active' && cleanupDebt === false)
+    || (state === 'cleanup-debt' && cleanupDebt === true);
+}
+
+function recoverableCurrentLeaseState(state, cleanupDebt) {
+  return recoverableSourceLeaseState(state, cleanupDebt)
+    || (state === 'recovering' && cleanupDebt === true);
+}
+
 function reconstructProviderRecoveryProof(snapshot, recoveryContext) {
   let activeRun = null;
   let ordinaryLeaseState = 'idle';
@@ -1368,7 +1378,9 @@ function reconstructProviderRecoveryProof(snapshot, recoveryContext) {
       throw new TypeError('Recovery event run is invalid.');
     }
     if (!recoveryStarted) {
-      if (ordinaryLeaseState !== 'cleanup-debt') throw new TypeError('Recovery source lease state is invalid.');
+      if (!['active', 'cleanup-debt'].includes(ordinaryLeaseState)) {
+        throw new TypeError('Recovery source lease state is invalid.');
+      }
       recoveryStarted = true;
       sourceAuditHeadDigest = entry.event.previousLedgerDigest;
       sourceLeaseVersion = entry.event.leaseVersionBefore;
@@ -1421,7 +1433,7 @@ function reconstructProviderRecoveryProof(snapshot, recoveryContext) {
   if (activeRun !== snapshot.lease.ownerRunId) {
     throw new TypeError('Recovery source owner run is invalid.');
   }
-  if (snapshot.lease.cleanupDebt !== true) {
+  if (!recoverableCurrentLeaseState(snapshot.lease.state, snapshot.lease.cleanupDebt)) {
     throw new TypeError('Recovery source owner debt is invalid.');
   }
   if (typeof snapshot.lease.ownerWorkflowRunId !== 'string') {
@@ -1431,7 +1443,8 @@ function reconstructProviderRecoveryProof(snapshot, recoveryContext) {
     throw new TypeError('Recovery source owner workflow is invalid.');
   }
   if (!recoveryStarted) {
-    if (ordinaryLeaseState !== 'cleanup-debt' || snapshot.lease.state !== 'cleanup-debt') {
+    if (ordinaryLeaseState !== snapshot.lease.state
+      || !recoverableSourceLeaseState(snapshot.lease.state, snapshot.lease.cleanupDebt)) {
       throw new TypeError('Recovery source lease state is invalid.');
     }
     sourceAuditHeadDigest = snapshot.lease.ledgerDigest;
@@ -1447,7 +1460,9 @@ function reconstructProviderRecoveryProof(snapshot, recoveryContext) {
       intent.environmentDigest !== snapshot.lease.environmentDigest
     ))) throw new TypeError('Recovery source intent set is invalid.');
     currentIntents = sourceIntents.map(safeCopy);
-  } else if (snapshot.lease.state !== 'recovering') {
+  } else if (!['active', 'cleanup-debt'].includes(ordinaryLeaseState)
+    || snapshot.lease.state !== 'recovering'
+    || snapshot.lease.cleanupDebt !== true) {
     throw new TypeError('Recovery lease state is invalid.');
   }
   for (const { intentId, projection } of snapshot.intentProjections) {
