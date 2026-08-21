@@ -100,6 +100,18 @@ const HANDOFF_KEYS = Object.freeze([
 ]);
 const CONTROLLER_RESULT_KEYS = Object.freeze(['diagnostics', 'status', 'value']);
 const DIAGNOSTIC_KEYS = Object.freeze(['code', 'retryable', 'safeMessage']);
+const SAFE_OPERATION_DIAGNOSTIC_CODES = new Set([
+  'TEST_CLOUD_PREFLIGHT_AUTHORIZATION_INVALID',
+  'TEST_CLOUD_PREFLIGHT_ATTESTATION_STALE',
+  'TEST_CLOUD_PREFLIGHT_MANIFEST_INVALID',
+  'TEST_CLOUD_PREFLIGHT_CLIENTS_INVALID',
+  'TEST_CLOUD_PREFLIGHT_SITE_READBACK_INVALID',
+  'TEST_CLOUD_PREFLIGHT_FUNCTION_READBACK_INVALID',
+  'TEST_CLOUD_PREFLIGHT_RUNNER_CONFIGURATION_INVALID',
+  'TEST_CLOUD_PREFLIGHT_PROJECTION_MISMATCH',
+  'TEST_CLOUD_PREFLIGHT_LEASE_INVALID',
+  'TEST_CLOUD_PREFLIGHT_INTERNAL_INVALID',
+]);
 const E2E_PASS_KEYS = Object.freeze(['capability', 'lease', 'passed']);
 const E2E_FAILURE_STATE_KEYS = Object.freeze(['capability', 'lease']);
 const BUILD_IDENTITY_KEYS = Object.freeze([
@@ -632,6 +644,13 @@ function validControllerResult(value, { allowFailureState = false } = {}) {
     && value.diagnostics.length <= 16;
 }
 
+function safeOperationDiagnosticCode(outcome, fallback) {
+  const candidate = outcome?.diagnostics?.length === 1
+    ? outcome.diagnostics[0]?.code
+    : undefined;
+  return SAFE_OPERATION_DIAGNOSTIC_CODES.has(candidate) ? candidate : fallback;
+}
+
 async function invoke(method, request) {
   try {
     const outcome = await method(deepFreeze(request));
@@ -642,7 +661,7 @@ async function invoke(method, request) {
     return result(
       outcome.status,
       null,
-      'TEST_CLOUD_PREFLIGHT_BLOCKED',
+      safeOperationDiagnosticCode(outcome, 'TEST_CLOUD_PREFLIGHT_BLOCKED'),
       outcome.diagnostics.some(({ retryable }) => retryable),
     );
   } catch {
@@ -677,7 +696,12 @@ async function invokeE2E(method, request) {
 function stageFailure(outcome, code, blockedOnly = false) {
   if (outcome.status === 'PASS') return null;
   const status = blockedOnly || outcome.status === 'BLOCKED' ? 'BLOCKED' : 'FAIL';
-  return result(status, null, code, outcome.diagnostics.some((item) => item?.retryable === true));
+  return result(
+    status,
+    null,
+    safeOperationDiagnosticCode(outcome, code),
+    outcome.diagnostics.some((item) => item?.retryable === true),
+  );
 }
 
 function now(clock) {
