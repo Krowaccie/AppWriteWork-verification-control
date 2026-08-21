@@ -625,6 +625,35 @@ function recoveryFailure(error) {
   );
 }
 
+function recoveryProviderProofFailureCode(error) {
+  if (!(error instanceof TypeError)) return 'RECOVERY_ACCOUNT_SESSION_PROVIDER_PROOF_INVALID';
+  const groups = new Map([
+    ['Ordinary audit evidence follows recovery.', 'RECOVERY_ACCOUNT_SESSION_PROOF_RECOVERY_EVENT_INVALID'],
+    ['Recovery source lease acquisition is invalid.', 'RECOVERY_ACCOUNT_SESSION_PROOF_LEASE_INVALID'],
+    ['Recovery source run chain is invalid.', 'RECOVERY_ACCOUNT_SESSION_PROOF_LEASE_INVALID'],
+    ['Recovery source lease renewal is invalid.', 'RECOVERY_ACCOUNT_SESSION_PROOF_LEASE_INVALID'],
+    ['Recovery source cleanup debt is invalid.', 'RECOVERY_ACCOUNT_SESSION_PROOF_LEASE_INVALID'],
+    ['Recovery source lease recovery is invalid.', 'RECOVERY_ACCOUNT_SESSION_PROOF_LEASE_INVALID'],
+    ['Recovery source lease close is invalid.', 'RECOVERY_ACCOUNT_SESSION_PROOF_LEASE_INVALID'],
+    ['Recovery source provider binding is invalid.', 'RECOVERY_ACCOUNT_SESSION_PROOF_PROVIDER_BINDING_INVALID'],
+    ['Recovery source intent evidence is invalid.', 'RECOVERY_ACCOUNT_SESSION_PROOF_INTENT_EVIDENCE_INVALID'],
+    ['Recovery source global cleanup evidence is invalid.', 'RECOVERY_ACCOUNT_SESSION_PROOF_GLOBAL_CLEANUP_INVALID'],
+    ['Recovery source account-session intent is invalid.', 'RECOVERY_ACCOUNT_SESSION_PROOF_SESSION_INVALID'],
+    ['Recovery source account-session intent is duplicated.', 'RECOVERY_ACCOUNT_SESSION_PROOF_SESSION_INVALID'],
+    ['Recovery event run is invalid.', 'RECOVERY_ACCOUNT_SESSION_PROOF_RECOVERY_EVENT_INVALID'],
+    ['Recovery source lease state is invalid.', 'RECOVERY_ACCOUNT_SESSION_PROOF_LEASE_INVALID'],
+    ['Recovery source intent set is invalid.', 'RECOVERY_ACCOUNT_SESSION_PROOF_INTENT_SET_INVALID'],
+    ['Recovery genesis proof is invalid.', 'RECOVERY_ACCOUNT_SESSION_PROOF_RECOVERY_EVENT_INVALID'],
+    ['Recovery terminal intent proof is invalid.', 'RECOVERY_ACCOUNT_SESSION_PROOF_RECOVERY_EVENT_INVALID'],
+    ['Recovery event snapshot is invalid.', 'RECOVERY_ACCOUNT_SESSION_PROOF_RECOVERY_EVENT_INVALID'],
+    ['Recovery successor source proof is invalid.', 'RECOVERY_ACCOUNT_SESSION_PROOF_RECOVERY_EVENT_INVALID'],
+    ['Recovery source owner is invalid.', 'RECOVERY_ACCOUNT_SESSION_PROOF_LEASE_INVALID'],
+    ['Recovery lease state is invalid.', 'RECOVERY_ACCOUNT_SESSION_PROOF_LEASE_INVALID'],
+    ['Recovery projection evidence is invalid.', 'RECOVERY_ACCOUNT_SESSION_PROOF_PROJECTION_INVALID'],
+  ]);
+  return groups.get(error.message) ?? 'RECOVERY_ACCOUNT_SESSION_PROVIDER_PROOF_INVALID';
+}
+
 function recoveryPositionEvidence(checkpoint) {
   const position = deriveRecoveryPosition({
     prefixLength: checkpoint.prefixLength,
@@ -1833,8 +1862,8 @@ export function createProviderRecoveryControlStore(args = {}) {
         nextRequest:mintReadOperation(),
         createAbsenceOperation:makeAccountSessionAbsenceOperationFactory(snapshot, sourceIntent),
       });
-    } catch {
-      return result('BLOCKED', null, 'RECOVERY_ACCOUNT_SESSION_PROVIDER_PROOF_INVALID');
+    } catch (error) {
+      return result('BLOCKED', null, recoveryProviderProofFailureCode(error));
     }
   }
 
