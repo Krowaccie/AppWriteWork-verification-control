@@ -191,13 +191,14 @@ async function pollDeployment(getDeployment, deploymentId, clock) {
   for (let attempt = 0; attempt < MAX_POLLS; attempt += 1) {
     const observed = await getDeployment(deploymentId);
     if (observed?.status !== 'PASS' || observed.value?.deploymentId !== deploymentId) {
-      return failed('DEPLOYMENT_TERMINAL_FAILURE');
+      if (attempt < MAX_POLLS - 1) await clock.sleep(POLL_INTERVAL_MS);
+      continue;
     }
     if (observed.value.status === 'ready') return pass(observed.value);
     if (['failed', 'canceled', 'cancelled'].includes(observed.value.status)) {
       return failed('DEPLOYMENT_TERMINAL_FAILURE');
     }
-    await clock.sleep(POLL_INTERVAL_MS);
+    if (attempt < MAX_POLLS - 1) await clock.sleep(POLL_INTERVAL_MS);
   }
   return failed('DEPLOYMENT_TIMEOUT');
 }

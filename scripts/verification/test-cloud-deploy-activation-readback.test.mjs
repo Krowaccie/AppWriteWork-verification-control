@@ -137,6 +137,7 @@ test('function activation tolerates one bounded stale parent readback', async ()
   const fixture = createFixture();
   const desired = new Map();
   let firstFunctionId = null;
+  let unavailableDeploymentReadReturned = false;
   let staleReadReturned = false;
   let sleeps = 0;
   const clients = {
@@ -148,6 +149,13 @@ test('function activation tolerates one bounded stale parent readback', async ()
         return { status: 'PASS', value: { deploymentId } };
       },
       async getFunctionDeployment({ deploymentId }) {
+        if (
+          deploymentId === desired.get(firstFunctionId)
+          && !unavailableDeploymentReadReturned
+        ) {
+          unavailableDeploymentReadReturned = true;
+          return { status: 'BLOCKED', value: null };
+        }
         return { status: 'PASS', value: { deploymentId, status: 'ready' } };
       },
       async activateFunctionDeployment({ deploymentId }) {
@@ -178,8 +186,9 @@ test('function activation tolerates one bounded stale parent readback', async ()
 
   assert.equal(result.status, 'PASS');
   assert.equal(result.value.length, inventory.productFunctions.length + 1);
+  assert.equal(unavailableDeploymentReadReturned, true);
   assert.equal(staleReadReturned, true);
-  assert.equal(sleeps, 1);
+  assert.equal(sleeps, 2);
 });
 
 test('site activation tolerates one bounded stale parent readback', async () => {
@@ -205,6 +214,7 @@ test('site activation tolerates one bounded stale parent readback', async () => 
     },
   });
   assert.equal(readerResult.status, 'PASS');
+  let unavailableDeploymentReadReturned = false;
   let staleReadReturned = false;
   let sleeps = 0;
   const deploymentId = 'deployment-site';
@@ -214,6 +224,10 @@ test('site activation tolerates one bounded stale parent readback', async () => 
         return { status: 'PASS', value: { deploymentId } };
       },
       async getSiteDeployment() {
+        if (!unavailableDeploymentReadReturned) {
+          unavailableDeploymentReadReturned = true;
+          return { status: 'BLOCKED', value: null };
+        }
         return { status: 'PASS', value: { deploymentId, status: 'ready' } };
       },
       async activateSiteDeployment() {
@@ -246,6 +260,7 @@ test('site activation tolerates one bounded stale parent readback', async () => 
 
   assert.equal(result.status, 'PASS');
   assert.equal(result.value.activeDeploymentId, deploymentId);
+  assert.equal(unavailableDeploymentReadReturned, true);
   assert.equal(staleReadReturned, true);
-  assert.equal(sleeps, 1);
+  assert.equal(sleeps, 2);
 });
