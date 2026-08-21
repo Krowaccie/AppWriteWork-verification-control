@@ -1302,6 +1302,7 @@ function recoverySourceIntentSet(latest) {
     }
   }
   const missingMask = matches.map((items) => items.length === 0 ? '1' : '0').join('');
+  if (missingMask === '111') return [];
   if (missingMask !== '000') {
     throw new TypeError(`Recovery source missing resource set is ${missingMask}.`);
   }
@@ -1515,8 +1516,11 @@ function reconstructProviderRecoveryProof(snapshot, recoveryContext) {
     intent.schemaVersion==='verification-intent-snapshot.v1'
       &&intent.resourceType==='primary-execution'
   ));
+  if(primaryExecutionIntents.length>1||(primaryExecutionIntents.length===1
+    &&!validRecoveryPrimaryExecutionSnapshot(primaryExecutionIntents[0]))){
+    throw new TypeError('Recovery primary-execution evidence is invalid.');
+  }
   const primaryExecutionIntent=primaryExecutionIntents.length===1
-    &&validRecoveryPrimaryExecutionSnapshot(primaryExecutionIntents[0])
     ?primaryExecutionIntents[0]:null;
   return { environmentDigest: snapshot.lease.environmentDigest, sourceAuditHeadDigest,
     sourceLeaseVersion, sourceIntents, currentIntents, predecessorRecoveryEvent, activeRun,
@@ -1873,17 +1877,24 @@ export function createProviderRecoveryControlStore(args = {}) {
         leaseVersion:sourceSnapshot.lease.leaseVersion+1,ledgerDigest:eventDigest});
       const checkpoint=proof.predecessorRecoveryEvent===null?null
         :validateRecoveryAuditEvent(proof.predecessorRecoveryEvent).checkpoint;
+      const completedResourceClose=sourceSnapshot.lease.state==='recovering'
+        &&sourceSnapshot.lease.cleanupDebt===true
+        &&checkpoint?.checkpointState==='resources-complete'&&checkpoint.prefixLength===42
+        &&checkpoint.intentDispositionCursor===3
+        &&proof.currentIntents.every((intent)=>intent.state==='absent')
+        &&proof.accountSessionIntent?.state==='absent'
+        &&proof.primaryExecutionIntent?.state==='created';
+      const emptyResourceClose=proof.predecessorRecoveryEvent===null
+        &&recoverableSourceLeaseState(sourceSnapshot.lease.state,sourceSnapshot.lease.cleanupDebt)
+        &&proof.sourceIntents.length===0&&proof.currentIntents.length===0
+        &&proof.accountSessionIntent?.state==='absent'
+        &&(proof.primaryExecutionIntent===null||proof.primaryExecutionIntent.state==='created');
       if(event.transition!=='lease.close'||event.previousLedgerDigest!==sourceSnapshot.lease.ledgerDigest
         ||event.runId!==sourceSnapshot.lease.ownerRunId
         ||event.leaseVersionBefore!==sourceSnapshot.lease.leaseVersion
         ||event.leaseVersionAfter!==sourceSnapshot.lease.leaseVersion+1
         ||event.intentId!==null||event.intentProjectionDigest!==null
-        ||sourceSnapshot.lease.state!=='recovering'||sourceSnapshot.lease.cleanupDebt!==true
-        ||checkpoint?.checkpointState!=='resources-complete'||checkpoint.prefixLength!==42
-        ||checkpoint.intentDispositionCursor!==3
-        ||proof.currentIntents.some((intent)=>intent.state!=='absent')
-        ||proof.accountSessionIntent?.state!=='absent'
-        ||proof.primaryExecutionIntent?.state!=='created'
+        ||(!completedResourceClose&&!emptyResourceClose)
         ||!same(nextLease,authorizedNextLease)){
         throw new TypeError('Recovery close operation is invalid.');
       }
@@ -1961,10 +1972,16 @@ export function createProviderRecoveryControlStore(args = {}) {
       const proof=reconstructProviderRecoveryProof(snapshot,args.context);
       const checkpoint=proof.predecessorRecoveryEvent===null?null
         :validateRecoveryAuditEvent(proof.predecessorRecoveryEvent).checkpoint;
-      if(checkpoint?.checkpointState!=='resources-complete'
-        ||proof.currentIntents.some((intent)=>intent.state!=='absent')
-        ||proof.accountSessionIntent?.state!=='absent'
-        ||proof.primaryExecutionIntent?.state!=='created'){
+      const completedResourceClose=checkpoint?.checkpointState==='resources-complete'
+        &&proof.currentIntents.every((intent)=>intent.state==='absent')
+        &&proof.accountSessionIntent?.state==='absent'
+        &&proof.primaryExecutionIntent?.state==='created';
+      const emptyResourceClose=proof.predecessorRecoveryEvent===null
+        &&recoverableSourceLeaseState(snapshot.lease.state,snapshot.lease.cleanupDebt)
+        &&proof.sourceIntents.length===0&&proof.currentIntents.length===0
+        &&proof.accountSessionIntent?.state==='absent'
+        &&(proof.primaryExecutionIntent===null||proof.primaryExecutionIntent.state==='created');
+      if(!completedResourceClose&&!emptyResourceClose){
         return result('BLOCKED',null,'AUDIT_CHAIN_MISMATCH');
       }
       return result('PASS',{snapshot,

@@ -915,6 +915,15 @@ function recoverableCurrentLeaseState(state, cleanupDebt) {
     || (state === 'recovering' && cleanupDebt === true);
 }
 
+function recoverySourceIntentsFromResourceMap(resourceMap){
+  const matches=QUALIFIED_CLEANUP_PROTOCOL.resourceOrder.map((resourceType)=>(
+    [...resourceMap.values()].filter((intent)=>intent.resourceType===resourceType)
+  ));
+  if(matches.every((items)=>items.length===0))return [];
+  if(matches.some((items)=>items.length!==1))throw new TypeError('recovery resource set');
+  return matches.map(([intent])=>intent);
+}
+
 function reconstructRecoverySnapshot(snapshot){
   try{
     const root=recoveryFields(snapshot,RECOVERY_SNAPSHOT_KEYS);
@@ -1015,13 +1024,10 @@ function reconstructRecoverySnapshot(snapshot){
           if(!['active','cleanup-debt'].includes(ordinaryLeaseState))return null;
           recoveryStarted=true;sourceAuditHeadDigest=expectedPrevious;
           sourceLeaseVersion=event.leaseVersionBefore;
-          sourceIntents=QUALIFIED_CLEANUP_PROTOCOL.resourceOrder.map((resourceType)=>{
-            const matches=[...resourceMap.values()].filter((intent)=>intent.resourceType===resourceType);
-            if(matches.length!==1)throw new TypeError('recovery resource set');
-            return matches[0];
-          });
+          sourceIntents=recoverySourceIntentsFromResourceMap(resourceMap);
           const genesisPosition=recoveryGenesisPositionFromSourceIntents(sourceIntents);
-          if(new Set(sourceIntents.map(({intentId})=>intentId)).size!==3
+          if(sourceIntents.length!==3
+            ||new Set(sourceIntents.map(({intentId})=>intentId)).size!==3
             ||genesisPosition===null
             ||sourceIntents.some((intent)=>intent.runId!==activeRun
               ||intent.environmentDigest!==lease.environmentDigest))return null;
@@ -1061,13 +1067,10 @@ function reconstructRecoverySnapshot(snapshot){
       ||expectedPrevious!==lease.ledgerDigest||expectedVersion!==lease.leaseVersion)return null;
     if(!recoveryStarted){
       sourceAuditHeadDigest=lease.ledgerDigest;sourceLeaseVersion=lease.leaseVersion;
-      sourceIntents=QUALIFIED_CLEANUP_PROTOCOL.resourceOrder.map((resourceType)=>{
-        const matches=[...resourceMap.values()].filter((intent)=>intent.resourceType===resourceType);
-        if(matches.length!==1)throw new TypeError('recovery resource set');
-        return matches[0];
-      });
+      sourceIntents=recoverySourceIntentsFromResourceMap(resourceMap);
       const genesisPosition=recoveryGenesisPositionFromSourceIntents(sourceIntents);
-      if(new Set(sourceIntents.map(({intentId})=>intentId)).size!==3
+      if(![0,3].includes(sourceIntents.length)
+        ||new Set(sourceIntents.map(({intentId})=>intentId)).size!==sourceIntents.length
         ||genesisPosition===null
         ||sourceIntents.some((intent)=>intent.runId!==activeRun
           ||intent.environmentDigest!==lease.environmentDigest))return null;
@@ -1100,7 +1103,7 @@ function reconstructRecoverySnapshot(snapshot){
       if(ordinaryProjection===null||expectedOrdinary===undefined
         ||canonicalJson(ordinaryProjection)!==canonicalJson(expectedOrdinary))return null;
     }
-    if(projectionMap.size!==3||currentIntents.some((intent)=>{
+    if(projectionMap.size!==currentIntents.length||currentIntents.some((intent)=>{
       const projection=projectionMap.get(intent.intentId);
       return projection===undefined||canonicalJson(projection)!==canonicalJson(intent);
     }))return null;
@@ -1352,6 +1355,12 @@ export async function openRecoveryCheckpoint(input){
     if(reconstruction.checkpoint===null){
       if(!validIso(reconstruction.lease.expiresAt)||Date.parse(reconstruction.lease.expiresAt)>now*1000)
         return blocked('LEASE_VERSION_MISMATCH');
+      if(reconstruction.sourceIntents.length===0){
+        const session=bindRecoverySession({context:fields.context,store:fields.store,
+          reconstruction,nextRequest});
+        return pass(freeze({emptyResourceSet:true,session,
+          snapshot:copy(reconstruction.snapshot)}));
+      }
       const checkpoint=makeRecoveryGenesis(reconstruction);
       const event=makeRecoveryEvent({checkpoint,transition:'recovery.checkpoint_started',
         previousLedgerDigest:reconstruction.lease.ledgerDigest,runId:reconstruction.lease.ownerRunId});
@@ -1686,12 +1695,22 @@ export async function closeRecoveryLease(input){
       recoveryOrdinarySemanticIntent(projection)
     )).filter((intent)=>intent?.schemaVersion==='verification-intent-snapshot.v1'
       &&intent.resourceType==='primary-execution');
-    if(predecessor.checkpoint?.checkpointState!=='resources-complete'
-      ||predecessor.checkpoint.prefixLength!==42||predecessor.checkpoint.intentDispositionCursor!==3
-      ||predecessor.currentIntents.some((intent)=>intent.state!=='absent')
-      ||predecessor.accountSessionIntent?.state!=='absent'||primaryExecutions.length!==1
-      ||primaryExecutions[0].state!=='created'
-      ||!validPrimaryExecutionSnapshot(primaryExecutions[0],PRIMARY_EXECUTION_RETENTION_MAX_SECONDS))
+    const completedResourceClose=predecessor.checkpoint?.checkpointState==='resources-complete'
+      &&predecessor.checkpoint.prefixLength===42
+      &&predecessor.checkpoint.intentDispositionCursor===3
+      &&predecessor.currentIntents.every((intent)=>intent.state==='absent')
+      &&predecessor.accountSessionIntent?.state==='absent'&&primaryExecutions.length===1
+      &&primaryExecutions[0].state==='created'
+      &&validPrimaryExecutionSnapshot(primaryExecutions[0],PRIMARY_EXECUTION_RETENTION_MAX_SECONDS);
+    const emptyResourceClose=predecessor.checkpoint===null&&predecessor.recoveryEvent===null
+      &&predecessor.sourceIntents.length===0&&predecessor.currentIntents.length===0
+      &&predecessor.accountSessionIntent?.state==='absent'
+      &&recoverableSourceLeaseState(predecessor.lease.state,predecessor.lease.cleanupDebt)
+      &&validIso(predecessor.lease.expiresAt)&&Date.parse(predecessor.lease.expiresAt)<=now*1000
+      &&primaryExecutions.length<=1
+      &&(primaryExecutions.length===0||(primaryExecutions[0].state==='created'
+        &&validPrimaryExecutionSnapshot(primaryExecutions[0],PRIMARY_EXECUTION_RETENTION_MAX_SECONDS)));
+    if(!completedResourceClose&&!emptyResourceClose)
       return blocked('AUDIT_CHAIN_MISMATCH');
     const sourceOutcome=await fields.store.readRecoveryCloseSource(binding.nextRequest);
     const source=recoveryStorePassValue(sourceOutcome,['createCloseOperation','snapshot']);

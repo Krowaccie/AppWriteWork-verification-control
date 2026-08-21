@@ -385,6 +385,17 @@ export async function runTestCloudRecoveryStateMachine(args) {
     const openedValue = resultValue(opened);
     if (openedValue === null) return describeRecoveryStageFailure('checkpoint-open', opened);
     const session = openedValue.session;
+    if (openedValue.emptyResourceSet === true) {
+      const closed = await closeRecoveryLease({
+        clock: args.clock,
+        context: args.context,
+        session,
+        store,
+      });
+      return resultValue(closed) === null
+        ? describeRecoveryStageFailure('lease-close', closed)
+        : closed;
+    }
 
     for (let ordinal = 0; ordinal < 256; ordinal += 1) {
       const staged = await readRecoveryCheckpointStage({
