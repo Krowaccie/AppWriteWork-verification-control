@@ -10,7 +10,7 @@ const LOGICAL_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*$/u;
 const RUNNER_ID = 'verification-runner-py';
 const RUNNER_IDENTITY_PATH = '.verification/runner-build-identity.v1.json';
 const RUNNER_REQUIREMENTS_DIGEST =
-  'sha256:4ac778533d3b8a0b44039593ee4289da885804f1c91ef5d5a8263843f44f8b31';
+  'sha256:d7f6d47467ddfd428ca6fe458e56168a53de2477f548fbbd1117ff06da1350d6';
 const RUNNER_REQUIRED_MEMBERS = Object.freeze([
   'bounded_transport.py',
   'fixture_cleanup.py',
