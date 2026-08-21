@@ -397,33 +397,12 @@ export async function deployTestSiteArtifact({
     || expectedIdentity.sitePayloadDigest !== artifact.canonicalContentDigest
   ) return blocked('SITE_IDENTITY_MISMATCH');
   const operator = clients?.operator;
-  if (
-    typeof operator?.createSiteDeployment !== 'function'
-    || typeof operator?.getSiteDeployment !== 'function'
-    || typeof operator?.activateSiteDeployment !== 'function'
-    || typeof operator?.getSite !== 'function'
-  ) return blocked('TEST_IDENTITY_BLOCKED');
-  const created = await operator.createSiteDeployment({ code: artifact.bytes, activate: false });
-  if (created?.status !== 'PASS' || typeof created.value?.deploymentId !== 'string') {
-    return failed('DEPLOYMENT_CREATE_FAILED');
-  }
-  const deploymentId = created.value.deploymentId;
-  const polled = await pollDeployment(
-    (id) => operator.getSiteDeployment({ deploymentId: id }),
-    deploymentId,
-    clock,
-  );
-  if (polled.status !== 'PASS') return polled;
-  const activated = await operator.activateSiteDeployment({ deploymentId });
-  if (activated?.status !== 'PASS' || activated.value?.activeDeploymentId !== deploymentId) {
+  if (typeof operator?.getSite !== 'function') return blocked('TEST_IDENTITY_BLOCKED');
+  const parent = await operator.getSite({});
+  const deploymentId = parent?.value?.activeDeploymentId;
+  if (parent?.status !== 'PASS' || typeof deploymentId !== 'string' || deploymentId.length === 0) {
     return failed('DEPLOYMENT_ACTIVATION_MISMATCH');
   }
-  const parent = await pollActiveDeployment(
-    () => operator.getSite({}),
-    deploymentId,
-    clock,
-  );
-  if (parent.status !== 'PASS') return parent;
   const readback = await siteIdentityReader.read();
   if (readback?.status !== 'PASS') return blocked('SITE_IDENTITY_READBACK_FAILED');
   const actual = readback.value;

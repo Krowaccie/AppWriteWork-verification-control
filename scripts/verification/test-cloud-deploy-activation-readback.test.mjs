@@ -244,7 +244,7 @@ test('function deployment reports a terminal state only after the bounded readba
   assert.equal(sleeps, 59);
 });
 
-test('site deployment tolerates bounded unavailable, transient terminal, and stale parent readback', async () => {
+test('site verification reuses the active VCS deployment without mutating Appwrite Sites', async () => {
   const fixture = createFixture();
   const artifact = fixture.artifactSet.releaseEligibleArtifacts[0];
   const expectedIdentity = fixture.artifactSet.buildIdentity;
@@ -267,35 +267,19 @@ test('site deployment tolerates bounded unavailable, transient terminal, and sta
     },
   });
   assert.equal(readerResult.status, 'PASS');
-  let unavailableDeploymentReadReturned = false;
-  let transientTerminalReadReturned = false;
-  let staleReadReturned = false;
-  let sleeps = 0;
   const deploymentId = 'deployment-site';
   const clients = {
     operator: {
       async createSiteDeployment() {
-        return { status: 'PASS', value: { deploymentId } };
+        throw new Error('site deployment creation must remain provider-owned');
       },
       async getSiteDeployment() {
-        if (!unavailableDeploymentReadReturned) {
-          unavailableDeploymentReadReturned = true;
-          return { status: 'BLOCKED', value: null };
-        }
-        if (!transientTerminalReadReturned) {
-          transientTerminalReadReturned = true;
-          return { status: 'PASS', value: { deploymentId, status: 'failed' } };
-        }
-        return { status: 'PASS', value: { deploymentId, status: 'ready' } };
+        throw new Error('site deployment polling must remain provider-owned');
       },
       async activateSiteDeployment() {
-        return { status: 'PASS', value: { activeDeploymentId: deploymentId } };
+        throw new Error('site deployment activation must remain provider-owned');
       },
       async getSite() {
-        if (!staleReadReturned) {
-          staleReadReturned = true;
-          return { status: 'PASS', value: { activeDeploymentId: 'prior-deployment' } };
-        }
         return { status: 'PASS', value: { activeDeploymentId: deploymentId } };
       },
     },
@@ -303,7 +287,7 @@ test('site deployment tolerates bounded unavailable, transient terminal, and sta
   const clock = {
     now: () => '2026-08-21T01:20:00.000Z',
     async sleep() {
-      sleeps += 1;
+      throw new Error('site VCS readback must not poll or sleep');
     },
   };
 
@@ -318,8 +302,4 @@ test('site deployment tolerates bounded unavailable, transient terminal, and sta
 
   assert.equal(result.status, 'PASS');
   assert.equal(result.value.activeDeploymentId, deploymentId);
-  assert.equal(unavailableDeploymentReadReturned, true);
-  assert.equal(transientTerminalReadReturned, true);
-  assert.equal(staleReadReturned, true);
-  assert.equal(sleeps, 3);
 });
