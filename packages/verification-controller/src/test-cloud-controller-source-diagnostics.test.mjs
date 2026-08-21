@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 import {
@@ -159,5 +160,28 @@ test('preserves only allowlisted identity-shape diagnostics at preflight', () =>
       'SECRET_VALUE_DO_NOT_EXPOSE',
     )),
     'TEST_CLOUD_PREFLIGHT_BLOCKED',
+  );
+});
+
+test('ordinary lane reports the exact cleanup phase without exposing provider details', async () => {
+  const source = await readFile('scripts/verification/test-cloud-lane.mjs', 'utf8');
+  for (const code of [
+    'CLEANUP_EXECUTION_FAILED',
+    'CLEANUP_ABSENCE_PROOF_FAILED',
+    'CLEANUP_LEASE_CLOSE_FAILED',
+  ]) {
+    assert.match(source, new RegExp(`'${code}'`, 'u'));
+  }
+  assert.match(
+    source,
+    /cleanupFailure = result\('BLOCKED', null, 'CLEANUP_EXECUTION_FAILED'\);/u,
+  );
+  assert.match(
+    source,
+    /cleanupFailure = result\('BLOCKED', null, 'CLEANUP_ABSENCE_PROOF_FAILED'\);/u,
+  );
+  assert.match(
+    source,
+    /cleanupFailure = result\('BLOCKED', null, 'CLEANUP_LEASE_CLOSE_FAILED'\);/u,
   );
 });
