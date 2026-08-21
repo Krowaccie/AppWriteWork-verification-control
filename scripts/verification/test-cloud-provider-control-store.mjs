@@ -669,6 +669,9 @@ function recoveryProviderProofFailureCode(error) {
     ['Recovery source owner workflow is invalid.', 'RECOVERY_ACCOUNT_SESSION_PROOF_LEASE_OWNER_WORKFLOW_INVALID'],
     ['Recovery lease state is invalid.', 'RECOVERY_ACCOUNT_SESSION_PROOF_LEASE_RECOVERY_STATE_INVALID'],
     ['Recovery projection evidence is invalid.', 'RECOVERY_ACCOUNT_SESSION_PROOF_PROJECTION_INVALID'],
+    ['Recovery projection evidence is missing.', 'RECOVERY_ACCOUNT_SESSION_PROOF_PROJECTION_MISSING'],
+    ['Recovery projection evidence is unexpected.', 'RECOVERY_ACCOUNT_SESSION_PROOF_PROJECTION_UNEXPECTED'],
+    ['Recovery projection evidence is mismatched.', 'RECOVERY_ACCOUNT_SESSION_PROOF_PROJECTION_MISMATCH'],
   ]);
   return groups.get(error.message) ?? 'RECOVERY_ACCOUNT_SESSION_PROVIDER_PROOF_INVALID';
 }
@@ -1507,9 +1510,15 @@ function reconstructProviderRecoveryProof(snapshot, recoveryContext) {
   for (const { intentId, projection } of snapshot.intentProjections) {
     const expected = latest.get(intentId);
     const recoveryIntent = currentIntents.find((intent) => intent.intentId === intentId);
+    if (projection === null) {
+      throw new TypeError('Recovery projection evidence is missing.');
+    }
+    if (recoveryIntent === undefined && expected === undefined) {
+      throw new TypeError('Recovery projection evidence is unexpected.');
+    }
     if ((recoveryIntent === undefined || !same(recoveryIntent, projection))
       && (expected === undefined || !same(expected, projection))) {
-      throw new TypeError('Recovery projection evidence is invalid.');
+      throw new TypeError('Recovery projection evidence is mismatched.');
     }
   }
   const primaryExecutionIntents=[...latest.values()].filter((intent)=>(
