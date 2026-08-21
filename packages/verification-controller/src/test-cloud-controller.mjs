@@ -1392,6 +1392,7 @@ export function createProductionHostedDependencies(args) {
         clock,
         siteIdentityReader: siteIdentityReader.value,
         expectedIdentity: source.artifactSet.buildIdentity,
+        expectedSourceTreeDigest: source.artifactSet.artifactManifest.sourceTreeDigest,
       });
       const qualifyRunner = async ({ functionDeployments }) => {
         const runner = functionDeployments.find(

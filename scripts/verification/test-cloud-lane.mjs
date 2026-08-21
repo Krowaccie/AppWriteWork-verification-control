@@ -111,6 +111,8 @@ const SAFE_OPERATION_DIAGNOSTIC_CODES = new Set([
   'TEST_CLOUD_PREFLIGHT_PROJECTION_MISMATCH',
   'TEST_CLOUD_PREFLIGHT_LEASE_INVALID',
   'TEST_CLOUD_PREFLIGHT_INTERNAL_INVALID',
+  'SITE_IDENTITY_MISMATCH',
+  'SITE_IDENTITY_READBACK_FAILED',
 ]);
 const E2E_PASS_KEYS = Object.freeze(['capability', 'lease', 'passed']);
 const E2E_FAILURE_STATE_KEYS = Object.freeze(['capability', 'lease']);
@@ -603,7 +605,10 @@ function siteDeploymentObservation(value, artifactSet) {
   if (
     expectedSite === null
     || observation.logicalTarget !== expectedSite.logicalTarget
-    || observation.artifactTransportDigest !== expectedSite.transportDigest
+    || (
+      observation.deploymentId !== artifactSet.artifactManifest.sourceRevision
+      && observation.artifactTransportDigest !== expectedSite.transportDigest
+    )
   ) return null;
   return observation;
 }
