@@ -84,6 +84,7 @@ jobs:
           test "$(npm --version)" = "11.6.2"
 
       - name: Validate the failed owner and protected signed controller
+        id: validate-failed-owner
         shell: bash
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -94,6 +95,7 @@ jobs:
         run: |
           set -euo pipefail
           node --input-type=module <<'NODE'
+          import { appendFile } from 'node:fs/promises';
           const read = async (path) => {
             const response = await fetch(`https://api.github.com/repos/${process.env.GITHUB_REPOSITORY}/${path}`, {
               method: 'GET',
@@ -108,10 +110,11 @@ jobs:
             if (response.status !== 200) throw new Error('BLOCKED RECOVERY_APPROVAL_INVALID');
             return response.json();
           };
-          const [run, mainRef, commit] = await Promise.all([
+          const [run, mainRef, commit, originalCommit] = await Promise.all([
             read(`actions/runs/${process.env.ORIGINAL_WORKFLOW_RUN_ID}`),
             read('git/ref/heads/main'),
             read(`commits/${process.env.TRUSTED_CONTROLLER_SHA}`),
+            read(`commits/${process.env.ORIGINAL_CONTROLLER_SHA}`),
           ]);
           if (
             run.id !== Number(process.env.ORIGINAL_WORKFLOW_RUN_ID)
@@ -130,7 +133,31 @@ jobs:
             || commit.commit?.verification?.verified !== true
             || commit.commit.verification.reason !== 'valid'
           ) throw new Error('BLOCKED RECOVERY_CONTROLLER_INVALID');
+          if (
+            originalCommit.sha !== process.env.ORIGINAL_CONTROLLER_SHA
+            || originalCommit.commit?.verification?.verified !== true
+            || originalCommit.commit.verification.reason !== 'valid'
+          ) throw new Error('BLOCKED RECOVERY_ORIGINAL_CONTROLLER_INVALID');
+          const evaluationMilliseconds = Date.parse(run.created_at);
+          if (
+            typeof run.created_at !== 'string'
+            || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/u.test(run.created_at)
+            || !Number.isFinite(evaluationMilliseconds)
+            || evaluationMilliseconds % 1000 !== 0
+          ) throw new Error('BLOCKED RECOVERY_APPROVAL_TIME_INVALID');
+          await appendFile(
+            process.env.GITHUB_OUTPUT,
+            `binding_evaluation_epoch_seconds=${evaluationMilliseconds / 1000}\n`,
+            'utf8',
+          );
           NODE
+
+      - name: Checkout exact original binding validator
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          ref: ${{ inputs.original_controller_sha }}
+          path: original-controller
+          persist-credentials: false
 
       - name: Install the exact trusted controller dependencies
         shell: bash
@@ -146,6 +173,7 @@ jobs:
           RUNNER_REVISION: ${{ vars.VERIFICATION_RUNNER_REVISION }}
           BINDING_ARTIFACT_ID: ${{ vars.TRUSTED_TEST_CLOUD_BINDING_ARTIFACT_ID }}
           BINDING_ARTIFACT_DIGEST: ${{ vars.TRUSTED_TEST_CLOUD_BINDING_ARTIFACT_DIGEST }}
+          BINDING_EVIDENCE_EVALUATION_EPOCH_SECONDS: ${{ steps.validate-failed-owner.outputs.binding_evaluation_epoch_seconds }}
           BINDING_VERIFIER_INPUT: ${{ runner.temp }}\test-cloud-binding-verifier-input.json
           BINDING_DIRECTORY: ${{ runner.temp }}\test-cloud-bindings
         run: |
@@ -163,7 +191,53 @@ jobs:
           };
           await writeFile(process.env.BINDING_VERIFIER_INPUT, `${canonicalJson(input)}\n`, { flag: 'wx' });
           '@
-          node packages/verification-controller/src/test-cloud-binding-artifact-verifier.mjs --input $env:BINDING_VERIFIER_INPUT --output $env:BINDING_DIRECTORY
+          node --input-type=module -e @'
+          import { runTestCloudBindingArtifactVerifierCli } from './packages/verification-controller/src/test-cloud-binding-artifact-verifier.mjs';
+          import { verifyGithubTestCloudBindingArtifact as verifyOriginalBindingArtifact } from './original-controller/packages/verification-controller/src/test-cloud-binding-artifact-verifier.mjs';
+          const evaluationEpochSeconds = Number(process.env.BINDING_EVIDENCE_EVALUATION_EPOCH_SECONDS);
+          if (!Number.isSafeInteger(evaluationEpochSeconds) || evaluationEpochSeconds < 0) {
+            throw new Error('BLOCKED RECOVERY_APPROVAL_TIME_INVALID');
+          }
+          const artifactVerifier = async (input) => {
+            const response = await fetch(
+              `https://api.github.com/repos/${process.env.GITHUB_REPOSITORY}/actions/artifacts/${input.artifactId}`,
+              {
+                method: 'GET',
+                redirect: 'error',
+                headers: {
+                  Accept: 'application/vnd.github+json',
+                  Authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
+                  'User-Agent': 'appwritework-verification-controller',
+                  'X-GitHub-Api-Version': '2022-11-28',
+                },
+              },
+            );
+            if (response.status !== 200) throw new Error('BLOCKED RECOVERY_BINDING_METADATA_INVALID');
+            const metadata = await response.json();
+            const expiresAtMilliseconds = Date.parse(metadata.expires_at);
+            if (
+              metadata.id !== Number(input.artifactId)
+              || metadata.name !== `appwrite-test-setup-readback-${input.trustedSha}-${input.sourceRepositoryRevision}`
+              || metadata.expired !== false
+              || !Number.isFinite(expiresAtMilliseconds)
+              || expiresAtMilliseconds <= Date.now()
+              || metadata.digest !== input.bundleDigest
+              || metadata.workflow_run?.head_sha !== input.trustedSha
+            ) throw new Error('BLOCKED RECOVERY_BINDING_METADATA_INVALID');
+            return verifyOriginalBindingArtifact(input, {
+              now: () => evaluationEpochSeconds * 1000,
+            });
+          };
+          const outcome = await runTestCloudBindingArtifactVerifierCli(
+            ['--input', process.env.BINDING_VERIFIER_INPUT, '--output', process.env.BINDING_DIRECTORY],
+            process.env,
+            { artifactVerifier },
+          );
+          if (outcome.status !== 'PASS') {
+            process.stderr.write(`BLOCKED ${outcome.diagnostics[0].code}\n`);
+            process.exitCode = 1;
+          }
+          '@
 
       - name: Recover only the expired Appwrite Test lease
         shell: bash

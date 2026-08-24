@@ -444,7 +444,12 @@ export async function runTestCloudBindingArtifactVerifierCli(
       'artifactId', 'bundleDigest', 'initialSeed', 'runnerRevision',
       'sourceRepositoryRevision', 'trustedSha',
     ])) return blocked('TEST_CLOUD_BINDING_ARTIFACT_CLI_INVALID');
-    const verified = await verifyGithubTestCloudBindingArtifact({
+    const artifactVerifier = dependencies.artifactVerifier
+      ?? verifyGithubTestCloudBindingArtifact;
+    if (typeof artifactVerifier !== 'function') {
+      return blocked('TEST_CLOUD_BINDING_ARTIFACT_CLI_INVALID');
+    }
+    const verified = await artifactVerifier({
       ...cliInput,
       authorization: environment.GITHUB_TOKEN,
       repository: environment.GITHUB_REPOSITORY,
