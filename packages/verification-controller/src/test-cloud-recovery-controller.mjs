@@ -22,6 +22,7 @@ import {
   recoverTestCloud,
 } from '../../../scripts/verification/test-cloud-recovery.mjs';
 import { qualifyExecutionObservationReadback } from '../../../scripts/verification/test-cloud-setup-check.mjs';
+import { contentDigestToRowId } from '../../../scripts/verification/test-cloud-row-id.mjs';
 import inventory from '../../../dev/verification/environments/test-cloud.inventory.v1.json' with {
   type: 'json',
 };
@@ -203,6 +204,107 @@ function exactSourceLease(value, authority) {
     && DIGEST.test(value.environmentDigest ?? '')
     && DIGEST.test(value.ledgerDigest ?? '')
     && DIGEST.test(value.leaseTokenDigest ?? '');
+}
+
+function exactExpiredActiveSourceLease(value, authority, nowEpochSeconds) {
+  const expectedRunId = `verify-${authority.sourceRevision.slice(0, 12)}`
+    + `-${authority.sourceRunId}-${authority.sourceRunAttempt}`;
+  const expiresAtMilliseconds = Date.parse(value?.expiresAt);
+  return exactObject(value, LEASE_KEYS)
+    && value.leaseRowId === inventory.control.leaseRowId
+    && Number.isSafeInteger(value.leaseVersion)
+    && value.leaseVersion >= 0
+    && value.leaseVersion < Number.MAX_SAFE_INTEGER
+    && value.ownerRunId === expectedRunId
+    && value.ownerWorkflowRunId === authority.sourceRunId
+    && value.cleanupDebt === false
+    && value.state === 'active'
+    && DIGEST.test(value.environmentDigest ?? '')
+    && DIGEST.test(value.ledgerDigest ?? '')
+    && DIGEST.test(value.leaseTokenDigest ?? '')
+    && Number.isSafeInteger(nowEpochSeconds)
+    && nowEpochSeconds >= 0
+    && Number.isFinite(expiresAtMilliseconds)
+    && expiresAtMilliseconds <= nowEpochSeconds * 1000;
+}
+
+async function markExpiredActiveLeaseCleanupDebt(
+  controlClient,
+  lease,
+  authority,
+  nowEpochSeconds,
+) {
+  if (exactSourceLease(lease, authority)) return Object.freeze(lease);
+  if (!exactExpiredActiveSourceLease(lease, authority, nowEpochSeconds)) return null;
+  const event = Object.freeze({
+    schemaVersion: 'verification-audit-event.v1',
+    previousLedgerDigest: lease.ledgerDigest,
+    runId: lease.ownerRunId,
+    leaseVersionBefore: lease.leaseVersion,
+    leaseVersionAfter: lease.leaseVersion + 1,
+    transition: 'lease.cleanup_debt',
+    intentId: null,
+    intentProjectionDigest: null,
+  });
+  const eventDigest = digest(event);
+  const nextLease = Object.freeze({
+    ...lease,
+    state: 'cleanup-debt',
+    cleanupDebt: true,
+    leaseVersion: lease.leaseVersion + 1,
+    ledgerDigest: eventDigest,
+  });
+  const opened = resultValue(await controlClient.createTransaction({ ttl: 60 }));
+  if (!exactObject(opened, ['status', 'transactionId'])
+    || opened.status !== 'pending'
+    || typeof opened.transactionId !== 'string'
+    || opened.transactionId.length === 0) return null;
+  const leasePatch = { ...nextLease };
+  delete leasePatch.leaseVersion;
+  const staged = resultValue(await controlClient.createTransactionOperations({
+    transactionId: opened.transactionId,
+    operations: [
+      {
+        action: 'createRow',
+        tableId: inventory.control.auditTableId,
+        rowId: contentDigestToRowId(eventDigest),
+        data: event,
+      },
+      {
+        action: 'incrementRowColumn',
+        tableId: inventory.control.leaseTableId,
+        rowId: inventory.control.leaseRowId,
+        column: 'leaseVersion',
+        value: 1,
+        max: nextLease.leaseVersion,
+      },
+      {
+        action: 'updateRow',
+        tableId: inventory.control.leaseTableId,
+        rowId: inventory.control.leaseRowId,
+        data: leasePatch,
+      },
+    ],
+  }));
+  if (!exactObject(staged, ['status', 'transactionId'])
+    || staged.status !== 'pending'
+    || staged.transactionId !== opened.transactionId) return null;
+  const committed = resultValue(await controlClient.commitOrRollbackTransaction({
+    action: 'commit',
+    transactionId: opened.transactionId,
+  }));
+  if (!exactObject(committed, ['status', 'transactionId'])
+    || committed.transactionId !== opened.transactionId
+    || !['committed', 'pending'].includes(committed.status)) return null;
+  const read = resultValue(await controlClient.getRow({
+    rowId: inventory.control.leaseRowId,
+    tableId: inventory.control.leaseTableId,
+  }));
+  return exactObject(read, ['data', 'rowId'])
+    && read.rowId === inventory.control.leaseRowId
+    && canonicalJson(read.data) === canonicalJson(nextLease)
+    ? nextLease
+    : null;
 }
 
 function exactEmptyAccountStage(outcome) {
@@ -492,11 +594,17 @@ export async function runTestCloudRecoveryStateMachine(args) {
       tableId: inventory.control.leaseTableId,
     });
     const readValue = resultValue(read);
-    const lease = exactObject(readValue, ['data', 'rowId'])
+    const sourceLease = exactObject(readValue, ['data', 'rowId'])
       && readValue.rowId === inventory.control.leaseRowId
       ? readValue.data
       : null;
-    if (!exactSourceLease(lease, recoveryAuthority)) {
+    const lease = await markExpiredActiveLeaseCleanupDebt(
+      controlClient,
+      sourceLease,
+      recoveryAuthority,
+      nowEpochSeconds,
+    );
+    if (lease === null) {
       return blocked('RECOVERY_SOURCE_BINDING_INVALID');
     }
     const createStore = () => createProviderRecoveryControlStore(Object.freeze({

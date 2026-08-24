@@ -1588,7 +1588,8 @@ export function createProviderRecoveryControlStore(args = {}) {
     const reversedTrail = [];
     const seenDigests = new Set();
     const intentIds = new Set();
-    let authoritativeRunId=lease.ownerRunId;
+    let authoritativeRunId = lease.ownerRunId;
+    let withinAuthoritativeLeaseGeneration = true;
     let auditDigest = lease.ledgerDigest;
     let expectedLeaseVersionAfter = lease.leaseVersion;
 
@@ -1599,8 +1600,12 @@ export function createProviderRecoveryControlStore(args = {}) {
       if (event === null || event.leaseVersionAfter !== expectedLeaseVersionAfter) {
         mismatch('AUDIT_CHAIN_MISMATCH');
       }
-      if(reversedTrail.length===0&&authoritativeRunId===null&&lease.state==='idle'
-        &&event.transition==='lease.close')authoritativeRunId=event.runId;
+      if (reversedTrail.length === 0
+        && authoritativeRunId === null
+        && lease.state === 'idle'
+        && event.transition === 'lease.close') {
+        authoritativeRunId = event.runId;
+      }
       let snapshot = null;
       if (event.intentId === null || event.intentProjectionDigest === null) {
         if (event.intentId !== null || event.intentProjectionDigest !== null) {
@@ -1611,9 +1616,16 @@ export function createProviderRecoveryControlStore(args = {}) {
         if (snapshot === null || snapshot.intentId !== event.intentId) {
           mismatch('AUDIT_CHAIN_MISMATCH');
         }
-        if (event.runId === authoritativeRunId) intentIds.add(event.intentId);
+        if (withinAuthoritativeLeaseGeneration && event.runId === authoritativeRunId) {
+          intentIds.add(event.intentId);
+        }
       }
       reversedTrail.push(deepFreeze({ digest: auditDigest, event, snapshot }));
+      if (withinAuthoritativeLeaseGeneration
+        && event.transition === 'lease.acquire'
+        && event.runId === authoritativeRunId) {
+        withinAuthoritativeLeaseGeneration = false;
+      }
       expectedLeaseVersionAfter = event.leaseVersionBefore;
       auditDigest = event.previousLedgerDigest;
     }
