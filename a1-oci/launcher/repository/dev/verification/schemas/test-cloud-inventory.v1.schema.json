@@ -21,7 +21,7 @@
   "properties": {
     "schemaVersion": { "const": "test-cloud-inventory.v1" },
     "environmentClass": { "const": "appwrite-cloud-test" },
-    "providerContractDigest": { "const": "sha256:71901b60028cfd680fee8d75254305a27fdbebb07e6d862d69dfe087c6a56ebc" },
+    "providerContractDigest": { "const": "sha256:47a1d778ca8b8cea333b10574ffbc2db488fd711c12a1c40faf9da5235e27184" },
     "sourceBranch": { "const": "main" },
     "environment": {
       "type": "object",

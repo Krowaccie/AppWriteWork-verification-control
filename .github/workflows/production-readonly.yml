@@ -1,0 +1,402 @@
+name: Production Readonly
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+  workflow_run:
+    workflows: ["Release Production"]
+    types: [completed]
+permissions:
+  contents: read
+jobs:
+  controller-artifact-proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      status: ${{ steps.controller-artifact.outputs.status }}
+      repository: ${{ steps.controller-artifact.outputs.repository }}
+      sha: ${{ steps.controller-artifact.outputs.sha }}
+      artifact_id: ${{ steps.controller-artifact.outputs.artifact_id }}
+      bundle_digest: ${{ steps.controller-artifact.outputs.bundle_digest }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          ref: ${{ vars.TRUSTED_CONTROLLER_SHA }}
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '24'
+      - name: Prove exact immutable controller artifact
+        id: controller-artifact
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_SHA: ${{ github.sha }}
+          TRUSTED_CONTROLLER_SHA: ${{ vars.TRUSTED_CONTROLLER_SHA }}
+          TRUSTED_CONTROLLER_ARTIFACT_ID: ${{ vars.TRUSTED_CONTROLLER_ARTIFACT_ID }}
+          TRUSTED_CONTROLLER_BUNDLE_DIGEST: ${{ vars.TRUSTED_CONTROLLER_BUNDLE_DIGEST }}
+          CONTROLLER_ARTIFACT_READ_TOKEN: ${{ github.token }}
+        run: |
+          env -i \
+            HOME="$HOME" \
+            PATH="$PATH" \
+            GITHUB_OUTPUT="$GITHUB_OUTPUT" \
+            GITHUB_REPOSITORY="$GITHUB_REPOSITORY" \
+            GITHUB_SHA="$GITHUB_SHA" \
+            TRUSTED_CONTROLLER_SHA="$TRUSTED_CONTROLLER_SHA" \
+            TRUSTED_CONTROLLER_ARTIFACT_ID="$TRUSTED_CONTROLLER_ARTIFACT_ID" \
+            TRUSTED_CONTROLLER_BUNDLE_DIGEST="$TRUSTED_CONTROLLER_BUNDLE_DIGEST" \
+            CONTROLLER_ARTIFACT_READ_TOKEN="$CONTROLLER_ARTIFACT_READ_TOKEN" \
+            node --input-type=module <<'NODE'
+          import { appendFileSync } from 'node:fs';
+          import { verifyGithubControllerArtifact } from './packages/verification-controller/src/github-controller-artifact-verifier.mjs';
+
+          const proof = await verifyGithubControllerArtifact({
+            artifactId: process.env.TRUSTED_CONTROLLER_ARTIFACT_ID,
+            authorization: process.env.CONTROLLER_ARTIFACT_READ_TOKEN,
+            bundleDigest: process.env.TRUSTED_CONTROLLER_BUNDLE_DIGEST,
+            repository: process.env.GITHUB_REPOSITORY,
+            requiredEntrypoint: 'packages/verification-controller/workflows/production-readonly.yml',
+            runtimeSha: process.env.GITHUB_SHA,
+            trustedSha: process.env.TRUSTED_CONTROLLER_SHA,
+          });
+          if (proof.status !== 'PASS') process.exit(2);
+          appendFileSync(process.env.GITHUB_OUTPUT, [
+            'status=PASS',
+            'repository=' + proof.value.controllerRepository,
+            'sha=' + proof.value.controllerBundleSha,
+            'artifact_id=' + proof.value.controllerArtifactId,
+            'bundle_digest=' + proof.value.controllerBundleDigest,
+            '',
+          ].join('\n'), 'utf8');
+          NODE
+
+  release-record-handoff:
+    needs: controller-artifact-proof
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: github.repository == 'Krowaccie/AppWriteWork-verification-control' && github.sha == vars.TRUSTED_CONTROLLER_SHA && (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success')
+    permissions:
+      contents: read
+      actions: read
+      deployments: read
+    outputs:
+      handoff_digest: ${{ steps.release-record-handoff.outputs.handoff_digest }}
+      record_artifact_id: ${{ steps.release-record-handoff.outputs.record_artifact_id }}
+      record_artifact_digest: ${{ steps.release-record-handoff.outputs.record_artifact_digest }}
+      handoff_artifact_id: ${{ steps.release-record-handoff-artifact.outputs.artifact-id }}
+      handoff_artifact_digest: ${{ steps.release-record-handoff-artifact.outputs.artifact-digest }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          ref: ${{ vars.TRUSTED_CONTROLLER_SHA }}
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '24'
+      - name: Reattest controller proof before GitHub credential mapping
+        shell: bash
+        env:
+          PROOF_STATUS: ${{ needs.controller-artifact-proof.outputs.status }}
+          PROOF_REPOSITORY: ${{ needs.controller-artifact-proof.outputs.repository }}
+          PROOF_SHA: ${{ needs.controller-artifact-proof.outputs.sha }}
+          PROOF_ARTIFACT_ID: ${{ needs.controller-artifact-proof.outputs.artifact_id }}
+          PROOF_BUNDLE_DIGEST: ${{ needs.controller-artifact-proof.outputs.bundle_digest }}
+          TRUSTED_CONTROLLER_SHA: ${{ vars.TRUSTED_CONTROLLER_SHA }}
+          TRUSTED_CONTROLLER_ARTIFACT_ID: ${{ vars.TRUSTED_CONTROLLER_ARTIFACT_ID }}
+          TRUSTED_CONTROLLER_BUNDLE_DIGEST: ${{ vars.TRUSTED_CONTROLLER_BUNDLE_DIGEST }}
+        run: |
+          env -i \
+            HOME="$HOME" \
+            PATH="$PATH" \
+            GITHUB_REPOSITORY="$GITHUB_REPOSITORY" \
+            GITHUB_SHA="$GITHUB_SHA" \
+            PROOF_STATUS="$PROOF_STATUS" \
+            PROOF_REPOSITORY="$PROOF_REPOSITORY" \
+            PROOF_SHA="$PROOF_SHA" \
+            PROOF_ARTIFACT_ID="$PROOF_ARTIFACT_ID" \
+            PROOF_BUNDLE_DIGEST="$PROOF_BUNDLE_DIGEST" \
+            TRUSTED_CONTROLLER_SHA="$TRUSTED_CONTROLLER_SHA" \
+            TRUSTED_CONTROLLER_ARTIFACT_ID="$TRUSTED_CONTROLLER_ARTIFACT_ID" \
+            TRUSTED_CONTROLLER_BUNDLE_DIGEST="$TRUSTED_CONTROLLER_BUNDLE_DIGEST" \
+            node --input-type=module <<'NODE'
+          import { reattestLocalControllerArtifact } from './packages/verification-controller/src/github-controller-artifact-verifier.mjs';
+          const proof = await reattestLocalControllerArtifact({
+            artifactId: process.env.PROOF_ARTIFACT_ID,
+            bundleDigest: process.env.PROOF_BUNDLE_DIGEST,
+            proofRepository: process.env.PROOF_REPOSITORY,
+            proofSha: process.env.PROOF_SHA,
+            proofStatus: process.env.PROOF_STATUS,
+            repository: process.env.GITHUB_REPOSITORY,
+            requiredEntrypoint: 'packages/verification-controller/src/create-verified-release-record-handoff.mjs',
+            runtimeSha: process.env.GITHUB_SHA,
+            trustedArtifactId: process.env.TRUSTED_CONTROLLER_ARTIFACT_ID,
+            trustedBundleDigest: process.env.TRUSTED_CONTROLLER_BUNDLE_DIGEST,
+            trustedSha: process.env.TRUSTED_CONTROLLER_SHA,
+          });
+          if (proof.status !== 'PASS') process.exit(2);
+          NODE
+      - name: Create verified release-record handoff
+        id: release-record-handoff
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
+          TRUSTED_CONTROLLER_SHA: ${{ vars.TRUSTED_CONTROLLER_SHA }}
+          TRUSTED_CONTROLLER_ARTIFACT_ID: ${{ vars.TRUSTED_CONTROLLER_ARTIFACT_ID }}
+          TRUSTED_CONTROLLER_BUNDLE_DIGEST: ${{ vars.TRUSTED_CONTROLLER_BUNDLE_DIGEST }}
+          PROOF_STATUS: ${{ needs.controller-artifact-proof.outputs.status }}
+          PROOF_REPOSITORY: ${{ needs.controller-artifact-proof.outputs.repository }}
+          PROOF_SHA: ${{ needs.controller-artifact-proof.outputs.sha }}
+          PROOF_ARTIFACT_ID: ${{ needs.controller-artifact-proof.outputs.artifact_id }}
+          PROOF_BUNDLE_DIGEST: ${{ needs.controller-artifact-proof.outputs.bundle_digest }}
+          TRUSTED_PRODUCTION_RELEASE_RECORD_ARTIFACT_ID: ${{ vars.TRUSTED_PRODUCTION_RELEASE_RECORD_ARTIFACT_ID }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          env -i \
+            HOME="$HOME" \
+            PATH="$PATH" \
+            GITHUB_OUTPUT="$GITHUB_OUTPUT" \
+            GITHUB_REPOSITORY="$GITHUB_REPOSITORY" \
+            GITHUB_SHA="$GITHUB_SHA" \
+            GITHUB_RUN_ID="$GITHUB_RUN_ID" \
+            GITHUB_RUN_ATTEMPT="$GITHUB_RUN_ATTEMPT" \
+            TRUSTED_CONTROLLER_SHA="$TRUSTED_CONTROLLER_SHA" \
+            TRUSTED_CONTROLLER_ARTIFACT_ID="$TRUSTED_CONTROLLER_ARTIFACT_ID" \
+            TRUSTED_CONTROLLER_BUNDLE_DIGEST="$TRUSTED_CONTROLLER_BUNDLE_DIGEST" \
+            PROOF_STATUS="$PROOF_STATUS" \
+            PROOF_REPOSITORY="$PROOF_REPOSITORY" \
+            PROOF_SHA="$PROOF_SHA" \
+            PROOF_ARTIFACT_ID="$PROOF_ARTIFACT_ID" \
+            PROOF_BUNDLE_DIGEST="$PROOF_BUNDLE_DIGEST" \
+            GITHUB_TOKEN="$GITHUB_TOKEN" \
+            node packages/verification-controller/src/create-verified-release-record-handoff.mjs --artifact-id "$TRUSTED_PRODUCTION_RELEASE_RECORD_ARTIFACT_ID" --output verified-release-record-handoff.v1.json
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        id: release-record-handoff-artifact
+        with:
+          name: verified-release-record-handoff-${{ github.run_id }}-${{ github.run_attempt }}
+          path: verified-release-record-handoff.v1.json
+          retention-days: 1
+
+  production-metadata:
+    needs:
+      - controller-artifact-proof
+      - release-record-handoff
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: production-readonly
+    if: github.repository == 'Krowaccie/AppWriteWork-verification-control' && github.sha == vars.TRUSTED_CONTROLLER_SHA && (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success')
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      policy_digest: ${{ steps.policy.outputs.policy_digest }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          ref: ${{ vars.TRUSTED_CONTROLLER_SHA }}
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '24'
+      - name: Reattest proof tuple and checkout before credential mapping
+        shell: bash
+        env:
+          PROOF_STATUS: ${{ needs.controller-artifact-proof.outputs.status }}
+          PROOF_REPOSITORY: ${{ needs.controller-artifact-proof.outputs.repository }}
+          PROOF_SHA: ${{ needs.controller-artifact-proof.outputs.sha }}
+          PROOF_ARTIFACT_ID: ${{ needs.controller-artifact-proof.outputs.artifact_id }}
+          PROOF_BUNDLE_DIGEST: ${{ needs.controller-artifact-proof.outputs.bundle_digest }}
+          TRUSTED_CONTROLLER_SHA: ${{ vars.TRUSTED_CONTROLLER_SHA }}
+          TRUSTED_CONTROLLER_ARTIFACT_ID: ${{ vars.TRUSTED_CONTROLLER_ARTIFACT_ID }}
+          TRUSTED_CONTROLLER_BUNDLE_DIGEST: ${{ vars.TRUSTED_CONTROLLER_BUNDLE_DIGEST }}
+        run: |
+          env -i \
+            HOME="$HOME" \
+            PATH="$PATH" \
+            GITHUB_REPOSITORY="$GITHUB_REPOSITORY" \
+            GITHUB_SHA="$GITHUB_SHA" \
+            PROOF_STATUS="$PROOF_STATUS" \
+            PROOF_REPOSITORY="$PROOF_REPOSITORY" \
+            PROOF_SHA="$PROOF_SHA" \
+            PROOF_ARTIFACT_ID="$PROOF_ARTIFACT_ID" \
+            PROOF_BUNDLE_DIGEST="$PROOF_BUNDLE_DIGEST" \
+            TRUSTED_CONTROLLER_SHA="$TRUSTED_CONTROLLER_SHA" \
+            TRUSTED_CONTROLLER_ARTIFACT_ID="$TRUSTED_CONTROLLER_ARTIFACT_ID" \
+            TRUSTED_CONTROLLER_BUNDLE_DIGEST="$TRUSTED_CONTROLLER_BUNDLE_DIGEST" \
+            node --input-type=module <<'NODE'
+          import { reattestLocalControllerArtifact } from './packages/verification-controller/src/github-controller-artifact-verifier.mjs';
+          const proof = await reattestLocalControllerArtifact({
+            artifactId: process.env.PROOF_ARTIFACT_ID,
+            bundleDigest: process.env.PROOF_BUNDLE_DIGEST,
+            proofRepository: process.env.PROOF_REPOSITORY,
+            proofSha: process.env.PROOF_SHA,
+            proofStatus: process.env.PROOF_STATUS,
+            repository: process.env.GITHUB_REPOSITORY,
+            requiredEntrypoint: 'packages/verification-controller/src/create-production-browser-policy.mjs',
+            runtimeSha: process.env.GITHUB_SHA,
+            trustedArtifactId: process.env.TRUSTED_CONTROLLER_ARTIFACT_ID,
+            trustedBundleDigest: process.env.TRUSTED_CONTROLLER_BUNDLE_DIGEST,
+            trustedSha: process.env.TRUSTED_CONTROLLER_SHA,
+          });
+          if (proof.status !== 'PASS') process.exit(2);
+          NODE
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
+        with:
+          artifact-ids: ${{ needs.release-record-handoff.outputs.handoff_artifact_id }}
+          path: .verified-release-record
+      - name: Prevalidate exact release-record handoff before Appwrite credential mapping
+        shell: bash
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
+          TRUSTED_CONTROLLER_SHA: ${{ vars.TRUSTED_CONTROLLER_SHA }}
+          TRUSTED_CONTROLLER_ARTIFACT_ID: ${{ vars.TRUSTED_CONTROLLER_ARTIFACT_ID }}
+          TRUSTED_CONTROLLER_BUNDLE_DIGEST: ${{ vars.TRUSTED_CONTROLLER_BUNDLE_DIGEST }}
+          EXPECTED_HANDOFF_DIGEST: ${{ needs.release-record-handoff.outputs.handoff_digest }}
+        run: |
+          env -i \
+            HOME="$HOME" \
+            PATH="$PATH" \
+            GITHUB_REPOSITORY="$GITHUB_REPOSITORY" \
+            GITHUB_SHA="$GITHUB_SHA" \
+            GITHUB_RUN_ID="$GITHUB_RUN_ID" \
+            GITHUB_RUN_ATTEMPT="$GITHUB_RUN_ATTEMPT" \
+            TRUSTED_CONTROLLER_SHA="$TRUSTED_CONTROLLER_SHA" \
+            TRUSTED_CONTROLLER_ARTIFACT_ID="$TRUSTED_CONTROLLER_ARTIFACT_ID" \
+            TRUSTED_CONTROLLER_BUNDLE_DIGEST="$TRUSTED_CONTROLLER_BUNDLE_DIGEST" \
+            EXPECTED_HANDOFF_DIGEST="$EXPECTED_HANDOFF_DIGEST" \
+            node --input-type=module <<'NODE'
+          import { readFile } from 'node:fs/promises';
+          import { parseVerifiedReleaseRecordHandoffBytes } from './packages/verification-controller/src/verified-release-record-handoff.mjs';
+          if (process.env.GITHUB_SHA !== process.env.TRUSTED_CONTROLLER_SHA) process.exit(2);
+          const handoff = parseVerifiedReleaseRecordHandoffBytes({
+            bytes: await readFile('.verified-release-record/verified-release-record-handoff.v1.json'),
+            expectedController: {
+              repository: process.env.GITHUB_REPOSITORY,
+              revision: process.env.TRUSTED_CONTROLLER_SHA,
+              artifactId: process.env.TRUSTED_CONTROLLER_ARTIFACT_ID,
+              bundleDigest: process.env.TRUSTED_CONTROLLER_BUNDLE_DIGEST,
+            },
+            expectedProducer: {
+              repository: process.env.GITHUB_REPOSITORY,
+              workflow: 'Production Readonly',
+              runId: process.env.GITHUB_RUN_ID,
+              runAttempt: Number(process.env.GITHUB_RUN_ATTEMPT),
+            },
+          });
+          if (handoff.handoffDigest !== process.env.EXPECTED_HANDOFF_DIGEST) process.exit(2);
+          NODE
+      - name: Create policy from verified release-record handoff
+        id: policy
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
+          TRUSTED_CONTROLLER_SHA: ${{ vars.TRUSTED_CONTROLLER_SHA }}
+          TRUSTED_CONTROLLER_ARTIFACT_ID: ${{ vars.TRUSTED_CONTROLLER_ARTIFACT_ID }}
+          TRUSTED_CONTROLLER_BUNDLE_DIGEST: ${{ vars.TRUSTED_CONTROLLER_BUNDLE_DIGEST }}
+          EXPECTED_HANDOFF_DIGEST: ${{ needs.release-record-handoff.outputs.handoff_digest }}
+          APPWRITE_PRODUCTION_READONLY_API_KEY: ${{ secrets.APPWRITE_PRODUCTION_READONLY_API_KEY }}
+        run: |
+          env -i \
+            HOME="$HOME" \
+            PATH="$PATH" \
+            GITHUB_OUTPUT="$GITHUB_OUTPUT" \
+            GITHUB_REPOSITORY="$GITHUB_REPOSITORY" \
+            GITHUB_SHA="$GITHUB_SHA" \
+            GITHUB_RUN_ID="$GITHUB_RUN_ID" \
+            GITHUB_RUN_ATTEMPT="$GITHUB_RUN_ATTEMPT" \
+            TRUSTED_CONTROLLER_SHA="$TRUSTED_CONTROLLER_SHA" \
+            TRUSTED_CONTROLLER_ARTIFACT_ID="$TRUSTED_CONTROLLER_ARTIFACT_ID" \
+            TRUSTED_CONTROLLER_BUNDLE_DIGEST="$TRUSTED_CONTROLLER_BUNDLE_DIGEST" \
+            EXPECTED_HANDOFF_DIGEST="$EXPECTED_HANDOFF_DIGEST" \
+            APPWRITE_PRODUCTION_READONLY_API_KEY="$APPWRITE_PRODUCTION_READONLY_API_KEY" \
+            node packages/verification-controller/src/create-production-browser-policy.mjs --verified-handoff ".verified-release-record/verified-release-record-handoff.v1.json" --expected-handoff-digest "$EXPECTED_HANDOFF_DIGEST" --output production-browser-policy.v1.json
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: production-browser-policy
+          path: production-browser-policy.v1.json
+          retention-days: 1
+
+  production-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs:
+      - controller-artifact-proof
+      - production-metadata
+    if: github.repository == 'Krowaccie/AppWriteWork-verification-control' && github.sha == vars.TRUSTED_CONTROLLER_SHA
+    container:
+      image: mcr.microsoft.com/playwright:v1.61.1-noble@sha256:5b8f294aff9041b7191c34a4bab3ac270157a28774d4b0660e9743297b697e48
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          ref: ${{ vars.TRUSTED_CONTROLLER_SHA }}
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '24'
+      - name: Validate trusted controller identity before secretless browser execution
+        shell: bash
+        env:
+          TRUSTED_CONTROLLER_SHA: ${{ vars.TRUSTED_CONTROLLER_SHA }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = Krowaccie/AppWriteWork-verification-control
+          test "$GITHUB_SHA" = "$TRUSTED_CONTROLLER_SHA"
+      - name: Reattest proof tuple and checkout before browser network execution
+        shell: bash
+        env:
+          PROOF_STATUS: ${{ needs.controller-artifact-proof.outputs.status }}
+          PROOF_REPOSITORY: ${{ needs.controller-artifact-proof.outputs.repository }}
+          PROOF_SHA: ${{ needs.controller-artifact-proof.outputs.sha }}
+          PROOF_ARTIFACT_ID: ${{ needs.controller-artifact-proof.outputs.artifact_id }}
+          PROOF_BUNDLE_DIGEST: ${{ needs.controller-artifact-proof.outputs.bundle_digest }}
+          TRUSTED_CONTROLLER_SHA: ${{ vars.TRUSTED_CONTROLLER_SHA }}
+          TRUSTED_CONTROLLER_ARTIFACT_ID: ${{ vars.TRUSTED_CONTROLLER_ARTIFACT_ID }}
+          TRUSTED_CONTROLLER_BUNDLE_DIGEST: ${{ vars.TRUSTED_CONTROLLER_BUNDLE_DIGEST }}
+        run: |
+          env -i \
+            HOME="$HOME" \
+            PATH="$PATH" \
+            GITHUB_REPOSITORY="$GITHUB_REPOSITORY" \
+            GITHUB_SHA="$GITHUB_SHA" \
+            PROOF_STATUS="$PROOF_STATUS" \
+            PROOF_REPOSITORY="$PROOF_REPOSITORY" \
+            PROOF_SHA="$PROOF_SHA" \
+            PROOF_ARTIFACT_ID="$PROOF_ARTIFACT_ID" \
+            PROOF_BUNDLE_DIGEST="$PROOF_BUNDLE_DIGEST" \
+            TRUSTED_CONTROLLER_SHA="$TRUSTED_CONTROLLER_SHA" \
+            TRUSTED_CONTROLLER_ARTIFACT_ID="$TRUSTED_CONTROLLER_ARTIFACT_ID" \
+            TRUSTED_CONTROLLER_BUNDLE_DIGEST="$TRUSTED_CONTROLLER_BUNDLE_DIGEST" \
+            node --input-type=module <<'NODE'
+          import { reattestLocalControllerArtifact } from './packages/verification-controller/src/github-controller-artifact-verifier.mjs';
+          const proof = await reattestLocalControllerArtifact({
+            artifactId: process.env.PROOF_ARTIFACT_ID,
+            bundleDigest: process.env.PROOF_BUNDLE_DIGEST,
+            proofRepository: process.env.PROOF_REPOSITORY,
+            proofSha: process.env.PROOF_SHA,
+            proofStatus: process.env.PROOF_STATUS,
+            repository: process.env.GITHUB_REPOSITORY,
+            requiredEntrypoint: 'packages/verification-controller/src/run-production-readonly-playwright.mjs',
+            runtimeSha: process.env.GITHUB_SHA,
+            trustedArtifactId: process.env.TRUSTED_CONTROLLER_ARTIFACT_ID,
+            trustedBundleDigest: process.env.TRUSTED_CONTROLLER_BUNDLE_DIGEST,
+            trustedSha: process.env.TRUSTED_CONTROLLER_SHA,
+          });
+          if (proof.status !== 'PASS') process.exit(2);
+          NODE
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
+        with:
+          name: production-browser-policy
+          path: .production-browser-policy
+      - run: npm --prefix packages/verification-controller ci --ignore-scripts
+      - name: Verify policy digest and prove no secret/token/key variable reaches the browser child
+        run: node packages/verification-controller/src/verify-production-browser-policy.mjs --policy .production-browser-policy/production-browser-policy.v1.json --expected-digest "${{ needs.production-metadata.outputs.policy_digest }}"
+      - run: npm --prefix packages/verification-controller run test:production-readonly:e2e

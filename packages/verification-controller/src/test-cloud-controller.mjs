@@ -13,6 +13,8 @@ import {
   runTestCloudLane,
   validateTestCloudArtifactSet,
 } from '../../../scripts/verification/test-cloud-lane.mjs';
+import { runTrustedTestCloudCleanup } from './test-cloud-cleanup-driver.mjs';
+import { QUALIFIED_CLEANUP_PROTOCOL } from '../../../scripts/verification/test-cloud-cleanup-protocol.mjs';
 
 const FULL_SHA = /^[0-9a-f]{40}$/;
 const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
@@ -104,7 +106,7 @@ const loadScenarioDriver = () =>
 const loadProcessContainment = () =>
   import('../../../scripts/verification/process-containment.mjs');
 const loadSourceArtifactReader = () =>
-  import('./source-artifact-reader.mjs');
+  import('./test-cloud-source-artifact-reader.mjs');
 const loadHostedSiteIdentity = () =>
   import('../../../scripts/verification/hosted-site-build-identity.mjs');
 const loadTestEnvironment = () =>
@@ -125,8 +127,12 @@ const loadTestCloudPreflight = () =>
   import('../../../scripts/verification/test-cloud-preflight.mjs');
 const loadTestCloudControlStore = () =>
   import('../../../scripts/verification/test-cloud-control-runtime.mjs');
-const loadTestCloudFixtures = () =>
-  import('../../../scripts/verification/test-cloud-fixtures.mjs');
+const loadTestCloudFixtureClock = () =>
+  import('./test-cloud-fixture-clock.mjs');
+const loadTestCloudFixtureIntentProducer = () =>
+  import('./test-cloud-fixture-intent-producer.mjs');
+const loadTestCloudBrowserArtifactSet = () =>
+  import('./test-cloud-browser-artifact-set.mjs');
 const loadTestCloudDeploy = () =>
   import('../../../scripts/verification/test-cloud-deploy.mjs');
 const loadEvidence = () => import('../../../scripts/verification/evidence.mjs');
@@ -260,12 +266,11 @@ const PRODUCTION_LANE_ARGUMENT_KEYS = Object.freeze([
 const PRODUCTION_LANE_OPERATION_KEYS = Object.freeze([
   'acquireLease',
   'cleanup',
-  'closeLease',
   'deployFunctionArtifacts',
   'deploySiteArtifact',
   'preflight',
-  'proveAbsence',
   'qualifyRunner',
+  'runTrustedFixtureIntentProducer',
   'runTrustedScenario',
 ].sort());
 const PRODUCTION_FACADE_KEYS = Object.freeze([
@@ -273,6 +278,27 @@ const PRODUCTION_FACADE_KEYS = Object.freeze([
   'scenarioIds',
   'scenarioInventoryDigest',
 ].sort());
+const TASK8_FAILURE_STATE_KEYS = Object.freeze(['capability', 'lease']);
+const TASK8_LEASE_KEYS = Object.freeze([
+  'acquiredAt', 'cleanupDebt', 'environmentDigest', 'expiresAt', 'leaseRowId',
+  'leaseTokenDigest', 'leaseVersion', 'ledgerDigest', 'ownerRunId',
+  'ownerWorkflowRunId', 'renewedAt', 'state',
+].sort());
+const TASK8_STABLE_SUCCESSOR_LEASE_KEYS = Object.freeze([
+  'acquiredAt', 'environmentDigest', 'leaseRowId', 'leaseTokenDigest',
+  'ownerRunId', 'ownerWorkflowRunId',
+]);
+const TASK9_CLOSE_PROOF_KEYS = Object.freeze(['event', 'predecessorLease']);
+const TASK9_CLOSE_EVENT_KEYS = Object.freeze([
+  'intentId', 'intentProjectionDigest', 'leaseVersionAfter', 'leaseVersionBefore',
+  'previousLedgerDigest', 'runId', 'schemaVersion', 'transition',
+]);
+const TASK9_CLEANUP_RESULT_KEYS = Object.freeze(['diagnostics', 'status', 'value']);
+const TASK9_CLEANUP_VALUE_KEYS = Object.freeze(['closeProof', 'closed', 'lease']);
+const TASK9_CLEANUP_STABLE_LEASE_KEYS = Object.freeze([
+  'acquiredAt', 'cleanupDebt', 'environmentDigest', 'expiresAt', 'leaseRowId',
+  'leaseTokenDigest', 'ownerRunId', 'ownerWorkflowRunId', 'renewedAt', 'state',
+]);
 
 function deepFreeze(value, seen = new WeakSet()) {
   if (
@@ -291,8 +317,151 @@ function deepFreeze(value, seen = new WeakSet()) {
   return Object.freeze(value);
 }
 
+function ownDataValue(value, key) {
+  try {
+    if (
+      value === null
+      || (typeof value !== 'object' && typeof value !== 'function')
+      || isProxy(value)
+    ) return undefined;
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    return descriptor !== undefined && Object.hasOwn(descriptor, 'value')
+      ? descriptor.value
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function ownDataErrorCode(error) {
+  const code = ownDataValue(error, 'code');
+  return typeof code === 'string' ? code : null;
+}
+
+function singleDataDiagnostic(outcome) {
+  const diagnostics = ownDataValue(outcome, 'diagnostics');
+  if (
+    !Array.isArray(diagnostics)
+    || isProxy(diagnostics)
+    || Object.getPrototypeOf(diagnostics) !== Array.prototype
+    || diagnostics.length !== 1
+  ) return null;
+  const diagnostic = ownDataValue(diagnostics, '0');
+  return diagnostic === undefined ? null : diagnostic;
+}
+
 function digestBytes(value) {
   return `sha256:${createHash('sha256').update(value).digest('hex')}`;
+}
+
+function exactFrozenOrdinaryDataRecord(value, expectedKeys) {
+  try {
+    if (
+      value === null
+      || typeof value !== 'object'
+      || Array.isArray(value)
+      || isProxy(value)
+      || Object.getPrototypeOf(value) !== Object.prototype
+      || !Object.isFrozen(value)
+      || Object.getOwnPropertySymbols(value).length !== 0
+    ) return false;
+    const keys = Object.getOwnPropertyNames(value).sort();
+    const expected = [...expectedKeys].sort();
+    if (keys.length !== expected.length
+      || keys.some((key, index) => key !== expected[index])) return false;
+    return keys.every((key) => {
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      return descriptor?.enumerable === true
+        && descriptor.configurable === false
+        && descriptor.writable === false
+        && Object.hasOwn(descriptor, 'value');
+    });
+  } catch {
+    return false;
+  }
+}
+
+function validAtomicCleanupPass(outcome, context, cleanupEntryLease) {
+  try {
+    if (!exactFrozenOrdinaryDataRecord(outcome, TASK9_CLEANUP_RESULT_KEYS)
+      || outcome.status !== 'PASS'
+      || !exactFrozenEmptyArray(outcome.diagnostics)
+      || !exactFrozenOrdinaryDataRecord(outcome.value, TASK9_CLEANUP_VALUE_KEYS)
+      || outcome.value.closed !== true
+      || !exactFrozenOrdinaryDataRecord(outcome.value.closeProof, TASK9_CLOSE_PROOF_KEYS)) {
+      return false;
+    }
+    const candidate = outcome.value.lease;
+    const prior = outcome.value.closeProof.predecessorLease;
+    const suppliedEvent = outcome.value.closeProof.event;
+    if (
+      !exactFrozenOrdinaryDataRecord(candidate, TASK8_LEASE_KEYS)
+      || !exactFrozenOrdinaryDataRecord(prior, TASK8_LEASE_KEYS)
+      || !exactFrozenOrdinaryDataRecord(cleanupEntryLease, TASK8_LEASE_KEYS)
+      || !exactFrozenOrdinaryDataRecord(suppliedEvent, TASK9_CLOSE_EVENT_KEYS)
+      || candidate === prior
+      || candidate === suppliedEvent
+      || prior === suppliedEvent
+      || outcome.value.closeProof === candidate
+      || outcome.value.closeProof === prior
+      || outcome.value.closeProof === suppliedEvent
+      || cleanupEntryLease === prior
+      || cleanupEntryLease.state !== 'active'
+      || cleanupEntryLease.cleanupDebt !== false
+      || !Number.isSafeInteger(cleanupEntryLease.leaseVersion)
+      || prior.leaseVersion - cleanupEntryLease.leaseVersion
+        < QUALIFIED_CLEANUP_PROTOCOL.counts.knownRunnerCalls
+      || prior.leaseVersion - cleanupEntryLease.leaseVersion
+        > QUALIFIED_CLEANUP_PROTOCOL.counts.maximumRunnerCalls
+      || TASK9_CLEANUP_STABLE_LEASE_KEYS.some(
+        (key) => prior[key] !== cleanupEntryLease[key],
+      )
+      || prior.leaseRowId !== configuredInventory.control.leaseRowId
+      || prior.state !== 'active'
+      || prior.cleanupDebt !== false
+      || prior.ownerRunId !== context.runId
+      || prior.environmentDigest !== context.environmentDigest
+      || typeof prior.ownerWorkflowRunId !== 'string'
+      || !SAFE_ID.test(prior.ownerWorkflowRunId)
+      || !DIGEST.test(prior.ledgerDigest)
+      || !DIGEST.test(prior.leaseTokenDigest)
+      || !Number.isSafeInteger(prior.leaseVersion)
+      || prior.leaseVersion < 0
+      || !Number.isFinite(Date.parse(prior.acquiredAt))
+      || !Number.isFinite(Date.parse(prior.renewedAt))
+      || !Number.isFinite(Date.parse(prior.expiresAt))
+      || Date.parse(prior.renewedAt) < Date.parse(prior.acquiredAt)
+      || Date.parse(prior.expiresAt) <= Date.parse(prior.renewedAt)
+    ) return false;
+    const event = {
+      schemaVersion: 'verification-audit-event.v1',
+      previousLedgerDigest: prior.ledgerDigest,
+      runId: context.runId,
+      leaseVersionBefore: prior.leaseVersion,
+      leaseVersionAfter: prior.leaseVersion + 1,
+      transition: 'lease.close',
+      intentId: null,
+      intentProjectionDigest: null,
+    };
+    const expected = {
+      ...prior,
+      leaseVersion: prior.leaseVersion + 1,
+      state: 'idle',
+      ownerRunId: null,
+      ownerWorkflowRunId: null,
+      environmentDigest: null,
+      acquiredAt: null,
+      renewedAt: null,
+      expiresAt: null,
+      ledgerDigest: digestBytes(new TextEncoder().encode(canonicalJson(event))),
+      leaseTokenDigest: null,
+      cleanupDebt: false,
+    };
+    return canonicalJson(suppliedEvent) === canonicalJson(event)
+      && canonicalJson(candidate) === canonicalJson(expected);
+  } catch {
+    return false;
+  }
 }
 
 function validArtifact(value) {
@@ -515,7 +684,7 @@ function validControllerResult(value) {
 }
 
 function retryable(outcome) {
-  return outcome?.diagnostics?.some((diagnostic) => diagnostic?.retryable === true) === true;
+  return ownDataValue(singleDataDiagnostic(outcome), 'retryable') === true;
 }
 
 function validHostedRequest(value) {
@@ -541,14 +710,15 @@ function validHostedSourceSnapshot(value, request) {
     && validateArtifactSetOutput(value.artifactSet, value.selection);
 }
 
-export function selectSafeDiagnosticCode(outcome, fallback, safeDiagnosticCodes) {
-  const outcomeCode = outcome?.diagnostics?.[0]?.code;
-  return safeDiagnosticCodes instanceof Set && safeDiagnosticCodes.has(outcomeCode)
-    ? outcomeCode
-    : fallback;
+function selectSafeDiagnosticCode(outcome, fallback, safeDiagnosticCodes) {
+  const code = ownDataValue(singleDataDiagnostic(outcome), 'code');
+  return safeDiagnosticCodes instanceof Set
+    && typeof code === 'string'
+    && safeDiagnosticCodes.has(code)
+    ? code : fallback;
 }
 
-export function selectSafePreflightDiagnosticCode(
+function selectSafePreflightDiagnosticCode(
   outcome,
   fallback = 'TEST_CLOUD_PREFLIGHT_BLOCKED',
 ) {
@@ -559,12 +729,12 @@ async function hostedStage(method, request, code, safeDiagnosticCodes = null) {
   try {
     const outcome = await method(deepFreeze(request));
     if (!validControllerResult(outcome) || outcome.status !== 'PASS') {
-      const selectedCode = selectSafeDiagnosticCode(
-        outcome,
-        code,
-        safeDiagnosticCodes,
+      return result(
+        'BLOCKED',
+        null,
+        selectSafeDiagnosticCode(outcome, code, safeDiagnosticCodes),
+        retryable(outcome),
       );
-      return result('BLOCKED', null, selectedCode, retryable(outcome));
     }
     return outcome;
   } catch {
@@ -617,37 +787,39 @@ function sourceReaderConfiguration(environment) {
   return Object.freeze({ appId, installationId, sourceRepositoryId, sourceWorkflowId });
 }
 
-function sourceArtifactDownloadFailure() {
-  const error = new Error('The source artifact download failed its closed transport contract.');
-  error.code = 'SOURCE_ARTIFACT_DOWNLOAD_FAILED';
-  return error;
-}
-
-function trustedArtifactRedirect(value) {
-  if (typeof value !== 'string' || value.length < 1 || value.length > 8192) return null;
-  try {
-    const url = new URL(value);
-    if (
-      url.protocol !== 'https:'
-      || url.username !== ''
-      || url.password !== ''
-      || url.port !== ''
-      || url.hash !== ''
-      || url.search.length < 2
-      || !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.blob\.core\.windows\.net$/u
-        .test(url.hostname)
-    ) return null;
-    return url.href;
-  } catch {
-    return null;
-  }
-}
-
-export async function githubSourceRequest(fetchImpl, requestPath, options = {}) {
+async function githubSourceRequest(fetchImpl, requestPath, options = {}) {
   if (typeof fetchImpl !== 'function' || typeof requestPath !== 'string') {
     throw new TypeError('GitHub source request is invalid.');
   }
   if (Number.isSafeInteger(options.expectedBytes)) {
+    const downloadFailure = () => {
+      const error = new Error('The source artifact download failed its closed transport contract.');
+      error.code = 'SOURCE_ARTIFACT_DOWNLOAD_FAILED';
+      return error;
+    };
+    const trustedRedirect = (value) => {
+      if (typeof value !== 'string' || value.length < 1 || value.length > 8192) return null;
+      try {
+        const url = new URL(value);
+        const rawAuthority = value.startsWith('https://')
+          ? value.slice('https://'.length).split(/[/?#]/u, 1)[0]
+          : null;
+        if (
+          url.protocol !== 'https:'
+          || rawAuthority !== url.hostname
+          || url.username !== ''
+          || url.password !== ''
+          || url.port !== ''
+          || url.hash !== ''
+          || url.search.length < 2
+          || !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.blob\.core\.windows\.net$/u
+            .test(url.hostname)
+        ) return null;
+        return url.href;
+      } catch {
+        return null;
+      }
+    };
     try {
       let response = await fetchImpl(`https://api.github.com${requestPath}`, {
         method: options.method,
@@ -659,22 +831,23 @@ export async function githubSourceRequest(fetchImpl, requestPath, options = {}) 
         const location = typeof response.headers?.get === 'function'
           ? response.headers.get('location')
           : null;
-        const redirectUrl = trustedArtifactRedirect(location);
-        if (redirectUrl === null) throw sourceArtifactDownloadFailure();
+        const redirectUrl = trustedRedirect(location);
+        if (redirectUrl === null) throw downloadFailure();
         response = await fetchImpl(redirectUrl, {
           method: 'GET',
           headers: { Accept: 'application/octet-stream' },
           redirect: 'error',
         });
       }
+      if (response?.status !== 200) throw downloadFailure();
       const { readBoundedSourceArtifactArchive } = await loadSourceArtifactReader();
       return Object.freeze({
         status: response.status,
         bytes: await readBoundedSourceArtifactArchive(response, options.expectedBytes),
       });
     } catch (error) {
-      if (error?.code === 'SOURCE_ARTIFACT_DOWNLOAD_FAILED') throw error;
-      throw sourceArtifactDownloadFailure();
+      if (ownDataErrorCode(error) === 'SOURCE_ARTIFACT_DOWNLOAD_FAILED') throw error;
+      throw downloadFailure();
     }
   }
   const response = await fetchImpl(`https://api.github.com${requestPath}`, {
@@ -823,6 +996,58 @@ function scenarioFailure(status, state) {
   });
 }
 
+function exactCreatedFixtureIntentSet(value) {
+  const resourceTypes = ['primary-project', 'primary-graph', 'primary-share'];
+  return Array.isArray(value)
+    && value.length === resourceTypes.length
+    && value.every((intent, index) => (
+      intent !== null
+      && typeof intent === 'object'
+      && intent.schemaVersion === 'verification-intent-snapshot.v2'
+      && intent.resourceType === resourceTypes[index]
+      && intent.state === 'created'
+    ));
+}
+
+function exactTask8CleanupDebtSuccessor(candidate, prior) {
+  try {
+    return exactDataObject(candidate, TASK8_LEASE_KEYS)
+      && exactDataObject(prior, TASK8_LEASE_KEYS)
+      && Object.isFrozen(candidate)
+      && Object.isFrozen(prior)
+      && prior.state === 'active'
+      && prior.cleanupDebt === false
+      && candidate.state === 'cleanup-debt'
+      && candidate.cleanupDebt === true
+      && Number.isSafeInteger(prior.leaseVersion)
+      && prior.leaseVersion >= 0
+      && Number.isSafeInteger(candidate.leaseVersion)
+      && candidate.leaseVersion > prior.leaseVersion
+      && candidate.leaseVersion - prior.leaseVersion <= 256
+      && DIGEST.test(prior.ledgerDigest)
+      && DIGEST.test(candidate.ledgerDigest)
+      && candidate.ledgerDigest !== prior.ledgerDigest
+      && Number.isFinite(Date.parse(prior.renewedAt))
+      && Number.isFinite(Date.parse(prior.expiresAt))
+      && Number.isFinite(Date.parse(candidate.renewedAt))
+      && Number.isFinite(Date.parse(candidate.expiresAt))
+      && Date.parse(candidate.renewedAt) >= Date.parse(prior.renewedAt)
+      && Date.parse(candidate.expiresAt) >= Date.parse(prior.expiresAt)
+      && Date.parse(candidate.expiresAt) > Date.parse(candidate.renewedAt)
+      && TASK8_STABLE_SUCCESSOR_LEASE_KEYS.every((key) => candidate[key] === prior[key]);
+  } catch {
+    return false;
+  }
+}
+
+function validTask8FailureState(value, priorLease) {
+  if (!exactDataObject(value, TASK8_FAILURE_STATE_KEYS) || !Object.isFrozen(value)) return false;
+  if (value.capability === null) return exactTask8CleanupDebtSuccessor(value.lease, priorLease);
+  return value.lease !== null
+    && value.lease !== undefined
+    && value.capability !== undefined;
+}
+
 export function composeProductionTestCloudLane(args) {
   if (
     !exactDataObject(args, PRODUCTION_LANE_ARGUMENT_KEYS)
@@ -855,9 +1080,32 @@ export function composeProductionTestCloudLane(args) {
       || trusted.value?.lease === undefined
       || trusted.value?.capability === undefined
     ) return trusted;
+    let produced;
+    try {
+      produced = await args.operations.runTrustedFixtureIntentProducer(Object.freeze({
+        lease: trusted.value.lease,
+        capability: trusted.value.capability,
+      }));
+    } catch {
+      return scenarioFailure('BLOCKED', null);
+    }
+    if (produced?.status !== 'PASS') {
+      const recoverableState = validTask8FailureState(produced?.value, trusted.value.lease)
+        ? Object.freeze({
+          lease: produced.value.lease,
+          capability: produced.value.capability,
+        })
+        : null;
+      return scenarioFailure('BLOCKED', recoverableState);
+    }
+    if (
+      produced.value?.lease === undefined
+      || produced.value?.capability === undefined
+      || !exactCreatedFixtureIntentSet(produced.value?.intents)
+    ) return scenarioFailure('BLOCKED', null);
     const state = Object.freeze({
-      lease: trusted.value.lease,
-      capability: trusted.value.capability,
+      lease: produced.value.lease,
+      capability: produced.value.capability,
     });
     const controllerBinding = Object.freeze({
       controllerBundleDigest: args.controller.controllerBundleDigest,
@@ -866,7 +1114,9 @@ export function composeProductionTestCloudLane(args) {
       scenarioInventoryDigest: args.facade.scenarioInventoryDigest,
     });
     try {
-      for (const scenarioId of args.facade.scenarioIds) {
+      for (const scenarioId of args.facade.scenarioIds.filter((candidate) => (
+        !['project-lifecycle', 'graph-editor', 'sharing-permissions'].includes(candidate)
+      ))) {
         const outcome = await args.facade.facade.runExactScenario({
           controllerBinding,
           scenarioId,
@@ -892,8 +1142,6 @@ export function composeProductionTestCloudLane(args) {
       qualifyRunner: args.operations.qualifyRunner,
       runE2E,
       cleanup: args.operations.cleanup,
-      proveAbsence: args.operations.proveAbsence,
-      closeLease: args.operations.closeLease,
     }),
     clock: args.clock,
     evidenceWriter: args.evidenceWriter,
@@ -1153,11 +1401,14 @@ export function createProductionHostedDependencies(args) {
     },
 
     async consumeSourceArtifact(stage) {
-      const { extractSourceArtifactZip, readSourceArtifact } = await loadSourceArtifactReader();
+      const {
+        extractSourceArtifactZip,
+        readTestCloudSourceArtifact,
+      } = await loadSourceArtifactReader();
       const configuration = sourceReaderConfiguration(environment);
       if (configuration === null) return result('BLOCKED', null, 'SOURCE_ARTIFACT_INVALID');
       try {
-        return result('PASS', await readSourceArtifact({
+        return result('PASS', await readTestCloudSourceArtifact({
           config: configuration,
           revision: stage.request.requestedRevision,
           qualifyingRunId: stage.request.sourceRunId,
@@ -1171,9 +1422,9 @@ export function createProductionHostedDependencies(args) {
           readZip: extractSourceArtifactZip,
         }));
       } catch (error) {
-        const code = typeof error?.code === 'string'
-          && SAFE_SOURCE_READER_DIAGNOSTIC_CODES.has(error.code)
-          ? error.code
+        const errorCode = ownDataErrorCode(error);
+        const code = errorCode !== null && SAFE_SOURCE_READER_DIAGNOSTIC_CODES.has(errorCode)
+          ? errorCode
           : 'SOURCE_ARTIFACT_INVALID';
         return result('BLOCKED', null, code);
       }
@@ -1200,8 +1451,8 @@ export function createProductionHostedDependencies(args) {
         ),
       });
       const [testEnvironment, appwrite, provider, identities, providerStore,
-        preflight, control, fixtures, evidence, evidenceWriter,
-        scenario, deployment] = await Promise.all([
+        preflight, control, evidence, evidenceWriter,
+        scenario, deployment, browserArtifactSet] = await Promise.all([
         loadTestEnvironment(),
         loadTestCloudAppwrite(),
         loadProviderRuntime(),
@@ -1209,11 +1460,15 @@ export function createProductionHostedDependencies(args) {
         loadProviderControlStore(),
         loadTestCloudPreflight(),
         loadTestCloudControlStore(),
-        loadTestCloudFixtures(),
         loadEvidence(),
         loadEvidenceWriter(),
         loadScenarioDriver(),
         loadTestCloudDeploy(),
+        loadTestCloudBrowserArtifactSet(),
+      ]);
+      const [fixtureClock, fixtureProducer] = await Promise.all([
+        loadTestCloudFixtureClock(),
+        loadTestCloudFixtureIntentProducer(),
       ]);
       const source = stage.artifactSet;
       const contextResult = testEnvironment.createTestEnvironmentContext({
@@ -1269,6 +1524,14 @@ export function createProductionHostedDependencies(args) {
           retryable(identityBindings),
         );
       }
+      const browserArtifacts = await browserArtifactSet.qualifyTestCloudBrowserArtifactSet({
+        runtimeQualification: stage.runtime.runtimeQualification,
+        context,
+        sourceArtifactSet: source.artifactSet,
+      });
+      if (browserArtifacts.status !== 'PASS') {
+        return result('BLOCKED', null, 'TEST_CLOUD_PROVIDER_CONTRACT_INVALID');
+      }
       const setupReadback = provider.loadQualifiedTestCloudSetupReadback(Object.freeze({
         runtimeQualification: stage.runtime.runtimeQualification,
         context,
@@ -1293,6 +1556,17 @@ export function createProductionHostedDependencies(args) {
           ),
           retryable(setupReadback),
         );
+      }
+      const armedBrowserArtifacts = browserArtifactSet.armQualifiedTestCloudBrowserArtifactMembers({
+        runtimeQualification: stage.runtime.runtimeQualification,
+        context,
+        qualification: browserArtifacts.value.qualification,
+        providerContractQualification: providerContract.value.qualification,
+        providerSetupReadbackQualification: setupReadback.value.qualification,
+        browserScenarioQualification: stage.runtime.browserScenarioQualification,
+      });
+      if (armedBrowserArtifacts.status !== 'PASS') {
+        return result('BLOCKED', null, 'TEST_CLOUD_PROVIDER_CONTRACT_INVALID');
       }
       const runnerRequest = appwrite.qualifyTestCloudRunnerVariableReadbackRequest({
         runtimeQualification: stage.runtime.runtimeQualification,
@@ -1347,10 +1621,6 @@ export function createProductionHostedDependencies(args) {
       if (siteIdentityReader.status !== 'PASS') {
         return blockedFrom(siteIdentityReader, 'TEST_CLOUD_SITE_IDENTITY_READER_INVALID');
       }
-      const providerFacade = Object.freeze({
-        async readExact() { return Object.freeze({ status: 500 }); },
-        async deleteExact() { return Object.freeze({ status: 500 }); },
-      });
       const preflightStage = async () => {
         const checked = await preflight.preflightTestCloud({
           runtimeQualification: stage.runtime.runtimeQualification,
@@ -1415,36 +1685,117 @@ export function createProductionHostedDependencies(args) {
         capability: request.capability,
         clock,
       });
-      const cleanup = async (request) => {
-        const intents = await control.reconstructAuthoritativeIntents({
-          store: store.value,
-          lease: request.lease,
-          primaryExecutionRetentionMaxSeconds:
-            setupAttestation.value.primaryExecutionRetentionMaxSeconds,
-        });
-        if (intents.status !== 'PASS') return intents;
-        return fixtures.cleanupRun({
+      const runTrustedFixtureIntentProducer = async (request) => {
+        const prepared = fixtureClock.prepareTestCloudFixtureClock(Object.freeze({
+          runtimeQualification: stage.runtime.runtimeQualification,
           context,
+          providerContract,
+          identityBindingsQualification: identityBindings.value.qualification,
+        }));
+        if (prepared.status !== 'PASS') return prepared;
+        const fixtureClockToken = prepared.value.clock;
+        const initialized = await fixtureProducer.initializeProviderFixtureIntentSet({
+          runtimeQualification: stage.runtime.runtimeQualification,
+          context,
+          providerContractQualification: providerContract.value.qualification,
           store: store.value,
-          provider: providerFacade,
           lease: request.lease,
           capability: request.capability,
-          intents: intents.value,
           clock,
+          providerContractDigest: configuredInventory.providerContractDigest,
         });
+        if (initialized.status !== 'PASS') return initialized;
+
+        const commonBrowserRoot = Object.freeze({
+          runtimeQualification: stage.runtime.runtimeQualification,
+          context,
+          browserScenarioQualification: stage.runtime.browserScenarioQualification,
+          clock: fixtureClockToken,
+          providerContractQualification: providerContract.value.qualification,
+          sessionIntentQualification: initialized.value.sessionIntentQualification,
+        });
+        const performOwnerLogin = Object.freeze(async function performOwnerLogin() {
+          const owner = await provider.performOwnerLogin(Object.freeze({
+            runtimeQualification: commonBrowserRoot.runtimeQualification,
+            context: commonBrowserRoot.context,
+            browserScenarioQualification: commonBrowserRoot.browserScenarioQualification,
+            clock: commonBrowserRoot.clock,
+            ownerLoginInput: Object.freeze({ password: stage.credentials.E2E_OWNER_PASSWORD }),
+            providerContractQualification: commonBrowserRoot.providerContractQualification,
+            identityBindingsQualification: identityBindings.value.qualification,
+            providerSetupReadbackQualification: setupReadback.value.qualification,
+            sessionIntentQualification: commonBrowserRoot.sessionIntentQualification,
+          }));
+          if (owner.status !== 'PASS') return owner;
+          for (const mutationOrdinal of [4, 5, 8, 11, 16]) {
+            const reading = fixtureClock.readTestCloudFixtureExpectedState(Object.freeze({
+              runtimeQualification: commonBrowserRoot.runtimeQualification,
+              clock: commonBrowserRoot.clock,
+              mutationOrdinal,
+            }));
+            if (reading.status !== 'PASS') return reading;
+          }
+          return owner;
+        });
+        const performProjectCreateAndGraphEditPrefix = Object.freeze(
+          async function performProjectCreateAndGraphEditPrefix() {
+            return provider.performProjectCreateAndGraphEditPrefix(commonBrowserRoot);
+          },
+        );
+        const performEditorShare = Object.freeze(async function performEditorShare() {
+          return provider.performEditorShare(Object.freeze({
+            runtimeQualification: commonBrowserRoot.runtimeQualification,
+            context: commonBrowserRoot.context,
+            browserScenarioQualification: commonBrowserRoot.browserScenarioQualification,
+            clock: commonBrowserRoot.clock,
+            providerContractQualification: commonBrowserRoot.providerContractQualification,
+            identityBindingsQualification: identityBindings.value.qualification,
+            sessionIntentQualification: commonBrowserRoot.sessionIntentQualification,
+          }));
+        });
+        const performViewerShare = Object.freeze(async function performViewerShare() {
+          return provider.performViewerShare(Object.freeze({
+            runtimeQualification: commonBrowserRoot.runtimeQualification,
+            context: commonBrowserRoot.context,
+            browserScenarioQualification: commonBrowserRoot.browserScenarioQualification,
+            clock: commonBrowserRoot.clock,
+            providerContractQualification: commonBrowserRoot.providerContractQualification,
+            identityBindingsQualification: identityBindings.value.qualification,
+            sessionIntentQualification: commonBrowserRoot.sessionIntentQualification,
+          }));
+        });
+        const fixtureMutationPort = Object.freeze(Object.assign(Object.create(null), {
+          performOwnerLogin,
+          performProjectCreateAndGraphEditPrefix,
+          performEditorShare,
+          performViewerShare,
+        }));
+        const task8Produced = await fixtureProducer.runTrustedTestCloudFixtureIntentProducer({
+          context,
+          store: store.value,
+          lease: initialized.value.lease,
+          capability: initialized.value.capability,
+          clock,
+          providerContractDigest: configuredInventory.providerContractDigest,
+          sessionIntentQualification: initialized.value.sessionIntentQualification,
+          fixtureMutationPort,
+        });
+        return task8Produced;
       };
-      const proveAbsence = async (request) => fixtures.verifyRunAbsent({
-        context,
-        provider: providerFacade,
-        intents: request.intents,
-      });
-      const closeLease = async (request) => control.closeLease({
-        context,
-        store: store.value,
-        lease: request.lease,
-        capability: request.capability,
-        clock,
-      });
+      const cleanup = async (request) => {
+        const outcome = await runTrustedTestCloudCleanup({
+          context,
+          client: clients.value.operator,
+          store: store.value,
+          lease: request.lease,
+          capability: request.capability,
+          clock,
+          providerContractDigest: configuredInventory.providerContractDigest,
+        });
+        return validAtomicCleanupPass(outcome, context, request.lease)
+          ? outcome
+          : result('BLOCKED', null, 'TEST_CLOUD_PREFLIGHT_BLOCKED');
+      };
       const laneEvidenceWriter = Object.freeze({
         async write(laneEvidence) {
           const started = Date.parse(laneEvidence.startedAt);
@@ -1517,10 +1868,9 @@ export function createProductionHostedDependencies(args) {
           deployFunctionArtifacts,
           deploySiteArtifact,
           qualifyRunner,
+          runTrustedFixtureIntentProducer,
           runTrustedScenario,
           cleanup,
-          proveAbsence,
-          closeLease,
         }),
         selection: source.selection,
       });

@@ -3,10 +3,7 @@ import { createHash } from 'node:crypto';
 import test from 'node:test';
 import { gzipSync } from 'node:zlib';
 
-import {
-  canonicalJson,
-  digestFileSet,
-} from '../../../scripts/verification/canonical-json.mjs';
+import { canonicalJson } from '../../../scripts/verification/canonical-json.mjs';
 import inventory from '../../../dev/verification/environments/test-cloud.inventory.v1.json' with {
   type: 'json',
 };
@@ -15,9 +12,9 @@ import { projectTestCloudBrowserArtifactPolicyRows } from
   './test-cloud-browser-artifact-set.mjs';
 
 const ENVIRONMENT_DIGEST =
-  'sha256:e83dac9cc615ccf37fd027683690edb2ff7332ac523d57130c1e86fa8617f302';
+  'sha256:02560e84745ed7b577b334a3412885f6a547b2a22f164f4978b255d3b35c0044';
 const PROVIDER_CONTRACT_DIGEST =
-  'sha256:eaa6c314b13daa4c56a75bfc29eb8b3c66b7315ad6f114475db4d5f9aee75cd8';
+  'sha256:47a1d778ca8b8cea333b10574ffbc2db488fd711c12a1c40faf9da5235e27184';
 
 function digest(value) {
   return `sha256:${createHash('sha256').update(value, 'utf8').digest('hex')}`;
@@ -49,6 +46,18 @@ function tarEntry(name, bytes) {
     bytes,
     Buffer.alloc((512 - (bytes.length % 512)) % 512),
   ]);
+}
+
+function hostedPayloadDigest(members) {
+  const records = [...members.entries()]
+    .filter(([memberPath]) => memberPath !== 'build-identity.json')
+    .map(([memberPath, bytes]) => ({
+      path: memberPath,
+      mode: '100644',
+      contentDigest: digest(bytes),
+    }))
+    .sort((left, right) => left.path < right.path ? -1 : left.path > right.path ? 1 : 0);
+  return digest(Buffer.from(canonicalJson(records), 'utf8'));
 }
 
 function sourceArtifactSet() {
@@ -96,14 +105,6 @@ function sourceArtifactSet() {
     'catalog/catalog-bundle.json', 'templates/registry.json', 'templates/entitlements.json',
   ]) members.set(name, payload(name));
   members.set('.vite/manifest.json', Buffer.from(JSON.stringify(manifest)));
-  members.set('build-identity.json', payload('build-identity.json'));
-  const canonicalContentDigest = digestFileSet([...members]
-    .filter(([name]) => name !== 'build-identity.json')
-    .map(([name, bytes]) => ({
-      path: name,
-      mode: '100644',
-      contentDigest: digest(bytes),
-    })));
   const tar = Buffer.concat([
     ...[...members.entries()]
       .sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0)
@@ -114,7 +115,7 @@ function sourceArtifactSet() {
   return {
     releaseEligibleArtifacts: [{
       bytes: Uint8Array.from(siteBytes),
-      canonicalContentDigest,
+      canonicalContentDigest: hostedPayloadDigest(members),
       kind: 'site',
       logicalTarget: 'web',
       relativePath: 'site/site.tar.gz',
@@ -171,23 +172,23 @@ function create(browserArtifactProjection = projection()) {
   });
 }
 
-test('creates 25 exact source-member rows and 31 fixed Appwrite Test rows', () => {
+test('creates 25 exact source-member rows and 33 fixed Appwrite Test rows', () => {
   const result = create();
   assert.equal(result.status, 'PASS', result.diagnostics?.[0]?.code);
   const policy = result.value.browserRequestPolicy;
-  assert.equal(policy.rows.length, 56);
-  assert.equal(policy.rows.reduce((total, row) => total + row.exactCount, 0), 58);
+  assert.equal(policy.rows.length, 58);
+  assert.equal(policy.rows.reduce((total, row) => total + row.exactCount, 0), 60);
   assert.equal(policy.rows[0].finalUrl, `${inventory.environment.publicOrigin}/index.html`);
   assert.equal(policy.rows[24].finalUrl,
     `${inventory.environment.publicOrigin}/assets/member-24.js`);
   assert.equal(policy.rows[25].finalUrl,
     `${inventory.environment.endpoint}/account/sessions/email`);
-  assert.equal(policy.rows[55].finalUrl,
+  assert.equal(policy.rows[57].finalUrl,
     `${inventory.environment.endpoint}/functions/sharing-py/executions`);
   assert.equal(policy.rows[25].expectedResponseStatus, 204);
   assert.equal(policy.rows[26].credentialCarrier, 'raw-playwright-request-body-only');
   assert.equal(policy.rows[28].credentialCarrier, 'browser-cookie-jar-only');
-  assert.equal(policy.rows[46].method, 'PATCH');
+  assert.equal(policy.rows[48].method, 'PATCH');
   assert.equal(policy.digest, digest(canonicalJson({
     schemaVersion: policy.schemaVersion,
     timeoutMilliseconds: policy.timeoutMilliseconds,
@@ -214,7 +215,7 @@ test('projects the exact 25 rows from a bounded source site artifact', async () 
   );
   const policy = create(projected.value);
   assert.equal(policy.status, 'PASS');
-  assert.equal(policy.value.browserRequestPolicy.rows.length, 56);
+  assert.equal(policy.value.browserRequestPolicy.rows.length, 58);
 });
 
 test('substitutes the exact public origin and project header digests', () => {

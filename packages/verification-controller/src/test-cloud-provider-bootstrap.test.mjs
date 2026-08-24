@@ -61,7 +61,7 @@ test('digest-bound provider contract is checked out with exact LF bytes', async 
   const attributes = await readFile(path.join(ROOT, '.gitattributes'), 'utf8');
   assert.match(
     attributes,
-    new RegExp(`^${providerContractPath.replaceAll('.', '\\.')} text eol=lf$`, 'mu'),
+    new RegExp(`^${providerContractPath.replaceAll('.', '\\.')}` + ' text eol=lf$', 'mu'),
   );
   const bytes = await readFile(path.join(ROOT, ...providerContractPath.split('/')));
   assert.equal(bytes.includes(0x0d), false);

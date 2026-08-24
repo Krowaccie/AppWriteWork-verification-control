@@ -57,6 +57,12 @@ jobs:
         with:
           node-version: '24.11.1'
 
+      - name: Install and run exact prepublication verification
+        shell: pwsh
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          node --test --test-isolation=none packages/verification-controller/src/test-cloud-cleanup-driver.test.mjs packages/verification-controller/src/test-cloud-controller.test.mjs scripts/verification/test-cloud-control-store.test.mjs scripts/verification/test-cloud-lane.test.mjs packages/verification-controller/src/test-cloud-controller-source-diagnostics.test.mjs
+
       - name: Verify exact Appwrite Test binding artifact
         shell: pwsh
         env:

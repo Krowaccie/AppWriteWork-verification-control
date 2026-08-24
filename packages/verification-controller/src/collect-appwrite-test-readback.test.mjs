@@ -139,13 +139,9 @@ test('preserves an allowlisted source-reader failure code without serializing se
   sourceError.code = safeCode;
   const fakes = dependencies();
   fakes.readSourceArtifactImpl = async () => { throw sourceError; };
-
   const result = await collectAppwriteTestReadback({
-    input: input(),
-    environment: environment(),
-    dependencies: fakes,
+    input: input(), environment: environment(), dependencies: fakes,
   });
-
   assert.equal(result.status, 'BLOCKED');
   assert.equal(result.diagnostics[0].code, safeCode);
   const serialized = JSON.stringify(result);
@@ -158,36 +154,59 @@ test('collapses an unknown source-reader failure code to the generic collector c
   sourceError.code = 'MALICIOUS_SECRET_VALUE_SENTINEL';
   const fakes = dependencies();
   fakes.readSourceArtifactImpl = async () => { throw sourceError; };
-
   const result = await collectAppwriteTestReadback({
-    input: input(),
-    environment: environment(),
-    dependencies: fakes,
+    input: input(), environment: environment(), dependencies: fakes,
   });
-
   assert.equal(result.status, 'BLOCKED');
   assert.equal(result.diagnostics[0].code, 'APPWRITE_TEST_COLLECT_INVALID');
   assert.equal(JSON.stringify(result).includes('secret-value-sentinel'), false);
 });
 
+test('does not invoke or reflect stateful and throwing source error code accessors', async (t) => {
+  const cases = [
+    ['stateful', (calls) => (
+      calls <= 2
+        ? 'SOURCE_INSTALLATION_TOKEN_SCOPE_MISMATCH'
+        : 'MALICIOUS_SECRET_VALUE_SENTINEL'
+    )],
+    ['throwing', () => { throw new Error('SECRET_ACCESSOR_VALUE'); }],
+  ];
+  for (const [name, readCode] of cases) {
+    await t.test(name, async () => {
+      let getterCalls = 0;
+      const sourceError = new Error('untrusted provider error');
+      Object.defineProperty(sourceError, 'code', {
+        get() {
+          getterCalls += 1;
+          return readCode(getterCalls);
+        },
+      });
+      const fakes = dependencies();
+      fakes.readSourceArtifactImpl = async () => { throw sourceError; };
+      const result = await collectAppwriteTestReadback({
+        input: input(), environment: environment(), dependencies: fakes,
+      });
+      assert.equal(result.status, 'BLOCKED');
+      assert.equal(result.diagnostics[0].code, 'APPWRITE_TEST_COLLECT_INVALID');
+      assert.equal(getterCalls, 0);
+      assert.equal(JSON.stringify(result).includes('MALICIOUS_SECRET_VALUE_SENTINEL'), false);
+      assert.equal(JSON.stringify(result).includes('SECRET_ACCESSOR_VALUE'), false);
+    });
+  }
+});
+
 test('preserves an allowlisted live-readback failure code without serializing secrets', async () => {
   const fakes = dependencies();
   fakes.readLiveImpl = async () => ({
-    status: 'BLOCKED',
-    value: null,
-    diagnostics: [{
+    status: 'BLOCKED', value: null, diagnostics: [{
       code: 'APPWRITE_TEST_RUNNER_LOGGING_INVALID',
       safeMessage: 'safe stage message',
       secretValue: 'secret-value-sentinel',
     }],
   });
-
   const result = await collectAppwriteTestReadback({
-    input: input(),
-    environment: environment(),
-    dependencies: fakes,
+    input: input(), environment: environment(), dependencies: fakes,
   });
-
   assert.equal(result.status, 'BLOCKED');
   assert.equal(result.diagnostics[0].code, 'APPWRITE_TEST_RUNNER_LOGGING_INVALID');
   assert.equal(JSON.stringify(result).includes('secret-value-sentinel'), false);
@@ -196,45 +215,79 @@ test('preserves an allowlisted live-readback failure code without serializing se
 test('collapses an unknown live-readback failure code to the stage code', async () => {
   const fakes = dependencies();
   fakes.readLiveImpl = async () => ({
-    status: 'BLOCKED',
-    value: null,
+    status: 'BLOCKED', value: null,
     diagnostics: [{ code: 'MALICIOUS_SECRET_VALUE_SENTINEL' }],
   });
-
   const result = await collectAppwriteTestReadback({
-    input: input(),
-    environment: environment(),
-    dependencies: fakes,
+    input: input(), environment: environment(), dependencies: fakes,
   });
-
   assert.equal(result.status, 'BLOCKED');
   assert.equal(result.diagnostics[0].code, 'APPWRITE_TEST_LIVE_PROJECTION_INVALID');
+});
+
+test('does not invoke or reflect a stateful live diagnostic code accessor', async () => {
+  let getterCalls = 0;
+  const diagnostic = {};
+  Object.defineProperty(diagnostic, 'code', {
+    enumerable: true,
+    get() {
+      getterCalls += 1;
+      return getterCalls === 1
+        ? 'APPWRITE_TEST_RUNNER_LOGGING_INVALID'
+        : 'MALICIOUS_SECRET_VALUE_SENTINEL';
+    },
+  });
+  const fakes = dependencies();
+  fakes.readLiveImpl = async () => ({
+    status: 'BLOCKED', value: null, diagnostics: [diagnostic],
+  });
+  const result = await collectAppwriteTestReadback({
+    input: input(), environment: environment(), dependencies: fakes,
+  });
+  assert.equal(result.diagnostics[0].code, 'APPWRITE_TEST_LIVE_PROJECTION_INVALID');
+  assert.equal(getterCalls, 0);
+  assert.equal(JSON.stringify(result).includes('MALICIOUS_SECRET_VALUE_SENTINEL'), false);
 });
 
 test('preserves an allowlisted binding-stage failure code without serializing secrets', async () => {
   const fakes = dependencies();
   fakes.createBindingsImpl = () => ({
-    status: 'BLOCKED',
-    value: null,
-    diagnostics: [{
+    status: 'BLOCKED', value: null, diagnostics: [{
       code: 'APPWRITE_TEST_BINDING_RUNNER_VARIABLES_INVALID',
       safeMessage: 'safe stage message',
       secretValue: 'secret-value-sentinel',
     }],
   });
-
   const result = await collectAppwriteTestReadback({
-    input: input(),
-    environment: environment(),
-    dependencies: fakes,
+    input: input(), environment: environment(), dependencies: fakes,
   });
-
   assert.equal(result.status, 'BLOCKED');
-  assert.equal(
-    result.diagnostics[0].code,
-    'APPWRITE_TEST_BINDING_RUNNER_VARIABLES_INVALID',
-  );
+  assert.equal(result.diagnostics[0].code, 'APPWRITE_TEST_BINDING_RUNNER_VARIABLES_INVALID');
   assert.equal(JSON.stringify(result).includes('secret-value-sentinel'), false);
+});
+
+test('does not invoke or reflect a stateful binding diagnostic code accessor', async () => {
+  let getterCalls = 0;
+  const diagnostic = {};
+  Object.defineProperty(diagnostic, 'code', {
+    enumerable: true,
+    get() {
+      getterCalls += 1;
+      return getterCalls === 1
+        ? 'APPWRITE_TEST_BINDING_RUNNER_VARIABLES_INVALID'
+        : 'MALICIOUS_SECRET_VALUE_SENTINEL';
+    },
+  });
+  const fakes = dependencies();
+  fakes.createBindingsImpl = () => ({
+    status: 'BLOCKED', value: null, diagnostics: [diagnostic],
+  });
+  const result = await collectAppwriteTestReadback({
+    input: input(), environment: environment(), dependencies: fakes,
+  });
+  assert.equal(result.diagnostics[0].code, 'APPWRITE_TEST_BINDING_OUTPUT_INVALID');
+  assert.equal(getterCalls, 0);
+  assert.equal(JSON.stringify(result).includes('MALICIOUS_SECRET_VALUE_SENTINEL'), false);
 });
 
 test('downloads a bounded source artifact through one trusted Azure redirect', async () => {
@@ -257,29 +310,116 @@ test('downloads a bounded source artifact through one trusted Azure redirect', a
     redirect: 'error',
     expectedBytes: archive.byteLength,
   });
-
   assert.equal(result.status, 200);
   assert.deepEqual(result.bytes, archive);
   assert.equal(calls[0][1].redirect, 'manual');
   assert.equal(calls[0][1].headers.Authorization, 'Bearer test-source-token');
   assert.equal(calls[1][0], redirectUrl);
-  assert.equal(calls[1][1].redirect, 'error');
-  assert.equal(Object.hasOwn(calls[1][1].headers, 'Authorization'), false);
+  assert.deepEqual(calls[1][1], {
+    method: 'GET',
+    headers: { Accept: 'application/octet-stream' },
+    redirect: 'error',
+  });
 });
 
-test('rejects an artifact redirect outside the exact trusted storage host class', async () => {
+test('rejects artifact redirects outside the one-hop trusted Azure storage contract', async (t) => {
+  const unsafeLocations = [
+    'https://example.invalid/artifact.zip?sig=test',
+    'http://account.blob.core.windows.net/container/artifact.zip?sig=test',
+    'https://user@account.blob.core.windows.net/container/artifact.zip?sig=test',
+    'https://account.blob.core.windows.net:443/container/artifact.zip?sig=test',
+    'https://account.blob.core.windows.net:444/container/artifact.zip?sig=test',
+    'https://account.blob.core.windows.net/container/artifact.zip#fragment',
+    'https://account.blob.core.windows.net/container/artifact.zip',
+    'https://nested.account.blob.core.windows.net/container/artifact.zip?sig=test',
+    'https://-account.blob.core.windows.net/container/artifact.zip?sig=test',
+  ];
+  for (const location of unsafeLocations) {
+    await t.test(location, async () => {
+      let calls = 0;
+      await assert.rejects(
+        githubSourceRequest(async () => {
+          calls += 1;
+          return calls === 1
+            ? new Response(null, { status: 302, headers: { location } })
+            : new Response(new Uint8Array(24), {
+              status: 200,
+              headers: { 'content-length': '24' },
+            });
+        }, '/repos/Krowaccie/AppWriteWork/actions/artifacts/9420071362/zip', {
+          method: 'GET',
+          headers: { Authorization: 'Bearer test-source-token' },
+          redirect: 'error',
+          expectedBytes: 24,
+        }),
+        (error) => error?.code === 'SOURCE_ARTIFACT_DOWNLOAD_FAILED',
+      );
+      assert.equal(calls, 1);
+    });
+  }
+});
+
+test('rejects non-200 direct responses and a redirect on the bounded second hop', async (t) => {
+  const archive = Uint8Array.from({ length: 24 }, (_, index) => index);
+  for (const status of [301, 307]) {
+    await t.test(`first-hop-${status}`, async () => {
+      await assert.rejects(
+        githubSourceRequest(async () => new Response(archive, {
+          status,
+          headers: { 'content-length': String(archive.byteLength) },
+        }), '/repos/Krowaccie/AppWriteWork/actions/artifacts/9420071362/zip', {
+          method: 'GET',
+          headers: { Authorization: 'Bearer test-source-token' },
+          expectedBytes: archive.byteLength,
+        }),
+        (error) => error?.code === 'SOURCE_ARTIFACT_DOWNLOAD_FAILED',
+      );
+    });
+  }
+  await t.test('second-hop-redirect', async () => {
+    let calls = 0;
+    await assert.rejects(
+      githubSourceRequest(async () => {
+        calls += 1;
+        return calls === 1
+          ? new Response(null, {
+            status: 302,
+            headers: {
+              location: 'https://account.blob.core.windows.net/container/artifact.zip?sig=test',
+            },
+          })
+          : new Response(archive, {
+            status: 302,
+            headers: { 'content-length': String(archive.byteLength) },
+          });
+      }, '/repos/Krowaccie/AppWriteWork/actions/artifacts/9420071362/zip', {
+        method: 'GET',
+        headers: { Authorization: 'Bearer test-source-token' },
+        expectedBytes: archive.byteLength,
+      }),
+      (error) => error?.code === 'SOURCE_ARTIFACT_DOWNLOAD_FAILED',
+    );
+    assert.equal(calls, 2);
+  });
+});
+
+test('collapses a hostile transport error code accessor without invoking it', async () => {
+  let getterCalls = 0;
+  const hostile = {};
+  Object.defineProperty(hostile, 'code', {
+    get() {
+      getterCalls += 1;
+      throw new Error('hostile error code accessor');
+    },
+  });
   await assert.rejects(
-    githubSourceRequest(async () => new Response(null, {
-      status: 302,
-      headers: { location: 'https://example.invalid/artifact.zip?sig=test' },
-    }), '/repos/Krowaccie/AppWriteWork/actions/artifacts/9420071362/zip', {
+    githubSourceRequest(async () => { throw hostile; }, '/artifact.zip', {
       method: 'GET',
-      headers: { Authorization: 'Bearer test-source-token' },
-      redirect: 'error',
       expectedBytes: 24,
     }),
     (error) => error?.code === 'SOURCE_ARTIFACT_DOWNLOAD_FAILED',
   );
+  assert.equal(getterCalls, 0);
 });
 
 test('CLI writes exactly eight bindings plus canonical evidence and manifest files', async () => {

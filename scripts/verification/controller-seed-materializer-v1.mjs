@@ -8,11 +8,20 @@ import { promisify } from 'node:util';
 import { validateA1SupervisorProposal } from './a1-supervisor-proposal.mjs';
 import { canonicalJson } from './canonical-json.mjs';
 import { validateControllerBundleProposal } from './controller-bundle.mjs';
+import {
+  validateControllerSourceSetDescriptor,
+} from './controller-source-set-contract.mjs';
 
 const SHA = /^[0-9a-f]{40}$/u;
 const DIGEST = /^sha256:[0-9a-f]{64}$/u;
 const SAFE_PATH = /^(?!\/)(?!.*\/{2})(?!.*(?:^|\/)\.{1,2}(?:\/|$))(?!.*\\)[\x21-\x7e]+$/u;
-const SET_NAMES = Object.freeze(['overlay', 'controller', 'tooling', 'a1-supervisor']);
+const SET_NAMES = Object.freeze([
+  'overlay',
+  'controller',
+  'tooling',
+  'validation-only',
+  'a1-supervisor',
+]);
 const SUPERVISOR_PATH = 'a1-oci/supervisor/verification-supervisor';
 const INTERNAL_PATH = 'seed-content-manifest.v1.json';
 const SOURCE_SET_DESCRIPTOR_PATH = 'packages/verification-controller/controller-seed-source-sets.v1.json';
@@ -20,35 +29,11 @@ const SOURCE_SET_DESCRIPTOR_SCHEMA_PATH = 'dev/verification/schemas/controller-s
 const PROPOSAL_PATH = 'packages/verification-controller/controller-bundle.proposal.json';
 const OVERLAY_ROOT = 'packages/verification-controller/controller-repository-seed';
 const A1 = Object.freeze({
-  descriptorDigest: 'sha256:3b4a84e744f3a02c6d3e37c740fa2c10c471e9d12af6f8d6b03eac033951b9ce',
-  sourceTreeDigest: 'sha256:a846decd8fc7d6b739cabe9467c5d6fa59348eddb60b42b21f106de73afbedd5',
-  binaryDigest: 'sha256:87a176269ec89c05fd08f5e979dc66c1502a7d42b9d23e82421acc9e3b7fe3c0',
+  descriptorDigest: 'sha256:3f6fd8bc74e3507bb2fe9f9a5dceeca33690f900539830a16cf37949d159e776',
+  sourceTreeDigest: 'sha256:00bda078134e863f46684e1da0deb9a7f123161f965f7a979cd1f0310afa6d54',
+  manifestDigest: 'sha256:8cffbed6f6c19f7cd0d682b074be2b15d4820a485bf73d785decfee593b6b05b',
+  binaryDigest: 'sha256:0b52f5b1f0abdf0acbd4d10c1a4895b53401d5644161ad71460b50317d5e1d89',
 });
-const WORKFLOWS = Object.freeze([
-  {
-    source: 'packages/verification-controller/workflows/collect-appwrite-test-readback.yml',
-    destination: '.github/workflows/collect-appwrite-test-readback.yml',
-  },
-  {
-    source: 'packages/verification-controller/workflows/publish-controller-bundle.yml',
-    destination: '.github/workflows/publish-controller-bundle.yml',
-  },
-  {
-    source: 'packages/verification-controller/workflows/verify-test-cloud.yml',
-    destination: '.github/workflows/verify-test-cloud.yml',
-  },
-]);
-const CONTROLLER_RELOCATIONS = Object.freeze([
-  {
-    source: 'packages/verification-controller/package-lock.json',
-    destination: 'package-lock.json',
-  },
-  {
-    source: 'packages/verification-controller/package.json',
-    destination: 'package.json',
-  },
-  ...WORKFLOWS,
-]);
 const COMMIT = Object.freeze({
   schemaVersion: 'controller-seed-commit.v1',
   author: 'AppWriteWork Verification Controller <verification-controller@appwritework.invalid>',
@@ -82,9 +67,24 @@ function exactObject(value, keys, optional = []) {
   try {
     if (value === null || typeof value !== 'object' || Array.isArray(value) || utilTypes.isProxy(value) || Object.getPrototypeOf(value) !== Object.prototype) return null;
     const allowed = new Set([...keys, ...optional]);
-    const names = Object.keys(value);
+    const ownKeys = Reflect.ownKeys(value);
+    if (ownKeys.some((key) => typeof key !== 'string')) return null;
+    const names = ownKeys;
     if (keys.some((key) => !names.includes(key)) || names.some((key) => !allowed.has(key))) return null;
-    return value;
+    const snapshot = {};
+    for (const name of names) {
+      const descriptor = Object.getOwnPropertyDescriptor(value, name);
+      if (descriptor === undefined || !descriptor.enumerable || !Object.hasOwn(descriptor, 'value')) {
+        return null;
+      }
+      Object.defineProperty(snapshot, name, {
+        value: descriptor.value,
+        enumerable: true,
+        writable: false,
+        configurable: false,
+      });
+    }
+    return Object.freeze(snapshot);
   } catch {
     return null;
   }
@@ -130,10 +130,6 @@ function ordinal(left, right) {
   return left < right ? -1 : left > right ? 1 : 0;
 }
 
-function joinSourcePath(sourceRoot, filePath) {
-  return sourceRoot === '' ? filePath : `${sourceRoot}/${filePath}`;
-}
-
 function hasCanonicalSourceOwnership(sets) {
   const owners = new Map();
   for (const sourceSet of sets) {
@@ -145,70 +141,6 @@ function hasCanonicalSourceOwnership(sets) {
     }
   }
   return true;
-}
-
-function validateSourceSetDescriptor(value) {
-  const input = exactObject(value, ['schemaVersion', 'sets']);
-  if (
-    input === null
-    || input.schemaVersion !== 'controller-seed-source-sets.v1'
-    || !Array.isArray(input.sets)
-    || input.sets.length !== 3
-  ) return null;
-  const expectedRoots = [OVERLAY_ROOT, '', ''];
-  const sets = [];
-  const allMappings = [];
-  for (let index = 0; index < input.sets.length; index += 1) {
-    const sourceSet = exactObject(input.sets[index], ['name', 'sourceRoot', 'files', 'relocations']);
-    if (
-      sourceSet === null
-      || sourceSet.name !== SET_NAMES[index]
-      || sourceSet.sourceRoot !== expectedRoots[index]
-      || !Array.isArray(sourceSet.files)
-      || sourceSet.files.length === 0
-      || sourceSet.files.some((filePath) => !safePath(filePath))
-      || sourceSet.files.some((filePath, fileIndex) => (
-        fileIndex > 0 && ordinal(sourceSet.files[fileIndex - 1], filePath) >= 0
-      ))
-      || !Array.isArray(sourceSet.relocations)
-    ) return null;
-    const relocations = [];
-    for (const candidate of sourceSet.relocations) {
-      const relocation = exactObject(candidate, ['source', 'destination']);
-      if (
-        relocation === null
-        || !safePath(relocation.source)
-        || !safePath(relocation.destination)
-        || !sourceSet.files.includes(relocation.source)
-      ) return null;
-      relocations.push({ source: relocation.source, destination: relocation.destination });
-    }
-    if (
-      (index !== 1 && relocations.length !== 0)
-      || (index === 1 && canonicalJson(relocations) !== canonicalJson(CONTROLLER_RELOCATIONS))
-    ) return null;
-    const mappings = [
-      ...sourceSet.files.map((filePath) => ({
-        sourcePath: joinSourcePath(sourceSet.sourceRoot, filePath),
-        destinationPath: filePath,
-      })),
-      ...relocations.map(({ source, destination }) => ({
-        sourcePath: joinSourcePath(sourceSet.sourceRoot, source),
-        destinationPath: destination,
-      })),
-    ];
-    sets.push({
-      name: sourceSet.name,
-      sourceRoot: sourceSet.sourceRoot,
-      files: [...sourceSet.files],
-      relocations,
-      mappings,
-    });
-    allMappings.push(...mappings);
-  }
-  const identities = allMappings.map(({ destinationPath }) => destinationPath.toLowerCase());
-  if (new Set(identities).size !== identities.length || !hasCanonicalSourceOwnership(sets)) return null;
-  return { schemaVersion: input.schemaVersion, sets };
 }
 
 function validateSourceRootRecords(value) {
@@ -242,8 +174,12 @@ function sourceSetMatchesDescriptor(sourceSet, descriptorSet) {
 
 function cloneEvidence(value) {
   const evidence = exactObject(value, ['descriptorDigest', 'sourceTreeDigest', 'binaryDigest']);
-  if (evidence === null || Object.entries(A1).some(([key, expected]) => evidence[key] !== expected)) return null;
-  return { ...evidence };
+  if (
+    evidence === null
+    || ['descriptorDigest', 'sourceTreeDigest', 'binaryDigest']
+      .some((key) => evidence[key] !== A1[key])
+  ) return null;
+  return Object.freeze({ ...evidence });
 }
 
 function canonicalBytes(value) {
@@ -351,14 +287,16 @@ export function buildDeterministicControllerSeed(args) {
       'sourceSetDescriptor', 'sourceSets', 'a1SupervisorEvidence',
     ]);
     const a1Evidence = input === null ? null : cloneEvidence(input.a1SupervisorEvidence);
-    const sourceSetDescriptor = input === null ? null : validateSourceSetDescriptor(input.sourceSetDescriptor);
+    const sourceSetDescriptor = input === null
+      ? null
+      : validateControllerSourceSetDescriptor(input.sourceSetDescriptor);
     const sourceRootRecords = input === null ? null : validateSourceRootRecords(input.sourceRootRecords);
     if (
       input === null
       || input.sourceRepository !== 'Krowaccie/AppWriteWork'
       || !SHA.test(input.sourceRepositoryRevision ?? '')
       || !Array.isArray(input.sourceSets)
-      || input.sourceSets.length !== 4
+      || input.sourceSets.length !== 5
       || a1Evidence === null
       || sourceSetDescriptor === null
       || sourceRootRecords === null
@@ -375,7 +313,7 @@ export function buildDeterministicControllerSeed(args) {
       if (sourceSet === null || sourceSet.name !== SET_NAMES[setIndex] || !Array.isArray(sourceSet.files) || sourceSet.files.length === 0) {
         return result('BLOCKED', null, 'SEED_SOURCE_SET_INVALID');
       }
-      if (setIndex < 3 && !sourceSetMatchesDescriptor(sourceSet, sourceSetDescriptor.sets[setIndex])) {
+      if (setIndex < 4 && !sourceSetMatchesDescriptor(sourceSet, sourceSetDescriptor.sets[setIndex])) {
         return result('BLOCKED', null, 'SEED_SOURCE_SET_INVALID');
       }
       for (const candidate of sourceSet.files) {
@@ -415,6 +353,7 @@ export function buildDeterministicControllerSeed(args) {
       supervisorEntries.length !== 2
       || supervisorEntries[0].path !== 'a1-oci/supervisor/dist.manifest.json'
       || supervisorEntries[0].mode !== '100644'
+      || supervisorEntries[0].sha256 !== A1.manifestDigest
       || supervisorEntries[1].path !== SUPERVISOR_PATH
       || supervisorEntries[1].mode !== '100755'
       || supervisorEntries[1].sha256 !== A1.binaryDigest
@@ -442,7 +381,9 @@ export function buildDeterministicControllerSeed(args) {
       sourceRepositoryRevision: input.sourceRepositoryRevision,
       files: fileRecords,
       closureDigest,
-      workflowMappings: WORKFLOWS,
+      workflowMappings: sourceSetDescriptor.sets[1].relocations.filter(
+        ({ destination }) => destination.startsWith('.github/workflows/'),
+      ),
       a1SupervisorEvidence: a1Evidence,
     };
     const internalManifestBytes = canonicalBytes(internalManifest);
@@ -602,10 +543,16 @@ async function readCommittedSourceRoot(sourceRepositoryRevision, gitOptions) {
 
 export async function buildDeterministicControllerSeedFromGit(args) {
   try {
-    const input = exactObject(args, [
+    const candidateInput = exactObject(args, [
       'repositoryRoot', 'sourceRepositoryRevision', 'a1SupervisorRoot',
       'a1SupervisorEvidence',
     ]);
+    const a1SupervisorEvidence = candidateInput === null
+      ? null
+      : cloneEvidence(candidateInput.a1SupervisorEvidence);
+    const input = candidateInput === null || a1SupervisorEvidence === null
+      ? null
+      : Object.freeze({ ...candidateInput, a1SupervisorEvidence });
     if (
       input === null
       || typeof input.repositoryRoot !== 'string'
@@ -630,7 +577,9 @@ export async function buildDeterministicControllerSeedFromGit(args) {
     if (descriptorBytes === undefined || proposalBytes === undefined) {
       return result('BLOCKED', null, 'SEED_GIT_INPUT_INVALID');
     }
-    const sourceSetDescriptor = validateSourceSetDescriptor(JSON.parse(descriptorBytes.toString('utf8')));
+    const sourceSetDescriptor = validateControllerSourceSetDescriptor(
+      JSON.parse(descriptorBytes.toString('utf8')),
+    );
     const proposalResult = validateControllerBundleProposal(JSON.parse(proposalBytes.toString('utf8')));
     if (sourceSetDescriptor === null || proposalResult.status !== 'PASS') {
       return result('BLOCKED', null, 'SEED_GIT_INPUT_INVALID');
@@ -646,12 +595,21 @@ export async function buildDeterministicControllerSeedFromGit(args) {
       .map(({ path: filePath }) => filePath)
       .sort(ordinal);
     const controllerInventory = [...sourceSetDescriptor.sets[1].files];
+    const preBundleValidationWorkflow = sourceSetDescriptor.sets[1].relocations.find(
+      ({ destination }) => destination === '.github/workflows/controller-validation.yml',
+    )?.source;
+    if (preBundleValidationWorkflow === undefined) {
+      return result('BLOCKED', null, 'SEED_GIT_INPUT_INVALID');
+    }
+    const controllerExecutableInventory = controllerInventory.filter(
+      (filePath) => filePath !== preBundleValidationWorkflow,
+    );
     const toolingInventory = [...sourceSetDescriptor.sets[2].files];
-    const ownedInventory = [...controllerInventory, ...toolingInventory].sort(ordinal);
+    const ownedInventory = [...controllerExecutableInventory, ...toolingInventory].sort(ordinal);
     if (
       new Set(ownedInventory.map((filePath) => filePath.toLowerCase())).size !== ownedInventory.length
       || proposalInventory.some((filePath) => !ownedInventory.includes(filePath))
-      || controllerInventory.some((filePath) => !proposalInventory.includes(filePath))
+      || controllerExecutableInventory.some((filePath) => !proposalInventory.includes(filePath))
       || toolingInventory.some((filePath) => !proposalInventory.includes(filePath))
     ) return result('BLOCKED', null, 'SEED_GIT_INPUT_INVALID');
     const overlayPrefix = `${OVERLAY_ROOT}/`;
@@ -691,7 +649,7 @@ export async function buildDeterministicControllerSeedFromGit(args) {
       return result('BLOCKED', null, 'SEED_A1_SUPERVISOR_INVALID');
     }
     sourceSets.push({ name: 'a1-supervisor', files: [
-      { sourcePath: 'dist.manifest.json', destinationPath: 'a1-oci/supervisor/dist.manifest.json', mode: '100644', bytes: new Uint8Array(await readFile(manifestPath)) },
+      { sourcePath: 'dist.manifest.json', destinationPath: 'a1-oci/supervisor/dist.manifest.json', mode: '100644', bytes: new Uint8Array(await readFile(manifestPath)), sha256: A1.manifestDigest },
       { sourcePath: 'dist/verification-supervisor', destinationPath: SUPERVISOR_PATH, mode: '100755', bytes: new Uint8Array(await readFile(binaryPath)), sha256: A1.binaryDigest },
     ] });
     return buildDeterministicControllerSeed({
@@ -708,7 +666,7 @@ export async function buildDeterministicControllerSeedFromGit(args) {
         })),
       },
       sourceSets,
-      a1SupervisorEvidence: input.a1SupervisorEvidence,
+      a1SupervisorEvidence,
     });
   } catch {
     return result('BLOCKED', null, 'SEED_GIT_INPUT_INVALID');

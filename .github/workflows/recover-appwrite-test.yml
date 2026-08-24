@@ -177,7 +177,9 @@ jobs:
           set -euo pipefail
           node packages/verification-controller/src/test-cloud-recovery-controller.mjs \
             --hosted \
-            --original-workflow-run-id "${{ inputs.original_workflow_run_id }}" \
+            --revision "${{ inputs.revision }}" \
             --source-workflow-run-id "${{ inputs.source_run_id }}" \
+            --source-run-attempt "${{ inputs.source_run_attempt }}" \
+            --original-workflow-run-id "${{ inputs.original_workflow_run_id }}" \
             --binding-directory "$BINDING_DIRECTORY" \
             --execute

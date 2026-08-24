@@ -393,6 +393,7 @@ const BROWSER_ROUTE_METHOD_KEYS = OBJECT_FREEZE([
 ]);
 const BROWSER_ARTIFACT_SETUP_KEYS = OBJECT_FREEZE([
   'receiver',
+  'consumeCurrentBrowserArtifactSetHandoff',
   'beginBrowserArtifactSetSetupBinding',
   'commitBrowserArtifactSetSetupBinding',
   'abortBrowserArtifactSetSetupBinding',
@@ -429,6 +430,7 @@ const APPWRITE_RUNNER_VARIABLE_REGISTRAR_PROPERTY =
 const APPWRITE_RUNNER_VARIABLE_REGISTRATION_KEYS = OBJECT_FREEZE([
   'receiver',
   'authenticateRunnerVariableReadbackRequestEvidence',
+  'consumeQualifiedRunnerProviderBindings',
   'moduleUrl',
 ]);
 const PROVIDER_CONTROL_NAMESPACE_EXPORTS = OBJECT_FREEZE([
@@ -616,7 +618,20 @@ const REQUEST_AUTHORITY_KEYS = OBJECT_FREEZE([
   'requestTemplate',
   'requestTemplateDigest',
   'exactDeploymentOrigin',
+  'fixedShareQueryContract',
+  'initialSourceOperationBindings',
   'logicalValueBindings',
+  'memberReadbackContract',
+]);
+const FIXED_SHARE_QUERY_CONTRACT_KEYS = OBJECT_FREEZE([
+  'bindingName', 'databaseBinding', 'databaseId', 'filterField', 'limit',
+  'projectionKeys', 'tableId', 'tableIdSource', 'total', 'transactionId',
+  'transactionMode',
+]);
+const MEMBER_READBACK_CONTRACT_KEYS = OBJECT_FREEZE([
+  'applicationKeys', 'databaseBinding', 'logicalResource', 'ownerSlot',
+  'projectionKeys', 'providerKind', 'tableBinding', 'transactionId',
+  'transactionMode',
 ]);
 const REQUEST_TEMPLATE_KEYS = OBJECT_FREEZE([
   'schemaVersion',
@@ -779,7 +794,7 @@ const ASYNC_FUNCTION_PROTOTYPE = OBJECT_GET_PROTOTYPE_OF(
   async function trustedAsyncFunction(_args) {},
 );
 const PROVIDER_CONTROL_METHOD_KINDS = OBJECT_FREEZE([
-  'sync', 'async', 'sync', 'async', 'sync',
+  'async', 'async', 'sync', 'async', 'sync',
   'async', 'async', 'async', 'async', 'async',
 ]);
 const IDENTITY_AUTHORITY_METHOD_KINDS = OBJECT_FREEZE([
@@ -796,6 +811,7 @@ const BROWSER_ROUTE_METHOD_KINDS = OBJECT_FREEZE([
   'async',
 ]);
 const BROWSER_ARTIFACT_METHOD_KINDS = OBJECT_FREEZE([
+  'sync',
   'sync',
   'sync',
   'sync',
@@ -909,6 +925,16 @@ let setupLoadRecord = OBJECT_FREEZE({ state: 'EMPTY', version: 0 });
 const PROVIDER_QUALIFICATIONS = new WEAK_MAP();
 const SETUP_QUALIFICATIONS = new WEAK_MAP();
 const PROVIDER_TUPLES = new WEAK_MAP();
+const SESSION_INTENT_LINEAGES = new WEAK_MAP();
+const ACTIVE_BROWSER_CLOCK_BINDINGS = new WEAK_MAP();
+const CLOCK_RECONCILIATION_ORDINALS = OBJECT_FREEZE([4, 5, 8, 11, 16]);
+const SESSION_LINEAGE_WITNESSES = new WEAK_MAP();
+const SESSION_LINEAGE_PUBLICATION_KEYS = OBJECT_FREEZE([
+  'context', 'intentSetDigest', 'leaseAcquiredAt', 'leaseTokenDigest',
+  'leaseVersion', 'ledgerDigest', 'providerContractDigest',
+  'providerContractQualification', 'providerControlStore',
+  'runtimeQualification', 'sessionIntentQualification', 'state',
+]);
 const SETUP_TUPLES = new WEAK_MAP();
 let futureBootstrapHub;
 let canonicalProviderControlNamespace;
@@ -920,7 +946,16 @@ let canonicalBrowserArtifactSetNamespace;
 let canonicalFixtureClockNamespace;
 let futureBrowserArtifactMemberReader;
 let currentQualifiedProviderRegistry;
+let currentProviderMutationProfiles;
+let currentMemberReadbackContracts;
+let currentFixedShareQueryContract;
+let qualifiedRunnerProviderBindings;
 const providerMutationCaptureEntries = [];
+const providerObservedBindingGroups = new Map();
+const providerExpectedStateMappings = new Map();
+const providerMutationIssueEntries = new WEAK_MAP();
+const shareBaselineEntries = new WEAK_MAP();
+const shareIssueEntries = new WEAK_MAP();
 const OPERATION_QUALIFICATIONS = new WEAK_MAP();
 const futureBridgeReceiver = OBJECT_FREEZE(OBJECT_CREATE(null));
 const futureSessionLineageReceiver = OBJECT_FREEZE(OBJECT_CREATE(null));
@@ -940,6 +975,12 @@ function terminallyBlockRuntime() {
     activeRuntimeQualification = undefined;
     activeBrowserScenarioQualification = undefined;
     currentQualifiedProviderRegistry = undefined;
+    currentProviderMutationProfiles = undefined;
+    currentMemberReadbackContracts = undefined;
+    currentFixedShareQueryContract = undefined;
+    qualifiedRunnerProviderBindings = undefined;
+    providerObservedBindingGroups.clear();
+    providerExpectedStateMappings.clear();
     futureBrowserArtifactMemberReader = undefined;
     runtimeRecord = successor;
   }
@@ -1718,11 +1759,23 @@ function exactLogicalValueBindings(value) {
 
 function exactQualifiedProviderRegistryFor(args) {
   const registry = currentQualifiedProviderRegistry;
-  if (!exactOrderedDataRecord(registry, QUALIFIED_PROVIDER_REGISTRY_KEYS)) return false;
+  if (!exactOrderedDataRecord(registry, QUALIFIED_PROVIDER_REGISTRY_KEYS)) {
+
+    return false;
+  }
   const values = OBJECT_CREATE(null);
   for (const key of QUALIFIED_PROVIDER_REGISTRY_KEYS) {
     values[key] = OBJECT_GET_OWN_PROPERTY_DESCRIPTOR(registry, key).value;
   }
+  const lineageAuthenticated = sessionLineageImplementation(createClosedNullRecord(
+    ['runtimeQualification', 'context', 'sessionIntentQualification'],
+    {
+      runtimeQualification: args.runtimeQualification,
+      context: args.context,
+      sessionIntentQualification: args.sessionIntentQualification,
+    },
+  ));
+
   if (
     values.state !== 'QUALIFIED'
     || !OBJECT_IS(values.runtimeQualification, activeRuntimeQualification)
@@ -1732,6 +1785,7 @@ function exactQualifiedProviderRegistryFor(args) {
       values.sessionIntentQualification,
       args.sessionIntentQualification,
     )
+    || lineageAuthenticated !== true
     || typeof values.exactDeploymentOrigin !== 'string'
     || values.exactDeploymentOrigin.length === 0
     || values.exactDeploymentOrigin.length > 2048
@@ -1754,12 +1808,378 @@ function exactQualifiedProviderRegistryFor(args) {
       canonicalJson(operationProfile.requestTemplate),
       'utf8',
     ))
+    || (args.mutationOrdinal <= 16
+      ? (!exactDigestString(operationProfile.expectedStateContractDigest)
+        || operationProfile.expectedStateContract === null)
+      : (operationProfile.expectedStateContract !== null
+        || operationProfile.expectedStateContractDigest !== null))
     || !exactLogicalValueBindings(logicalValueBindings)
-  ) return false;
+  ) {
+
+    return false;
+  }
+
   return createClosedNullRecord(
     ['registry', 'operationProfile', 'logicalValueBindings'],
     { registry, operationProfile, logicalValueBindings },
   );
+}
+
+function installTrustedProviderRegistry(args, providerRecord, sessionIntentQualification) {
+  try {
+
+    if (
+      currentQualifiedProviderRegistry !== undefined
+      || currentProviderMutationProfiles !== undefined
+      || currentMemberReadbackContracts !== undefined
+      || currentFixedShareQueryContract !== undefined
+      || providerRecord === undefined
+      || providerRecord.providerContract === null
+      || typeof providerRecord.providerContract !== 'object'
+      || !Array.isArray(providerRecord.providerContract.aggregateContracts?.resources)
+      || typeof args.context.endpoint !== 'string'
+    ) return false;
+    const runnerBindings = qualifiedRunnerProviderBindings;
+
+    if (
+      runnerBindings === undefined
+      || !OBJECT_IS(runnerBindings.runtimeQualification, args.runtimeQualification)
+      || !OBJECT_IS(runnerBindings.context, args.context)
+      || !OBJECT_IS(
+        runnerBindings.providerContractQualification,
+        args.providerContractQualification,
+      )
+    ) return false;
+    const fixedQueries = providerRecord.providerContract.fixedQueryContracts?.queries;
+    const tableBindings = providerRecord.providerContract.coreProvider?.tableBindings;
+
+    if (!Array.isArray(fixedQueries) || !Array.isArray(tableBindings)) return false;
+    const shareQueries = fixedQueries.filter(({ bindingName }) => bindingName === 'project-shares');
+    const shareTables = tableBindings.filter(({ bindingName }) => bindingName === 'project-shares');
+    if (
+      shareQueries.length !== 1
+      || shareTables.length !== 1
+      || shareTables[0].idSource !== 'VERIFICATION_SHARES_TABLE_ID'
+    ) return false;
+    const shareQuery = shareQueries[0];
+    currentFixedShareQueryContract = createClosedNullRecord(
+      FIXED_SHARE_QUERY_CONTRACT_KEYS,
+      {
+        bindingName: shareQuery.bindingName,
+        databaseBinding: 'VERIFICATION_PRIMARY_DATABASE_ID',
+        databaseId: runnerBindings.primaryDatabaseId,
+        filterField: shareQuery.filterField,
+        limit: shareQuery.limit,
+        projectionKeys: safePrivateJsonCopy(shareQuery.projectionKeys),
+        tableId: runnerBindings.sharesTableId,
+        tableIdSource: shareTables[0].idSource,
+        total: shareQuery.total,
+        transactionId: shareQuery.transactionId,
+        transactionMode: shareQuery.transactionMode,
+      },
+    );
+    const operations = [];
+    const readbackContracts = [];
+
+    for (const resource of providerRecord.providerContract.aggregateContracts.resources) {
+      if (!Array.isArray(resource.memberTemplates)) return false;
+      for (const memberTemplate of resource.memberTemplates) {
+        if (!Array.isArray(memberTemplate.operations)) return false;
+        for (const operation of memberTemplate.operations) {
+          if (!NUMBER_IS_SAFE_INTEGER(operation.mutationOrdinal)
+            || operation.mutationOrdinal < 0 || operation.mutationOrdinal > 18
+            || operations[operation.mutationOrdinal] !== undefined) return false;
+          operations[operation.mutationOrdinal] = operation;
+          readbackContracts[operation.mutationOrdinal] = operation.mutationOrdinal >= 17
+            ? null
+            : createClosedNullRecord(MEMBER_READBACK_CONTRACT_KEYS, {
+              applicationKeys: safePrivateJsonCopy(
+                operation.expectedStateContract.applicationKeys
+                  ?? operation.expectedStateContract.metadataKeys,
+              ),
+              databaseBinding: memberTemplate.providerKind === 'tablesdb-row'
+                ? operation.requestTemplate.pathBindings.databaseBinding : null,
+              logicalResource: resource.resourceType,
+              ownerSlot: memberTemplate.slot,
+              projectionKeys: safePrivateJsonCopy(
+                memberTemplate.readProjectionKeys
+                  ?? operation.expectedStateContract.metadataKeys,
+              ),
+              providerKind: memberTemplate.providerKind,
+              tableBinding: memberTemplate.bindingName,
+              transactionId: memberTemplate.readTransactionId,
+              transactionMode: memberTemplate.readTransactionMode,
+            });
+        }
+      }
+    }
+    if (operations.length !== 19 || operations.some((operation) => operation === undefined)) {
+
+      return false;
+    }
+    if (readbackContracts.length !== 19
+      || readbackContracts.some((contract) => contract === undefined)) {
+
+      return false;
+    }
+
+    const operationProfiles = OBJECT_FREEZE(operations.map((operation) => {
+      const requestTemplate = createClosedNullRecord(REQUEST_TEMPLATE_KEYS, {
+        schemaVersion: operation.requestTemplate.schemaVersion,
+        mutationOrdinal: operation.requestTemplate.mutationOrdinal,
+        method: operation.requestTemplate.method,
+        routeId: operation.requestTemplate.routeId,
+        pathTemplate: operation.requestTemplate.pathTemplate,
+        pathBindings: safePrivateJsonCopy(operation.requestTemplate.pathBindings),
+        query: safePrivateJsonCopy(operation.requestTemplate.query),
+        bodyKind: operation.requestTemplate.bodyKind,
+        bodyTemplate: safePrivateJsonCopy(operation.requestTemplate.bodyTemplate),
+        bindingNames: safePrivateJsonCopy(operation.requestTemplate.bindingNames),
+        executionEnvelopeTemplate: operation.requestTemplate.executionEnvelopeTemplate === null
+          ? null : safePrivateJsonCopy(operation.requestTemplate.executionEnvelopeTemplate),
+      });
+      return createClosedNullRecord(CANONICAL_OPERATION_PROFILE_KEYS, {
+        mutationOrdinal: operation.mutationOrdinal,
+        phase: operation.phase,
+        operation: operation.operation,
+        requestTemplate,
+        requestTemplateDigest: operation.requestTemplateDigest,
+        expectedStateContract: operation.expectedStateContract === null
+          ? null : normalizedExpectedStateContract(operation.expectedStateContract),
+        expectedStateContractDigest: operation.expectedStateContractDigest,
+      });
+    }));
+    const logicalValueBindingGroups = OBJECT_FREEZE(
+      operations.map(() => OBJECT_FREEZE([])),
+    );
+    const fixtureLiterals = providerRecord.providerContract.fixtureSemanticLiterals;
+    const fixtureSemanticLiterals = OBJECT_FREEZE([
+      'entrypointArtifactName', 'projectRowName', 'projectTags', 'rootArtifactName',
+    ].map((literalName) => createClosedNullRecord(
+      FIXTURE_SEMANTIC_LITERAL_KEYS,
+      {
+        literalName,
+        valueType: Array.isArray(fixtureLiterals[literalName])
+          ? 'array' : typeof fixtureLiterals[literalName],
+        value: safePrivateJsonCopy(fixtureLiterals[literalName]),
+      },
+    )));
+    currentProviderMutationProfiles = OBJECT_FREEZE(operationProfiles.map((operation) => (
+      createClosedNullRecord(PROVIDER_MUTATION_PROFILE_KEYS, {
+        operation,
+        expectedStateContract: operation.expectedStateContract,
+        expectedStateContractDigest: operation.expectedStateContractDigest,
+        fixtureSemanticLiterals,
+        environmentBindings: createClosedNullRecord(
+          ENVIRONMENT_BINDING_KEYS,
+          {
+            environmentDigest: args.context.environmentDigest,
+            providerContractDigest: providerRecord.providerContractDigest,
+          },
+        ),
+        providerIdentities: OBJECT_FREEZE([]),
+        ownerUserId: '',
+        priorExpectedStates: OBJECT_FREEZE([]),
+        sourceByteSizes: OBJECT_FREEZE([]),
+        timestampBindings: OBJECT_FREEZE([]),
+      })
+    )));
+    currentMemberReadbackContracts = OBJECT_FREEZE(readbackContracts);
+    currentQualifiedProviderRegistry = createClosedNullRecord(
+      QUALIFIED_PROVIDER_REGISTRY_KEYS,
+      {
+        state: 'QUALIFIED',
+        runtimeQualification: args.runtimeQualification,
+        context: args.context,
+        sessionIntentQualification,
+        exactDeploymentOrigin: new URL(args.context.endpoint).origin,
+        operationProfiles,
+        logicalValueBindingGroups,
+      },
+    );
+
+    return exactOrderedDataRecord(
+      currentQualifiedProviderRegistry,
+      QUALIFIED_PROVIDER_REGISTRY_KEYS,
+    ) && exactDenseFrozenArray(currentProviderMutationProfiles)
+      && exactOrderedDataRecord(
+        currentFixedShareQueryContract,
+        FIXED_SHARE_QUERY_CONTRACT_KEYS,
+      );
+  } catch {
+
+    currentQualifiedProviderRegistry = undefined;
+    currentProviderMutationProfiles = undefined;
+    currentMemberReadbackContracts = undefined;
+    currentFixedShareQueryContract = undefined;
+    return false;
+  }
+}
+
+function expectedStateSourceRequirements(contract) {
+  const required = {
+    logicalValueBindings: [], providerIdentities: [],
+    priorExpectedStates: [], sourceByteSizes: [],
+  };
+  const add = (key, value) => {
+    if (!required[key].includes(value)) required[key].push(value);
+  };
+  if (contract?.baseSourceMutationOrdinal !== null
+    && contract?.baseSourceMutationOrdinal !== undefined) {
+    add('priorExpectedStates', contract.baseSourceMutationOrdinal);
+  }
+  const sourceSlots = Object.freeze({
+    0: 'rootManifestInitial', 1: 'entrypointSourceInitial',
+    7: 'entrypointSourceSaved', 10: 'rootManifestSaved',
+    14: 'visualModelSourceSaved',
+  });
+  const visit = (source) => {
+    if (source === null || typeof source !== 'object') return;
+    if (source.kind === 'logical-value') {
+      add('logicalValueBindings', `${source.ownerSlot}.${source.name}`);
+    } else if (source.kind === 'provider-id') {
+      add('providerIdentities', source.ownerSlot);
+    } else if (source.kind === 'environment-id') {
+      add('providerIdentities', source.bindingName);
+    } else if (source.kind === 'expected-state-field') {
+      add('priorExpectedStates', source.sourceMutationOrdinal);
+    } else if (source.kind === 'source-bytes-size') {
+      add('sourceByteSizes', sourceSlots[source.sourceMutationOrdinal]);
+    } else if (source.kind === 'derived-string' && Array.isArray(source.inputSources)) {
+      for (const input of source.inputSources) visit(input);
+    }
+  };
+  for (const row of contract?.valueSources ?? []) visit(row.source);
+  return required;
+}
+
+function observedProviderBinding(mutationOrdinal, bindingName) {
+  const group = providerObservedBindingGroups.get(mutationOrdinal);
+  return group?.find((row) => row.bindingName === bindingName)?.value;
+}
+
+function currentProviderMutationProfile(mutationOrdinal) {
+  const base = currentProviderMutationProfiles?.[mutationOrdinal];
+
+  if (!exactOrderedDataRecord(base, PROVIDER_MUTATION_PROFILE_KEYS)) {
+
+    return false;
+  }
+  if (typeof base.ownerUserId === 'string' && base.ownerUserId.length !== 0) {
+    return createClosedNullRecord(
+      ['providerMutationProfile', 'logicalValueBindings'],
+      { providerMutationProfile: base, logicalValueBindings: null },
+    );
+  }
+  const requirements = expectedStateSourceRequirements(base.expectedStateContract);
+  const logicalSources = Object.freeze({
+    'entrypointArtifact.entrypointArtifactId': [0, 'entrypointArtifact.entrypointArtifactId'],
+    'entrypointVersionInitial.initialEntrypointVersionId': [0, 'entrypointVersionInitial.initialEntrypointVersionId'],
+    'entrypointVersionInitial.workflowContentHash': [0, 'entrypointVersionInitial.workflowContentHash'],
+    'entrypointVersionSaved.savedEntrypointVersionId': [8, 'body.versionId'],
+    'entrypointVersionSaved.workflowContentHash': [8, 'body.contentHash'],
+    'projectFacade.projectId': [0, 'projectFacade.projectId'],
+    'rootArtifact.rootArtifactId': [0, 'rootArtifact.rootArtifactId'],
+    'rootVersionInitial.initialRootVersionId': [2, 'body.latestPublishedVersionId'],
+    'rootVersionInitial.rootContentHash': [0, 'rootVersionInitial.rootContentHash'],
+    'rootVersionSaved.rootContentHash': [11, 'body.contentHash'],
+    'rootVersionSaved.savedRootVersionId': [11, 'body.versionId'],
+    'visualModelArtifact.visualArtifactId': [
+      14, 'body.fileName', 'visual-model-artifact-id',
+    ],
+    'visualModelVersionSaved.visualContentHash': [16, 'body.contentHash'],
+    'visualModelVersionSaved.visualVersionId': [15, 'body.latestPublishedVersionId'],
+  });
+  const providerSources = Object.freeze({
+    rootManifestInitial: [0, 'body.fileId'],
+    entrypointSourceInitial: [1, 'body.fileId'],
+    entrypointSourceSaved: [7, 'body.fileId'],
+    rootManifestSaved: [10, 'body.fileId'],
+    visualModelSourceSaved: [14, 'body.fileId'],
+    'project-files': [0, 'path.bucketId'],
+  });
+  const sourceSizeOrdinals = Object.freeze({
+    rootManifestInitial: 0,
+    entrypointSourceInitial: 1,
+    entrypointSourceSaved: 7,
+    rootManifestSaved: 10,
+    visualModelSourceSaved: 14,
+  });
+  try {
+    const logicalValueBindings = OBJECT_FREEZE(requirements.logicalValueBindings.map((bindingName) => {
+      const source = logicalSources[bindingName];
+      let value = source === undefined ? undefined
+        : observedProviderBinding(source[0], source[1]);
+      if (source?.[2] === 'visual-model-artifact-id') {
+        if (typeof value !== 'string'
+          || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}\.json$/u.test(value)) {
+          value = undefined;
+        } else {
+          const candidate = value.slice(0, -'.json'.length);
+          value = `${candidate}.json` === value ? candidate : undefined;
+        }
+      }
+      if (value === undefined) throw new TypeError('logical value unavailable ' + bindingName);
+      return createClosedNullRecord(LOGICAL_VALUE_BINDING_KEYS, {
+        bindingName,
+        valueType: Array.isArray(value) ? 'array' : typeof value,
+        value: safePrivateJsonCopy(value),
+      });
+    }));
+    const providerIdentities = OBJECT_FREEZE(requirements.providerIdentities.map((bindingName) => {
+      const source = providerSources[bindingName];
+      const value = source === undefined ? undefined
+        : observedProviderBinding(source[0], source[1]);
+      if (typeof value !== 'string' || value.length === 0) {
+        throw new TypeError('provider identity unavailable');
+      }
+      return createClosedNullRecord(PROVIDER_IDENTITY_KEYS, { bindingName, value });
+    }));
+    const priorExpectedStates = OBJECT_FREEZE(requirements.priorExpectedStates.map(
+      (sourceOrdinal) => {
+        const mapping = providerExpectedStateMappings.get(sourceOrdinal);
+        if (mapping === undefined) throw new TypeError('prior state unavailable');
+        return createClosedNullRecord(PRIOR_EXPECTED_STATE_KEYS, {
+          mutationOrdinal: sourceOrdinal,
+          expectedState: mapping.expectedResultState,
+        });
+      },
+    ));
+    const sourceByteSizes = OBJECT_FREEZE(requirements.sourceByteSizes.map((bindingName) => {
+      const sourceOrdinal = sourceSizeOrdinals[bindingName];
+      const sizeBytes = observedProviderBinding(sourceOrdinal, 'body.sizeBytes');
+      if (!NUMBER_IS_SAFE_INTEGER(sizeBytes) || sizeBytes < 0) {
+        throw new TypeError('source size unavailable');
+      }
+      return createClosedNullRecord(SOURCE_BYTE_SIZE_KEYS, { bindingName, sizeBytes });
+    }));
+    let ownerUserId;
+    for (const group of providerObservedBindingGroups.values()) {
+      ownerUserId ??= group.find((row) => row.bindingName === 'ownerUserId')?.value;
+      ownerUserId ??= group.find((row) => row.bindingName === 'body.createdBy')?.value;
+      ownerUserId ??= group.find((row) => row.bindingName === 'body.ownerId')?.value;
+    }
+    if (typeof ownerUserId !== 'string' || ownerUserId.length === 0) {
+
+      return false;
+    }
+    const providerMutationProfile = createClosedNullRecord(PROVIDER_MUTATION_PROFILE_KEYS, {
+      ...base,
+      providerIdentities,
+      ownerUserId,
+      priorExpectedStates,
+      sourceByteSizes,
+      timestampBindings: OBJECT_FREEZE([]),
+    });
+
+    return createClosedNullRecord(
+      ['providerMutationProfile', 'logicalValueBindings'],
+      { providerMutationProfile, logicalValueBindings },
+    );
+  } catch (error) {
+
+    return false;
+  }
 }
 
 function mutationOrdinalAlreadyCaptured(registry, mutationOrdinal) {
@@ -1809,7 +2229,11 @@ function createMutationRequestAuthority(args) {
     requestTemplate: qualified.operationProfile.requestTemplate,
     requestTemplateDigest: qualified.operationProfile.requestTemplateDigest,
     exactDeploymentOrigin: qualified.registry.exactDeploymentOrigin,
+    fixedShareQueryContract: args.mutationOrdinal >= 17
+      ? currentFixedShareQueryContract : null,
+    initialSourceOperationBindings: OBJECT_FREEZE([]),
     logicalValueBindings: qualified.logicalValueBindings,
+    memberReadbackContract: currentMemberReadbackContracts?.[args.mutationOrdinal] ?? null,
   });
   return createClosedNullRecord(
     ['registry', 'operationQualification', 'requestAuthority'],
@@ -1831,8 +2255,10 @@ function exactRouteProjection(value) {
     || !exactDigestString(value.queryBinding.queryDigest)
     || !exactDigestString(value.bodyBinding.semanticBodyDigest)
     || !exactDigestString(value.bodyBinding.boundValuesDigest)
-    || !exactDigestString(value.bodyBinding.executionEnvelopeDigest)
-    || !exactDigestString(value.sourceBytesDigest)
+    || (value.bodyBinding.executionEnvelopeDigest !== null
+      && !exactDigestString(value.bodyBinding.executionEnvelopeDigest))
+    || (value.sourceBytesDigest !== null
+      && !exactDigestString(value.sourceBytesDigest))
     || !exactDenseFrozenArray(value.generatedIdBindings)
   ) return false;
   for (const binding of value.generatedIdBindings) {
@@ -1925,7 +2351,42 @@ function invokeProviderControlMethod(methodName, args) {
   }
 }
 
+async function invokeCanonicalIdentityMethod(methodName, args) {
+  if (canonicalIdentityBindingsNamespace === undefined) {
+    return terminallyBlockRuntime();
+  }
+  const descriptor = OBJECT_GET_OWN_PROPERTY_DESCRIPTOR(
+    canonicalIdentityBindingsNamespace,
+    methodName,
+  );
+  if (
+    descriptor === undefined
+    || REFLECT_HAS(descriptor, 'value') !== true
+    || typeof descriptor.value !== 'function'
+  ) return terminallyBlockRuntime();
+  try {
+    const operation = REFLECT_APPLY(
+      descriptor.value,
+      canonicalIdentityBindingsNamespace,
+      [args],
+    );
+    if (!exactLocalPromise(operation)) return terminallyBlockRuntime();
+    const result = await operation;
+    return createClosedNullRecord(['status', 'value', 'diagnostics'], {
+      status: result.status,
+      value: result.value,
+      diagnostics: result.diagnostics,
+    });
+  } catch {
+    return terminallyBlockRuntime();
+  }
+}
+
 function invokeIdentityMethod(methodName, args) {
+  if (methodName === 'createShareIdentityBindingHandoff'
+    || methodName === 'bindQualifiedShareIdentityValues') {
+    return invokeCanonicalIdentityMethod(methodName, args);
+  }
   if (
     futureRegistrationStates.registerIdentityAuthorityBridge !== 'REGISTERED'
     || !OBJECT_IS(
@@ -1953,6 +2414,25 @@ function invokeIdentityMethod(methodName, args) {
   }
 }
 
+function invokeBrowserArtifactSetupMethod(methodName, args) {
+  const registration = registeredEnvelopeImplementation(
+    'registerBrowserArtifactSetSetupBridge',
+  );
+  if (registration === undefined) return false;
+  const descriptor = OBJECT_GET_OWN_PROPERTY_DESCRIPTOR(registration, methodName);
+  const receiver = registrationReceiver(registration);
+  if (
+    descriptor === undefined
+    || REFLECT_HAS(descriptor, 'value') !== true
+    || typeof descriptor.value !== 'function'
+  ) return false;
+  try {
+    return REFLECT_APPLY(descriptor.value, receiver, [args]);
+  } catch {
+    return false;
+  }
+}
+
 function deliverTimestampBindingResult(args) {
   return invokeEnvelopeSlot('registerTimestampBindingTransferReceiver', args);
 }
@@ -1975,6 +2455,7 @@ function authenticateProviderQualification(args) {
 
 function authenticateBrowserScenarioQualification(args) {
   try {
+
     if (
       runtimeRecord.state !== 'ACTIVE'
       || activationState !== 'COMMITTED'
@@ -1990,7 +2471,7 @@ function authenticateBrowserScenarioQualification(args) {
       args,
       'browserScenarioQualification',
     );
-    return runtimeDescriptor !== undefined
+    const authenticated = runtimeDescriptor !== undefined
       && scenarioDescriptor !== undefined
       && REFLECT_HAS(runtimeDescriptor, 'value') === true
       && REFLECT_HAS(scenarioDescriptor, 'value') === true
@@ -2002,17 +2483,142 @@ function authenticateBrowserScenarioQualification(args) {
       )
       ? true
       : terminallyBlockRuntime();
+
+    return authenticated;
+  } catch {
+
+    return terminallyBlockRuntime();
+  }
+}
+
+function safePrivateJsonCopy(value) {
+  const copy = parseClosedJson(canonicalJson(value));
+  deepFreezeJson(copy);
+  return copy;
+}
+
+function normalizedExpectedStateSource(source) {
+  if (source === null || typeof source !== 'object' || ARRAY_IS_ARRAY(source)) {
+    throw new TypeError('expected state source');
+  }
+  let keys;
+  if (source.kind === 'contract-literal') keys = ['kind', 'name'];
+  else if (source.kind === 'literal') keys = ['kind', 'value'];
+  else if (source.kind === 'owner-user-id') keys = ['kind'];
+  else if (source.kind === 'logical-value') keys = ['kind', 'ownerSlot', 'name'];
+  else if (source.kind === 'provider-id') keys = ['kind', 'ownerSlot'];
+  else if (source.kind === 'environment-id') keys = ['kind', 'bindingName'];
+  else if (source.kind === 'expected-state-field') {
+    keys = ['kind', 'ownerSlot', 'sourceMutationOrdinal', 'key'];
+  } else if (source.kind === 'source-bytes-size') keys = ['kind', 'sourceMutationOrdinal'];
+  else if (source.kind === 'runtime-utc-timestamp') {
+    keys = ['kind', 'mutationOrdinal', 'name'];
+  } else if (source.kind === 'derived-string') keys = ['kind', 'derivation', 'inputSources'];
+  else throw new TypeError('expected state source kind');
+  if (OBJECT_KEYS(source).length !== keys.length
+    || keys.some((key) => !OBJECT_HAS_OWN(source, key))) {
+    throw new TypeError('expected state source shape');
+  }
+  return createClosedNullRecord(keys, Object.fromEntries(keys.map((key) => [
+    key,
+    key === 'inputSources'
+      ? OBJECT_FREEZE(source.inputSources.map(normalizedExpectedStateSource))
+      : safePrivateJsonCopy(source[key]),
+  ])));
+}
+
+function normalizedExpectedStateContract(contract) {
+  if (contract === null || typeof contract !== 'object' || ARRAY_IS_ARRAY(contract)) {
+    throw new TypeError('expected state contract');
+  }
+  const keys = contract.schemaVersion === 'verification-file-expected-state-contract.v1'
+    ? ['schemaVersion', 'metadataKeys', 'valueSources']
+    : contract.schemaVersion === 'verification-row-expected-state-contract.v1'
+      ? ['schemaVersion', 'baseSourceMutationOrdinal', 'applicationKeys', 'valueSources']
+      : null;
+  if (keys === null || OBJECT_KEYS(contract).length !== keys.length
+    || keys.some((key) => !OBJECT_HAS_OWN(contract, key))
+    || !ARRAY_IS_ARRAY(contract.valueSources)) {
+    throw new TypeError('expected state contract shape');
+  }
+  const values = { ...contract };
+  values.metadataKeys = contract.metadataKeys === undefined
+    ? undefined : safePrivateJsonCopy(contract.metadataKeys);
+  values.applicationKeys = contract.applicationKeys === undefined
+    ? undefined : safePrivateJsonCopy(contract.applicationKeys);
+  values.valueSources = OBJECT_FREEZE(contract.valueSources.map((row) => {
+    if (row === null || typeof row !== 'object' || ARRAY_IS_ARRAY(row)
+      || OBJECT_KEYS(row).length !== 2 || !OBJECT_HAS_OWN(row, 'key')
+      || !OBJECT_HAS_OWN(row, 'source')) {
+      throw new TypeError('expected state value source');
+    }
+    return createClosedNullRecord(['key', 'source'], {
+      key: row.key,
+      source: normalizedExpectedStateSource(row.source),
+    });
+  }));
+  return createClosedNullRecord(keys, values);
+}
+
+function readFixtureClockPolicy(args) {
+  try {
+    if (
+      runtimeRecord.state !== 'ACTIVE'
+      || activationState !== 'COMMITTED'
+      || !exactOrderedDataRecord(args, [
+        'runtimeQualification', 'context', 'providerContractQualification',
+      ])
+      || !OBJECT_IS(args.runtimeQualification, activeRuntimeQualification)
+    ) return terminallyBlockRuntime();
+    const record = providerRecordFor(args.providerContractQualification);
+    if (
+      record === undefined
+      || !OBJECT_IS(record.runtimeQualification, args.runtimeQualification)
+      || !OBJECT_IS(record.context, args.context)
+    ) return terminallyBlockRuntime();
+    return createClosedNullRecord(['fixtureClockPolicy'], {
+      fixtureClockPolicy: safePrivateJsonCopy(record.providerContract.fixtureClockPolicy),
+    });
   } catch {
     return terminallyBlockRuntime();
   }
 }
 
-function readFixtureClockPolicy(_args) {
-  return terminallyBlockRuntime();
-}
-
-function readBrowserRequestPolicy(_args) {
-  return terminallyBlockRuntime();
+function readBrowserRequestPolicy(args) {
+  try {
+    if (
+      runtimeRecord.state !== 'ACTIVE'
+      || activationState !== 'COMMITTED'
+      || !exactOrderedDataRecord(args, [
+        'runtimeQualification', 'context', 'providerContractQualification',
+        'providerSetupReadbackQualification',
+      ])
+      || !OBJECT_IS(args.runtimeQualification, activeRuntimeQualification)
+    ) return terminallyBlockRuntime();
+    const providerRecord = providerRecordFor(args.providerContractQualification);
+    const setupRecord = SETUP_QUALIFICATIONS.get(
+      args.providerSetupReadbackQualification,
+    );
+    if (
+      providerRecord === undefined
+      || setupRecord === undefined
+      || setupRecord.state !== 'QUALIFIED'
+      || !OBJECT_IS(providerRecord.runtimeQualification, args.runtimeQualification)
+      || !OBJECT_IS(providerRecord.context, args.context)
+      || !OBJECT_IS(setupRecord.runtimeQualification, args.runtimeQualification)
+      || !OBJECT_IS(setupRecord.context, args.context)
+      || !OBJECT_IS(
+        setupRecord.providerQualification,
+        args.providerContractQualification,
+      )
+      || setupRecord.providerContractDigest !== providerRecord.providerContractDigest
+    ) return terminallyBlockRuntime();
+    return createClosedNullRecord(['browserRequestPolicy'], {
+      browserRequestPolicy: safePrivateJsonCopy(setupRecord.browserRequestPolicy),
+    });
+  } catch {
+    return terminallyBlockRuntime();
+  }
 }
 
 async function prepareShareValuesTransition(args) {
@@ -2214,18 +2820,258 @@ function invokeCanonicalRegistrar(namespace, registrarName, expectedSlots) {
   return true;
 }
 
-function sessionLineageImplementation(_args) {
+function sessionLineagePublication(args) {
+  if (!exactOrderedDataRecord(args, SESSION_LINEAGE_PUBLICATION_KEYS)) return false;
+  const providerRecord = providerRecordFor(args.providerContractQualification);
+  if (
+    providerRecord === undefined
+    || !OBJECT_IS(providerRecord.runtimeQualification, args.runtimeQualification)
+    || !OBJECT_IS(providerRecord.context, args.context)
+    || providerRecord.providerContractDigest !== args.providerContractDigest
+    || !exactEmptyReceiver(args.sessionIntentQualification)
+    || args.providerControlStore === null
+    || typeof args.providerControlStore !== 'object'
+    || !exactDigestString(args.intentSetDigest)
+    || !exactDigestString(args.leaseTokenDigest)
+    || !exactDigestString(args.ledgerDigest)
+    || !NUMBER_IS_SAFE_INTEGER(args.leaseVersion)
+    || args.leaseVersion < 1
+    || typeof args.leaseAcquiredAt !== 'string'
+    || args.leaseAcquiredAt.length === 0
+  ) return false;
+  const prior = SESSION_LINEAGE_WITNESSES.get(args.sessionIntentQualification);
+  const publicLineage = SESSION_INTENT_LINEAGES.get(args.sessionIntentQualification);
+  if (args.state === 'REVOKED') {
+    if (
+      prior === undefined
+      || !OBJECT_IS(prior.runtimeQualification, args.runtimeQualification)
+      || !OBJECT_IS(prior.context, args.context)
+      || !OBJECT_IS(prior.providerContractQualification, args.providerContractQualification)
+      || !OBJECT_IS(prior.providerControlStore, args.providerControlStore)
+      || prior.providerContractDigest !== args.providerContractDigest
+      || prior.intentSetDigest !== args.intentSetDigest
+      || prior.leaseAcquiredAt !== args.leaseAcquiredAt
+      || prior.leaseTokenDigest !== args.leaseTokenDigest
+      || prior.leaseVersion !== args.leaseVersion
+      || prior.ledgerDigest !== args.ledgerDigest
+      || (
+        publicLineage !== undefined
+        && (
+          !OBJECT_IS(publicLineage.runtimeQualification, args.runtimeQualification)
+          || !OBJECT_IS(publicLineage.context, args.context)
+          || !OBJECT_IS(
+            publicLineage.providerContractQualification,
+            args.providerContractQualification,
+          )
+          || !OBJECT_IS(publicLineage.providerControlStore, args.providerControlStore)
+          || publicLineage.providerContractDigest !== args.providerContractDigest
+          || publicLineage.leaseAcquiredAt !== args.leaseAcquiredAt
+          || publicLineage.leaseTokenDigest !== args.leaseTokenDigest
+          || publicLineage.leaseVersion !== args.leaseVersion
+          || publicLineage.ledgerDigest !== args.ledgerDigest
+          || publicLineage.intentSetDigest !== args.intentSetDigest
+        )
+      )
+    ) return false;
+    prior.state = 'REVOKED';
+    return OBJECT_IS(SESSION_LINEAGE_WITNESSES.get(args.sessionIntentQualification), prior)
+      && prior.state === 'REVOKED';
+  }
+  if (args.state !== 'ACTIVE' || !activeQualificationIs(args.runtimeQualification)) return false;
+  let successorLineage = publicLineage;
+  if (publicLineage !== undefined) {
+    const sameBinding = (
+      publicLineage.state === 'ACTIVE'
+      && OBJECT_IS(publicLineage.runtimeQualification, args.runtimeQualification)
+      && OBJECT_IS(publicLineage.context, args.context)
+      && OBJECT_IS(
+        publicLineage.providerContractQualification,
+        args.providerContractQualification,
+      )
+      && publicLineage.providerContractDigest === args.providerContractDigest
+      && OBJECT_IS(publicLineage.providerControlStore, args.providerControlStore)
+      && publicLineage.leaseAcquiredAt === args.leaseAcquiredAt
+      && publicLineage.leaseTokenDigest === args.leaseTokenDigest
+    );
+    const exactReplay = sameBinding
+      && publicLineage.leaseVersion === args.leaseVersion
+      && publicLineage.ledgerDigest === args.ledgerDigest
+      && publicLineage.intentSetDigest === args.intentSetDigest;
+    const exactSuccessor = sameBinding
+      && args.leaseVersion === publicLineage.leaseVersion + 1
+      && args.ledgerDigest !== publicLineage.ledgerDigest
+      && args.intentSetDigest !== publicLineage.intentSetDigest;
+    if (!exactReplay && !exactSuccessor) return false;
+    if (exactReplay) {
+      if (
+        prior === undefined
+        || !['FRESH', 'CONSUMED', 'REVOKED'].includes(prior.state)
+        || !OBJECT_IS(prior.runtimeQualification, args.runtimeQualification)
+        || !OBJECT_IS(prior.context, args.context)
+        || !OBJECT_IS(prior.providerContractQualification, args.providerContractQualification)
+        || prior.providerContractDigest !== args.providerContractDigest
+        || !OBJECT_IS(prior.providerControlStore, args.providerControlStore)
+        || prior.leaseAcquiredAt !== args.leaseAcquiredAt
+        || prior.leaseTokenDigest !== args.leaseTokenDigest
+        || prior.leaseVersion !== args.leaseVersion
+        || prior.ledgerDigest !== args.ledgerDigest
+        || prior.intentSetDigest !== args.intentSetDigest
+      ) return false;
+      return OBJECT_IS(SESSION_LINEAGE_WITNESSES.get(args.sessionIntentQualification), prior)
+        && OBJECT_IS(SESSION_INTENT_LINEAGES.get(args.sessionIntentQualification), publicLineage);
+    }
+    if (exactSuccessor) {
+      successorLineage = OBJECT_FREEZE({
+        ...publicLineage,
+        leaseVersion: args.leaseVersion,
+        ledgerDigest: args.ledgerDigest,
+        intentSetDigest: args.intentSetDigest,
+      });
+    }
+  }
+  const witness = {
+    state: 'FRESH',
+    runtimeQualification: args.runtimeQualification,
+    context: args.context,
+    providerContractQualification: args.providerContractQualification,
+    providerContractDigest: args.providerContractDigest,
+    providerControlStore: args.providerControlStore,
+    leaseAcquiredAt: args.leaseAcquiredAt,
+    leaseTokenDigest: args.leaseTokenDigest,
+    leaseVersion: args.leaseVersion,
+    ledgerDigest: args.ledgerDigest,
+    intentSetDigest: args.intentSetDigest,
+  };
+  SESSION_LINEAGE_WITNESSES.set(args.sessionIntentQualification, witness);
+  if (!OBJECT_IS(SESSION_LINEAGE_WITNESSES.get(args.sessionIntentQualification), witness)) {
+    return false;
+  }
+  if (successorLineage !== publicLineage) {
+    SESSION_INTENT_LINEAGES.set(args.sessionIntentQualification, successorLineage);
+  }
+  return OBJECT_IS(SESSION_LINEAGE_WITNESSES.get(args.sessionIntentQualification), witness)
+    && OBJECT_IS(
+      SESSION_INTENT_LINEAGES.get(args.sessionIntentQualification),
+      successorLineage,
+    );
+}
+
+function sessionLineageImplementation(args) {
+
   if (
     canonicalControlStoreNamespace === undefined
     || canonicalControlStoreExports === undefined
-  ) return terminallyBlockRuntime();
-  for (const key of CONTROL_STORE_NAMESPACE_EXPORTS) {
-    if (!OBJECT_IS(
-      OBJECT_GET_OWN_PROPERTY_DESCRIPTOR(canonicalControlStoreNamespace, key).value,
-      OBJECT_GET_OWN_PROPERTY_DESCRIPTOR(canonicalControlStoreExports, key).value,
-    )) return terminallyBlockRuntime();
+  ) {
+
+    return terminallyBlockRuntime();
   }
-  return false;
+  for (const key of CONTROL_STORE_NAMESPACE_EXPORTS) {
+
+    const namespaceDescriptor = OBJECT_GET_OWN_PROPERTY_DESCRIPTOR(
+      canonicalControlStoreNamespace,
+      key,
+    );
+    const capturedDescriptor = OBJECT_GET_OWN_PROPERTY_DESCRIPTOR(
+      canonicalControlStoreExports,
+      key,
+    );
+    if (namespaceDescriptor === undefined || capturedDescriptor === undefined
+      || !REFLECT_HAS(namespaceDescriptor, 'value')
+      || !REFLECT_HAS(capturedDescriptor, 'value')
+      || !OBJECT_IS(namespaceDescriptor.value, capturedDescriptor.value)) {
+
+      return terminallyBlockRuntime();
+    }
+  }
+  try {
+    if (exactOrderedDataRecord(args, SESSION_LINEAGE_PUBLICATION_KEYS)) {
+      return sessionLineagePublication(args);
+    }
+    const mutationAuthentication = exactOrderedDataRecord(args, [
+      'runtimeQualification', 'context', 'sessionIntentQualification',
+    ]);
+    const clockAuthentication = exactOrderedDataRecord(args, [
+      'runtimeQualification', 'context', 'identityBindingsQualification',
+      'sessionIntentQualification',
+    ]);
+    if (!mutationAuthentication && !clockAuthentication) {
+      return false;
+    }
+    const lineage = SESSION_INTENT_LINEAGES.get(args.sessionIntentQualification);
+    const witness = SESSION_LINEAGE_WITNESSES.get(args.sessionIntentQualification);
+
+    if (
+      lineage === undefined
+      || witness === undefined
+      || lineage.state !== 'ACTIVE'
+      || witness.state !== 'FRESH'
+      || !OBJECT_IS(lineage.runtimeQualification, args.runtimeQualification)
+      || !OBJECT_IS(lineage.context, args.context)
+      || !OBJECT_IS(witness.runtimeQualification, lineage.runtimeQualification)
+      || !OBJECT_IS(witness.context, lineage.context)
+      || !OBJECT_IS(
+        witness.providerContractQualification,
+        lineage.providerContractQualification,
+      )
+      || witness.providerContractDigest !== lineage.providerContractDigest
+      || !OBJECT_IS(witness.providerControlStore, lineage.providerControlStore)
+      || witness.leaseAcquiredAt !== lineage.leaseAcquiredAt
+      || witness.leaseTokenDigest !== lineage.leaseTokenDigest
+      || witness.leaseVersion !== lineage.leaseVersion
+      || witness.ledgerDigest !== lineage.ledgerDigest
+      || witness.intentSetDigest !== lineage.intentSetDigest
+      || !activeQualificationIs(args.runtimeQualification)
+      || providerRecordFor(lineage.providerContractQualification)?.providerContractDigest
+        !== lineage.providerContractDigest
+    ) {
+
+      return false;
+    }
+    if (clockAuthentication) {
+      const runnerBindings = qualifiedRunnerProviderBindings;
+      const setupRecord = runnerBindings === undefined
+        ? undefined : setupRecordFor(runnerBindings.providerSetupReadbackQualification);
+      if (
+        setupRecord === undefined
+        || !OBJECT_IS(runnerBindings.runtimeQualification, args.runtimeQualification)
+        || !OBJECT_IS(runnerBindings.context, args.context)
+        || !OBJECT_IS(setupRecord.runtimeQualification, args.runtimeQualification)
+        || !OBJECT_IS(setupRecord.context, args.context)
+        || !OBJECT_IS(setupRecord.identityQualification, args.identityBindingsQualification)
+        || !OBJECT_IS(
+          setupRecord.providerQualification,
+          lineage.providerContractQualification,
+        )
+        || setupRecord.providerContractDigest !== lineage.providerContractDigest
+        || identityQualificationMatches(createClosedOrdinaryRecord([
+          'runtimeQualification', 'qualification', 'context',
+          'providerContractQualification', 'expectedEnvironmentDigest',
+          'expectedProviderContractDigest', 'expectedIdentityBindingsDigest',
+        ], {
+          runtimeQualification: args.runtimeQualification,
+          qualification: args.identityBindingsQualification,
+          context: args.context,
+          providerContractQualification: lineage.providerContractQualification,
+          expectedEnvironmentDigest: setupRecord.environmentDigest,
+          expectedProviderContractDigest: setupRecord.providerContractDigest,
+          expectedIdentityBindingsDigest: setupRecord.identityBindingsDigest,
+        })) !== true
+      ) return false;
+      return SESSION_LINEAGE_WITNESSES.get(args.sessionIntentQualification) === witness
+        && witness.state === 'FRESH';
+    }
+
+    witness.state = 'CONSUMED';
+
+    return SESSION_LINEAGE_WITNESSES.get(args.sessionIntentQualification) === witness
+      && lineage.state === 'ACTIVE'
+      && OBJECT_IS(lineage.runtimeQualification, args.runtimeQualification)
+      && OBJECT_IS(lineage.context, args.context)
+      && witness.state === 'CONSUMED';
+  } catch (error) {
+
+    return false;
+  }
 }
 
 function captureControlStoreExports(namespace) {
@@ -2305,6 +3151,7 @@ function registerRunnerVariableAuthority(namespace) {
     {
       receiver: runnerVariableAuthorityReceiver,
       authenticateRunnerVariableReadbackRequestEvidence,
+      consumeQualifiedRunnerProviderBindings,
       moduleUrl: TEST_CLOUD_PROVIDER_CONTRACT_URL,
     },
   );
@@ -2666,16 +3513,140 @@ export function consumeTestCloudBrowserFactoryAuthorization() {
   return terminallyBlockRuntime();
 }
 
-export function installProviderControlStore(args) {
+export async function installProviderControlStore(args) {
+
   if (
     arguments.length !== 1
     || !currentPublicOperationAuthorized(
       args,
       INSTALL_PROVIDER_CONTROL_STORE_ARGUMENT_KEYS,
     )
-    || currentQualifiedProviderRegistry === undefined
-  ) return blockPublicOperation();
-  return blockPublicOperation();
+  ) {
+
+    return blockPublicOperation();
+  }
+  const authorizedProviderRecord = providerRecordFor(
+    args.providerContractQualification,
+  );
+  if (
+    authorizedProviderRecord === undefined
+    || !OBJECT_IS(
+      authorizedProviderRecord.runtimeQualification,
+      args.runtimeQualification,
+    )
+    || !OBJECT_IS(authorizedProviderRecord.context, args.context)
+  ) {
+
+    return blockPublicOperation();
+  }
+  const promise = invokeProviderControlMethod('installProviderControlStore', args);
+  try {
+    if (OBJECT_GET_PROTOTYPE_OF(promise) !== Promise.prototype) {
+
+      return blockPublicOperation();
+    }
+    const installed = await promise;
+
+    if (
+      !exactOrderedDataRecord(installed, ['status', 'value', 'diagnostics'])
+      || installed.status !== 'PASS'
+      || !exactDenseFrozenArray(installed.diagnostics)
+      || installed.diagnostics.length !== 0
+      || !exactOrderedDataRecord(installed.value, ['installed', 'sessionIntentQualification'])
+      || installed.value.installed !== true
+      || !exactEmptyReceiver(installed.value.sessionIntentQualification)
+    ) {
+
+      return blockPublicOperation();
+    }
+    const providerRecord = providerRecordFor(args.providerContractQualification);
+    if (
+      providerRecord === undefined
+      || !OBJECT_IS(providerRecord, authorizedProviderRecord)
+      || !OBJECT_IS(providerRecord.runtimeQualification, args.runtimeQualification)
+      || !OBJECT_IS(providerRecord.context, args.context)
+    ) {
+
+      return blockPublicOperation();
+    }
+    const witness = SESSION_LINEAGE_WITNESSES.get(installed.value.sessionIntentQualification);
+    if (
+      witness === undefined
+      || !['FRESH', 'CONSUMED'].includes(witness.state)
+      || !OBJECT_IS(witness.runtimeQualification, args.runtimeQualification)
+      || !OBJECT_IS(witness.context, args.context)
+      || !OBJECT_IS(
+        witness.providerContractQualification,
+        args.providerContractQualification,
+      )
+      || !OBJECT_IS(witness.providerControlStore, args.providerControlStore)
+      || witness.providerContractDigest !== providerRecord.providerContractDigest
+      || !exactDigestString(witness.intentSetDigest)
+      || !exactDigestString(witness.leaseTokenDigest)
+      || !exactDigestString(witness.ledgerDigest)
+      || !NUMBER_IS_SAFE_INTEGER(witness.leaseVersion)
+      || witness.leaseVersion < 1
+      || typeof witness.leaseAcquiredAt !== 'string'
+      || witness.leaseAcquiredAt.length === 0
+    ) {
+
+      return blockPublicOperation();
+    }
+
+    if (
+      currentQualifiedProviderRegistry === undefined
+      && !installTrustedProviderRegistry(
+        args,
+        providerRecord,
+        installed.value.sessionIntentQualification,
+      )
+    ) {
+
+      return blockPublicOperation();
+    }
+    const existingLineage = SESSION_INTENT_LINEAGES.get(
+      installed.value.sessionIntentQualification,
+    );
+    if (existingLineage !== undefined) {
+      if (
+        existingLineage.state !== 'ACTIVE'
+        || !OBJECT_IS(existingLineage.runtimeQualification, args.runtimeQualification)
+        || !OBJECT_IS(existingLineage.context, args.context)
+        || !OBJECT_IS(
+          existingLineage.providerContractQualification,
+          args.providerContractQualification,
+        )
+        || existingLineage.providerContractDigest !== providerRecord.providerContractDigest
+        || !OBJECT_IS(existingLineage.providerControlStore, args.providerControlStore)
+        || existingLineage.leaseAcquiredAt !== witness.leaseAcquiredAt
+        || existingLineage.leaseTokenDigest !== witness.leaseTokenDigest
+        || existingLineage.leaseVersion !== witness.leaseVersion
+        || existingLineage.ledgerDigest !== witness.ledgerDigest
+        || existingLineage.intentSetDigest !== witness.intentSetDigest
+      ) return blockPublicOperation();
+      return installed;
+    }
+    const lineage = OBJECT_FREEZE({
+      state: 'ACTIVE',
+      runtimeQualification: args.runtimeQualification,
+      context: args.context,
+      providerContractQualification: args.providerContractQualification,
+      providerContractDigest: providerRecord.providerContractDigest,
+      providerControlStore: witness.providerControlStore,
+      leaseAcquiredAt: witness.leaseAcquiredAt,
+      leaseTokenDigest: witness.leaseTokenDigest,
+      leaseVersion: witness.leaseVersion,
+      ledgerDigest: witness.ledgerDigest,
+      intentSetDigest: witness.intentSetDigest,
+    });
+    SESSION_INTENT_LINEAGES.set(installed.value.sessionIntentQualification, lineage);
+    if (!OBJECT_IS(SESSION_INTENT_LINEAGES.get(installed.value.sessionIntentQualification), lineage)) {
+      return blockPublicOperation();
+    }
+    return installed;
+  } catch {
+    return blockPublicOperation();
+  }
 }
 
 export function captureTestCloudProviderMutationRoute(args) {
@@ -2690,7 +3661,11 @@ export function captureTestCloudProviderMutationRoute(args) {
   if (authority === false) return blockPublicOperation();
   const captureEntry = {
     registry: authority.registry,
+    context: args.context,
+    sessionIntentQualification: args.sessionIntentQualification,
     mutationOrdinal: args.mutationOrdinal,
+    operationQualification: authority.operationQualification,
+    logicalValueBindings: authority.requestAuthority.logicalValueBindings,
     state: 'PENDING',
     retainedResult: undefined,
   };
@@ -2724,8 +3699,115 @@ export function captureTestCloudProviderMutationRoute(args) {
       routeProjection: result.routeProjection,
     },
   );
+  if (captureEntry.logicalValueBindings.length === 0) {
+    const observed = captureProviderMutationRoute(createClosedNullRecord([
+      'operation', 'runtimeQualification', 'context',
+      'sessionIntentQualification', 'mutationOrdinal',
+      'observationQualification', 'logicalResource', 'batchIndex',
+    ], {
+      operation: 'read-provider-values',
+      runtimeQualification: args.runtimeQualification,
+      context: args.context,
+      sessionIntentQualification: args.sessionIntentQualification,
+      mutationOrdinal: args.mutationOrdinal,
+      observationQualification: result.observationQualification,
+      logicalResource: 'route-observation',
+      batchIndex: -1,
+    }));
+    if (
+      !exactOrderedDataRecord(observed, ['bindings'])
+      || !exactLogicalValueBindings(observed.bindings)
+    ) {
+      return blockCapturedDelivery(captureEntry);
+    }
+    let trustedBindings = observed.bindings;
+    if (args.mutationOrdinal === 0) {
+      const sourceRows = OBJECT_FREEZE([
+        OBJECT_FREEZE([
+          ['rootManifestInitial', 'sourceBytesDigest', 'source-bytes-digest'],
+          ['rootArtifact', 'rootArtifactId', 'artifact-id'],
+          ['rootVersionInitial', 'rootContentHash', 'content-hash'],
+          ['projectFacade', 'projectId', 'project-id'],
+        ]),
+        OBJECT_FREEZE([
+          ['entrypointArtifact', 'entrypointArtifactId', 'artifact-id'],
+          ['entrypointVersionInitial', 'initialEntrypointVersionId', 'artifact-version-id'],
+          ['entrypointVersionInitial', 'workflowContentHash', 'content-hash'],
+        ]),
+      ]);
+      const sourceBindings = [];
+      for (let batchIndex = 0; batchIndex < sourceRows.length; batchIndex += 1) {
+        const readback = captureProviderMutationRoute(createClosedNullRecord([
+          'operation', 'runtimeQualification', 'context',
+          'sessionIntentQualification', 'mutationOrdinal',
+          'observationQualification', 'logicalResource', 'batchIndex',
+        ], {
+          operation: 'read-provider-values',
+          runtimeQualification: args.runtimeQualification,
+          context: args.context,
+          sessionIntentQualification: args.sessionIntentQualification,
+          mutationOrdinal: args.mutationOrdinal,
+          observationQualification: result.observationQualification,
+          logicalResource: batchIndex === 0 ? 'primary-project' : 'primary-graph',
+          batchIndex,
+        }));
+        if (!exactOrderedDataRecord(readback, ['bindings'])
+          || !exactDenseFrozenArray(readback.bindings)
+          || readback.bindings.length !== sourceRows[batchIndex].length) {
+          return blockCapturedDelivery(captureEntry);
+        }
+        for (let index = 0; index < sourceRows[batchIndex].length; index += 1) {
+          const [ownerSlot, name, valueKind] = sourceRows[batchIndex][index];
+          const binding = readback.bindings[index];
+          if (!exactOrderedDataRecord(binding, [
+            'ownerSlot', 'name', 'valueKind', 'value', 'valueDigest',
+          ]) || binding.ownerSlot !== ownerSlot || binding.name !== name
+            || binding.valueKind !== valueKind || typeof binding.value !== 'string'
+            || binding.value.length === 0
+            || binding.valueDigest !== sha256(BUFFER_FROM(binding.value, 'utf8'))) {
+            return blockCapturedDelivery(captureEntry);
+          }
+          sourceBindings.push(createClosedNullRecord(LOGICAL_VALUE_BINDING_KEYS, {
+            bindingName: ownerSlot + '.' + name,
+            valueType: 'string',
+            value: binding.value,
+          }));
+        }
+      }
+      trustedBindings = OBJECT_FREEZE([...observed.bindings, ...sourceBindings]);
+    }
+    captureEntry.logicalValueBindings = trustedBindings;
+    providerObservedBindingGroups.set(args.mutationOrdinal, trustedBindings);
+  }
   captureEntry.state = 'CAPTURED';
   return runtimeOperationPassResult(['captured'], { captured: true });
+}
+
+function abortCapturedDelivery(captureEntry) {
+  if (
+    captureEntry === undefined
+    || captureEntry.retainedResult === undefined
+    || !exactEmptyReceiver(captureEntry.retainedResult.observationQualification)
+  ) return false;
+  const aborted = captureProviderMutationRoute(createClosedNullRecord([
+    'operation', 'runtimeQualification', 'context',
+    'sessionIntentQualification', 'mutationOrdinal',
+    'observationQualification',
+  ], {
+    operation: 'abort-delivery',
+    runtimeQualification: activeRuntimeQualification,
+    context: captureEntry.context,
+    sessionIntentQualification: captureEntry.sessionIntentQualification,
+    mutationOrdinal: captureEntry.mutationOrdinal,
+    observationQualification: captureEntry.retainedResult.observationQualification,
+  }));
+  captureEntry.state = 'BLOCKED';
+  return exactOrderedDataRecord(aborted, ['aborted']) && aborted.aborted === true;
+}
+
+function blockCapturedDelivery(captureEntry) {
+  abortCapturedDelivery(captureEntry);
+  return blockPublicOperation();
 }
 
 function validMutationOrdinal(args) {
@@ -2742,33 +3824,473 @@ async function inertProviderOperation(args, expectedKeys, validate = undefined) 
   return blockPublicOperation();
 }
 
+function exactProviderControlPass(value, valueKey) {
+  return exactOrderedDataRecord(value, ['status', 'value', 'diagnostics'])
+    && value.status === 'PASS'
+    && exactDenseFrozenArray(value.diagnostics)
+    && value.diagnostics.length === 0
+    && exactOrderedDataRecord(value.value, [valueKey])
+    && exactEmptyReceiver(value.value[valueKey]);
+}
+
+function capturedMutationEntry(args) {
+  const registry = currentQualifiedProviderRegistry;
+  let match;
+  for (const entry of providerMutationCaptureEntries) {
+    if (
+      OBJECT_IS(entry.registry, registry)
+      && entry.mutationOrdinal === args.mutationOrdinal
+      && entry.state === 'CAPTURED'
+    ) {
+      if (match !== undefined) return undefined;
+      match = entry;
+    }
+  }
+  return match;
+}
+
 export async function issueProviderMutation(args) {
-  if (arguments.length !== 1) return blockPublicOperation();
-  return inertProviderOperation(
-    args,
-    CAPTURE_PROVIDER_MUTATION_ROUTE_ARGUMENT_KEYS,
-    validMutationOrdinal,
+  if (
+    arguments.length !== 1
+    || !currentPublicOperationAuthorized(
+      args,
+      CAPTURE_PROVIDER_MUTATION_ROUTE_ARGUMENT_KEYS,
+    )
+    || !validMutationOrdinal(args)
+    || currentQualifiedProviderRegistry === undefined
+    || !exactDenseFrozenArray(currentProviderMutationProfiles)
+    || args.mutationOrdinal >= currentProviderMutationProfiles.length
+  ) {
+
+    return blockPublicOperation();
+  }
+  const captureEntry = capturedMutationEntry(args);
+  const profileSelection = currentProviderMutationProfile(args.mutationOrdinal);
+  const providerMutationProfile = profileSelection === false
+    ? undefined : profileSelection.providerMutationProfile;
+  if (
+    captureEntry === undefined
+    || !exactOrderedDataRecord(providerMutationProfile, PROVIDER_MUTATION_PROFILE_KEYS)
+  ) {
+    return captureEntry === undefined
+      ? blockPublicOperation()
+      : blockCapturedDelivery(captureEntry);
+  }
+  if (profileSelection.logicalValueBindings !== null) {
+    captureEntry.logicalValueBindings = profileSelection.logicalValueBindings;
+  }
+  captureEntry.state = 'PREPARING';
+  const expectedStateMapping = constructExpectedStateForProviderMutation(
+    createClosedNullRecord(EXPECTED_STATE_CONSTRUCTOR_ARGUMENT_KEYS, {
+      runtimeQualification: args.runtimeQualification,
+      context: args.context,
+      sessionIntentQualification: args.sessionIntentQualification,
+      mutationOrdinal: args.mutationOrdinal,
+      providerMutationProfile,
+      logicalValueBindings: captureEntry.logicalValueBindings,
+      routeProjection: captureEntry.retainedResult.routeProjection,
+    }),
+  );
+  if (!exactOrderedDataRecord(expectedStateMapping, EXPECTED_STATE_MAPPING_KEYS)) {
+    return blockCapturedDelivery(captureEntry);
+  }
+  const promise = invokeProviderControlMethod(
+    'issueProviderMutation',
+    createClosedNullRecord([
+      'runtimeQualification', 'context', 'sessionIntentQualification',
+      'mutationOrdinal', 'observationQualification', 'routeProjection',
+      'expectedStateMapping',
+    ], {
+      runtimeQualification: args.runtimeQualification,
+      context: args.context,
+      sessionIntentQualification: args.sessionIntentQualification,
+      mutationOrdinal: args.mutationOrdinal,
+      observationQualification: captureEntry.retainedResult.observationQualification,
+      routeProjection: captureEntry.retainedResult.routeProjection,
+      expectedStateMapping,
+    }),
+  );
+  if (!exactLocalPromise(promise)) {
+    return blockCapturedDelivery(captureEntry);
+  }
+  const issued = await promise;
+  if (!exactProviderControlPass(issued, 'providerMutationIssue')) {
+    return blockCapturedDelivery(captureEntry);
+  }
+  const providerMutationIssue = issued.value.providerMutationIssue;
+  providerExpectedStateMappings.set(
+    args.mutationOrdinal,
+    expectedStateMapping,
+  );
+  if (captureProviderMutationRoute(createClosedNullRecord([
+    'operation', 'runtimeQualification', 'observationQualification',
+    'providerMutationIssue',
+  ], {
+    operation: 'bind-provider-issue',
+    runtimeQualification: args.runtimeQualification,
+    observationQualification: captureEntry.retainedResult.observationQualification,
+    providerMutationIssue,
+  })) !== true) {
+    return blockCapturedDelivery(captureEntry);
+  }
+  const issueEntry = OBJECT_FREEZE({
+    state: 'ISSUED',
+    runtimeQualification: args.runtimeQualification,
+    captureEntry,
+  });
+  providerMutationIssueEntries.set(providerMutationIssue, issueEntry);
+  captureEntry.state = 'ISSUED';
+
+  return runtimeOperationPassResult(
+    ['providerMutationIssue'],
+    { providerMutationIssue },
   );
 }
 
 export async function reconcileProviderMutation(args) {
-  if (arguments.length !== 1) return blockPublicOperation();
-  return inertProviderOperation(args, RECONCILE_PROVIDER_MUTATION_ARGUMENT_KEYS);
+  if (
+    arguments.length !== 1
+    || !currentPublicOperationAuthorized(
+      args,
+      RECONCILE_PROVIDER_MUTATION_ARGUMENT_KEYS,
+    )
+    || !exactEmptyReceiver(args.providerMutationIssue)
+  ) return blockPublicOperation();
+  const issueEntry = providerMutationIssueEntries.get(args.providerMutationIssue);
+  if (
+    issueEntry === undefined
+    || issueEntry.state !== 'ISSUED'
+    || !OBJECT_IS(issueEntry.runtimeQualification, args.runtimeQualification)
+    || issueEntry.captureEntry.state !== 'ISSUED'
+  ) return blockPublicOperation();
+  issueEntry.captureEntry.state = 'RECONCILING';
+  const releaseResult = captureProviderMutationRoute(createClosedNullRecord([
+    'operation', 'runtimeQualification', 'providerMutationIssue',
+  ], {
+    operation: 'consume-release-disposition',
+    runtimeQualification: args.runtimeQualification,
+    providerMutationIssue: args.providerMutationIssue,
+  }));
+  const release = exactLocalPromise(releaseResult)
+    ? await releaseResult
+    : releaseResult;
+  if (!exactOrderedDataRecord(release, [
+    'observationQualification', 'releaseDisposition',
+  ]) || !exactEmptyReceiver(release.observationQualification)
+    || !['returned', 'threw', 'unknown'].includes(release.releaseDisposition)) {
+    return blockCapturedDelivery(issueEntry.captureEntry);
+  }
+  const promise = invokeProviderControlMethod(
+    'reconcileProviderMutation',
+    createClosedNullRecord([
+      'runtimeQualification', 'providerMutationIssue',
+      'observationQualification', 'releaseDisposition',
+    ], {
+      runtimeQualification: args.runtimeQualification,
+      providerMutationIssue: args.providerMutationIssue,
+      observationQualification: release.observationQualification,
+      releaseDisposition: release.releaseDisposition,
+    }),
+  );
+  if (!exactLocalPromise(promise)) return blockCapturedDelivery(issueEntry.captureEntry);
+  const reconciled = await promise;
+  if (!exactProviderControlPass(reconciled, 'reconciliationQualification')) {
+    return blockCapturedDelivery(issueEntry.captureEntry);
+  }
+  const reconciliationQualification = reconciled.value.reconciliationQualification;
+  if (release.releaseDisposition !== 'returned') {
+    return blockCapturedDelivery(issueEntry.captureEntry);
+  }
+  if (CLOCK_RECONCILIATION_ORDINALS.includes(issueEntry.captureEntry.mutationOrdinal)) {
+    const clockBinding = ACTIVE_BROWSER_CLOCK_BINDINGS.get(
+      issueEntry.captureEntry.sessionIntentQualification,
+    );
+    if (
+      clockBinding === undefined
+      || !OBJECT_IS(clockBinding.runtimeQualification, args.runtimeQualification)
+      || !OBJECT_IS(clockBinding.context, issueEntry.captureEntry.context)
+      || deliverMutationReconciliationQualification(createClosedOrdinaryRecord([
+        'runtimeQualification', 'clock', 'mutationOrdinal', 'qualification',
+      ], {
+        runtimeQualification: args.runtimeQualification,
+        clock: clockBinding.clock,
+        mutationOrdinal: issueEntry.captureEntry.mutationOrdinal,
+        qualification: reconciliationQualification,
+      })) !== true
+    ) {
+      return blockCapturedDelivery(issueEntry.captureEntry);
+    }
+  }
+  const delivered = captureProviderMutationRoute(createClosedNullRecord([
+    'operation', 'runtimeQualification', 'issueKind', 'issue',
+    'reconciliationQualification',
+  ], {
+    operation: 'complete-delivery',
+    runtimeQualification: args.runtimeQualification,
+    issueKind: 'provider',
+    issue: args.providerMutationIssue,
+    reconciliationQualification,
+  }));
+  const delivery = exactLocalPromise(delivered) ? await delivered : delivered;
+  if (!exactOrderedDataRecord(delivery, ['delivered']) || delivery.delivered !== true) {
+    return blockCapturedDelivery(issueEntry.captureEntry);
+  }
+  const reconciledEntry = OBJECT_FREEZE({ ...issueEntry, state: 'RECONCILED' });
+  providerMutationIssueEntries.set(args.providerMutationIssue, reconciledEntry);
+  issueEntry.captureEntry.state = 'RECONCILED';
+  return runtimeOperationPassResult(
+    ['reconciliationQualification'],
+    { reconciliationQualification },
+  );
 }
 
 export async function createShareBaselineProof(args) {
-  if (arguments.length !== 1) return blockPublicOperation();
-  return inertProviderOperation(args, CREATE_SHARE_BASELINE_ARGUMENT_KEYS);
+
+  if (
+    arguments.length !== 1
+    || !currentPublicOperationAuthorized(args, CREATE_SHARE_BASELINE_ARGUMENT_KEYS)
+    || !exactEmptyReceiver(args.providerQualification)
+    || !['editorShare', 'viewerShare'].includes(args.ownerSlot)
+  ) {
+
+    return blockPublicOperation();
+  }
+  const captureEntry = capturedMutationEntry({
+    mutationOrdinal: args.ownerSlot === 'editorShare' ? 17 : 18,
+  });
+  if (captureEntry === undefined) return blockPublicOperation();
+  let internalProviderQualification = args.providerQualification;
+  let safeDigestProjection;
+  const runnerBindings = qualifiedRunnerProviderBindings;
+  const setupRecord = runnerBindings === undefined
+    ? undefined : setupRecordFor(runnerBindings.providerSetupReadbackQualification);
+  if (setupRecord !== undefined) {
+
+    const handoffResult = invokeIdentityMethod('createShareIdentityBindingHandoff',
+      createClosedNullRecord([
+        'runtimeQualification', 'context', 'identityBindingsQualification', 'ownerSlot',
+      ], {
+        runtimeQualification: args.runtimeQualification,
+        context: args.context,
+        identityBindingsQualification: setupRecord.identityQualification,
+        ownerSlot: args.ownerSlot,
+      }));
+    if (!exactLocalPromise(handoffResult)) {
+
+      return blockCapturedDelivery(captureEntry);
+    }
+    const handoff = await handoffResult;
+    if (!exactOrderedDataRecord(handoff, ['status', 'value', 'diagnostics'])
+      || handoff.status !== 'PASS'
+      || !exactDenseFrozenArray(handoff.diagnostics)
+      || handoff.diagnostics.length !== 0
+      || !exactOrderedDataRecord(handoff.value, ['handoff', 'safeDigestProjection'])
+      || !exactEmptyReceiver(handoff.value.handoff)) {
+
+      return blockCapturedDelivery(captureEntry);
+    }
+
+    const boundResult = invokeIdentityMethod('bindQualifiedShareIdentityValues',
+      createClosedNullRecord(['runtimeQualification', 'handoff'], {
+        runtimeQualification: args.runtimeQualification,
+        handoff: handoff.value.handoff,
+      }));
+    if (!exactLocalPromise(boundResult)) {
+
+      return blockCapturedDelivery(captureEntry);
+    }
+    const bound = await boundResult;
+    if (!exactOrderedDataRecord(bound, ['status', 'value', 'diagnostics'])
+      || bound.status !== 'PASS'
+      || !exactDenseFrozenArray(bound.diagnostics)
+      || bound.diagnostics.length !== 0
+      || !exactOrderedDataRecord(bound.value, ['safeDigestProjection'])) {
+
+      return blockCapturedDelivery(captureEntry);
+    }
+    internalProviderQualification = handoff.value.handoff;
+    safeDigestProjection = bound.value.safeDigestProjection;
+  }
+  const internalArgs = createClosedNullRecord(
+    CREATE_SHARE_BASELINE_ARGUMENT_KEYS,
+    { ...args, providerQualification: internalProviderQualification },
+  );
+  const promise = invokeProviderControlMethod('createShareBaselineProof', internalArgs);
+
+  if (!exactLocalPromise(promise)) {
+
+    return blockCapturedDelivery(captureEntry);
+  }
+  const created = await promise;
+  if (!exactProviderControlPass(created, 'baselineProof')) {
+
+    return blockCapturedDelivery(captureEntry);
+  }
+
+  shareBaselineEntries.set(created.value.baselineProof, OBJECT_FREEZE({
+    state: 'QUALIFIED',
+    runtimeQualification: args.runtimeQualification,
+    context: args.context,
+    sessionIntentQualification: args.sessionIntentQualification,
+    providerQualification: args.providerQualification,
+    internalProviderQualification,
+    safeDigestProjection,
+    ownerSlot: args.ownerSlot,
+    mutationOrdinal: args.ownerSlot === 'editorShare' ? 17 : 18,
+  }));
+  return runtimeOperationPassResult(
+    ['baselineProof'],
+    { baselineProof: created.value.baselineProof },
+  );
 }
 
 export async function issueShareCreate(args) {
-  if (arguments.length !== 1) return blockPublicOperation();
-  return inertProviderOperation(args, ISSUE_SHARE_CREATE_ARGUMENT_KEYS);
+  if (
+    arguments.length !== 1
+    || !currentPublicOperationAuthorized(args, ISSUE_SHARE_CREATE_ARGUMENT_KEYS)
+    || !exactEmptyReceiver(args.providerQualification)
+    || !exactEmptyReceiver(args.baselineProof)
+    || !exactEmptyReceiver(args.requestTuple)
+  ) return blockPublicOperation();
+  const baseline = shareBaselineEntries.get(args.baselineProof);
+  if (
+    baseline === undefined
+    || baseline.state !== 'QUALIFIED'
+    || !OBJECT_IS(baseline.runtimeQualification, args.runtimeQualification)
+    || !OBJECT_IS(baseline.context, args.context)
+    || !OBJECT_IS(baseline.sessionIntentQualification, args.sessionIntentQualification)
+    || !OBJECT_IS(baseline.providerQualification, args.providerQualification)
+  ) return blockPublicOperation();
+  const captureEntry = capturedMutationEntry({ mutationOrdinal: baseline.mutationOrdinal });
+  if (captureEntry === undefined) return blockPublicOperation();
+  let requestTuple = args.requestTuple;
+  if (baseline.safeDigestProjection !== undefined) {
+    const projection = baseline.safeDigestProjection;
+    if (!exactOrderedDataRecord(projection, [
+        'schemaVersion', 'identityBindingsDigest', 'ownerSlot',
+        'projectIdentityDigest', 'targetIdentityDigest', 'tupleDigest',
+        'boundValuesDigest',
+      ])) return blockCapturedDelivery(captureEntry);
+    requestTuple = createClosedNullRecord([
+      'schemaVersion', 'ownerSlot', 'mutationOrdinal', 'requestInstanceDigest',
+      'projectIdentityDigest', 'targetIdentityDigest', 'tupleDigest',
+      'boundValuesDigest',
+    ], {
+      schemaVersion: 'verification-share-create-request.v1',
+      ownerSlot: baseline.ownerSlot,
+      mutationOrdinal: baseline.mutationOrdinal,
+      requestInstanceDigest: sha256(BUFFER_FROM(canonicalJson({
+        mutationOrdinal: baseline.mutationOrdinal,
+        routeProjection: captureEntry.retainedResult.routeProjection,
+      }), 'utf8')),
+      projectIdentityDigest: projection.projectIdentityDigest,
+      targetIdentityDigest: projection.targetIdentityDigest,
+      tupleDigest: projection.tupleDigest,
+      boundValuesDigest: projection.boundValuesDigest,
+    });
+  }
+  const promise = invokeProviderControlMethod('issueShareCreate', createClosedNullRecord([
+    'runtimeQualification', 'context', 'sessionIntentQualification',
+    'providerQualification', 'baselineProof', 'requestTupleSeed',
+    'observationQualification', 'routeProjection',
+  ], {
+    ...args,
+    providerQualification: baseline.internalProviderQualification,
+    requestTupleSeed: requestTuple,
+    observationQualification: captureEntry.retainedResult.observationQualification,
+    routeProjection: captureEntry.retainedResult.routeProjection,
+  }));
+  if (!exactLocalPromise(promise)) return blockCapturedDelivery(captureEntry);
+  const issued = await promise;
+  if (!exactProviderControlPass(issued, 'shareIssue')) {
+    return blockCapturedDelivery(captureEntry);
+  }
+  if (captureProviderMutationRoute(createClosedNullRecord([
+    'operation', 'runtimeQualification', 'observationQualification', 'shareIssue',
+  ], {
+    operation: 'bind-share-issue',
+    runtimeQualification: args.runtimeQualification,
+    observationQualification: captureEntry.retainedResult.observationQualification,
+    shareIssue: issued.value.shareIssue,
+  })) !== true) return blockCapturedDelivery(captureEntry);
+  captureEntry.state = 'ISSUED';
+  shareIssueEntries.set(issued.value.shareIssue, OBJECT_FREEZE({
+    state: 'ISSUED',
+    runtimeQualification: args.runtimeQualification,
+    captureEntry,
+  }));
+  return runtimeOperationPassResult(['shareIssue'], { shareIssue: issued.value.shareIssue });
 }
 
 export async function reconcileShareCreate(args) {
-  if (arguments.length !== 1) return blockPublicOperation();
-  return inertProviderOperation(args, RECONCILE_SHARE_CREATE_ARGUMENT_KEYS);
+  if (
+    arguments.length !== 1
+    || !currentPublicOperationAuthorized(args, RECONCILE_SHARE_CREATE_ARGUMENT_KEYS)
+    || !exactEmptyReceiver(args.shareIssue)
+  ) return blockPublicOperation();
+  const entry = shareIssueEntries.get(args.shareIssue);
+  if (
+    entry === undefined
+    || entry.state !== 'ISSUED'
+    || !OBJECT_IS(entry.runtimeQualification, args.runtimeQualification)
+  ) return blockPublicOperation();
+  const releaseResult = captureProviderMutationRoute(createClosedNullRecord([
+    'operation', 'runtimeQualification', 'shareIssue',
+  ], {
+    operation: 'consume-share-release-disposition',
+    runtimeQualification: args.runtimeQualification,
+    shareIssue: args.shareIssue,
+  }));
+  const release = exactLocalPromise(releaseResult)
+    ? await releaseResult
+    : releaseResult;
+  if (!exactOrderedDataRecord(release, [
+    'observationQualification', 'releaseDisposition',
+  ]) || !exactEmptyReceiver(release.observationQualification)
+    || !['returned', 'threw', 'unknown'].includes(release.releaseDisposition)) {
+    return blockCapturedDelivery(entry.captureEntry);
+  }
+  const promise = invokeProviderControlMethod('reconcileShareCreate', createClosedNullRecord([
+    'runtimeQualification', 'shareIssue', 'observationQualification',
+    'releaseDisposition',
+  ], {
+    runtimeQualification: args.runtimeQualification,
+    shareIssue: args.shareIssue,
+    observationQualification: release.observationQualification,
+    releaseDisposition: release.releaseDisposition,
+  }));
+  if (!exactLocalPromise(promise)) return blockCapturedDelivery(entry.captureEntry);
+  const reconciled = await promise;
+  if (
+    !exactOrderedDataRecord(reconciled, ['status', 'value', 'diagnostics'])
+    || reconciled.status !== 'PASS'
+    || !exactDenseFrozenArray(reconciled.diagnostics)
+    || reconciled.diagnostics.length !== 0
+    || !exactOrderedDataRecord(
+      reconciled.value,
+      ['reconciled', 'reconciliationQualification'],
+    )
+    || reconciled.value.reconciled !== true
+    || !exactEmptyReceiver(reconciled.value.reconciliationQualification)
+    || release.releaseDisposition !== 'returned'
+  ) return blockCapturedDelivery(entry.captureEntry);
+  const delivered = captureProviderMutationRoute(createClosedNullRecord([
+    'operation', 'runtimeQualification', 'issueKind', 'issue',
+    'reconciliationQualification',
+  ], {
+    operation: 'complete-delivery',
+    runtimeQualification: args.runtimeQualification,
+    issueKind: 'share',
+    issue: args.shareIssue,
+    reconciliationQualification: reconciled.value.reconciliationQualification,
+  }));
+  const delivery = exactLocalPromise(delivered) ? await delivered : delivered;
+  if (!exactOrderedDataRecord(delivery, ['delivered']) || delivery.delivered !== true) {
+    return blockCapturedDelivery(entry.captureEntry);
+  }
+  shareIssueEntries.set(args.shareIssue, OBJECT_FREEZE({ ...entry, state: 'RECONCILED' }));
+  entry.captureEntry.state = 'RECONCILED';
+  return runtimeOperationPassResult(['reconciled'], { reconciled: true });
 }
 
 function exactCurrentBrowserOperation(args, expectedKeys) {
@@ -2783,15 +4305,112 @@ function exactCurrentBrowserOperation(args, expectedKeys) {
   return true;
 }
 
-async function inertBrowserOperation(args, expectedKeys, validate = undefined) {
+async function invokeBrowserOperation(
+  methodName,
+  args,
+  expectedKeys,
+  resultKey,
+  validate = undefined,
+) {
   if (
     !exactCurrentBrowserOperation(args, expectedKeys)
     || (validate !== undefined && validate(args) !== true)
     || currentQualifiedProviderRegistry === undefined
-  ) return blockPublicOperation();
-  const clockOperations = createCurrentClockOperations();
-  if (clockOperations === false) return blockPublicOperation();
-  return blockPublicOperation();
+  ) {
+
+    return blockPublicOperation();
+  }
+
+  const implementation = registeredEnvelopeImplementation(
+    'registerBrowserRouteAdapterImplementation',
+  );
+  if (implementation === undefined) {
+
+    return blockPublicOperation();
+  }
+  const receiver = registrationReceiver(implementation);
+  const descriptor = OBJECT_GET_OWN_PROPERTY_DESCRIPTOR(implementation, methodName);
+  if (
+    descriptor === undefined
+    || REFLECT_HAS(descriptor, 'value') !== true
+    || !exactFunction(descriptor.value, 1, 'async', methodName)
+  ) {
+
+    return blockPublicOperation();
+  }
+  const internalValues = OBJECT_CREATE(null);
+  for (const key of expectedKeys) {
+    if (key !== 'clock' || methodName === 'performOwnerLogin'
+      || methodName === 'performProjectCreateAndGraphEditPrefix') {
+      internalValues[key] = key === 'ownerLoginInput'
+        ? createClosedNullRecord(OWNER_LOGIN_INPUT_KEYS, { password: args[key].password })
+        : args[key];
+    }
+  }
+  const internalKeys = expectedKeys.filter((key) => (
+    key !== 'clock' || methodName === 'performOwnerLogin'
+      || methodName === 'performProjectCreateAndGraphEditPrefix'
+  ));
+  if (
+    methodName === 'performOwnerLogin'
+    || methodName === 'performProjectCreateAndGraphEditPrefix'
+  ) {
+    const clockOperations = createCurrentClockOperations();
+    if (clockOperations === false) {
+
+      return blockPublicOperation();
+    }
+    internalKeys.push('clockOperations');
+    internalValues.clockOperations = clockOperations;
+  }
+  if (methodName === 'performProjectCreateAndGraphEditPrefix') {
+    if (ACTIVE_BROWSER_CLOCK_BINDINGS.get(args.sessionIntentQualification) !== undefined) {
+
+      return blockPublicOperation();
+    }
+    const clockBinding = OBJECT_FREEZE({
+      runtimeQualification: args.runtimeQualification,
+      context: args.context,
+      clock: args.clock,
+    });
+    ACTIVE_BROWSER_CLOCK_BINDINGS.set(args.sessionIntentQualification, clockBinding);
+    if (!OBJECT_IS(
+      ACTIVE_BROWSER_CLOCK_BINDINGS.get(args.sessionIntentQualification),
+      clockBinding,
+    )) {
+
+      return blockPublicOperation();
+    }
+  }
+  try {
+
+    const promise = REFLECT_APPLY(
+      descriptor.value,
+      receiver,
+      [createClosedNullRecord(internalKeys, internalValues)],
+    );
+    if (!exactLocalPromise(promise)) {
+
+      return blockPublicOperation();
+    }
+    const operationResult = await promise;
+
+    if (
+      !exactOrderedDataRecord(operationResult, ['status', 'value', 'diagnostics'])
+      || operationResult.status !== 'PASS'
+      || !exactDenseFrozenArray(operationResult.diagnostics)
+      || operationResult.diagnostics.length !== 0
+      || !exactOrderedDataRecord(operationResult.value, [resultKey])
+      || operationResult.value[resultKey] !== true
+    ) {
+
+      return blockPublicOperation();
+    }
+    return runtimeOperationPassResult([resultKey], { [resultKey]: true });
+  } catch {
+
+    return blockPublicOperation();
+  }
 }
 
 function exactOwnerLoginInput(args) {
@@ -2807,31 +4426,48 @@ function exactOwnerLoginInput(args) {
 
 export async function performOwnerLogin(args) {
   if (arguments.length !== 1) return blockPublicOperation();
-  return inertBrowserOperation(
+  return invokeBrowserOperation(
+    'performOwnerLogin',
     args,
     PERFORM_OWNER_LOGIN_ARGUMENT_KEYS,
+    'ownerLoginComplete',
     exactOwnerLoginInput,
   );
 }
 
 export async function performProjectCreateAndGraphEditPrefix(args) {
   if (arguments.length !== 1) return blockPublicOperation();
-  return inertBrowserOperation(args, PERFORM_PROJECT_PREFIX_ARGUMENT_KEYS);
+  return invokeBrowserOperation(
+    'performProjectCreateAndGraphEditPrefix',
+    args,
+    PERFORM_PROJECT_PREFIX_ARGUMENT_KEYS,
+    'projectGraphPrefixReady',
+  );
 }
 
 export async function performEditorShare(args) {
   if (arguments.length !== 1) return blockPublicOperation();
-  return inertBrowserOperation(args, PERFORM_SHARE_ARGUMENT_KEYS);
+  return invokeBrowserOperation(
+    'performEditorShare',
+    args,
+    PERFORM_SHARE_ARGUMENT_KEYS,
+    'editorShareComplete',
+  );
 }
 
 export async function performViewerShare(args) {
   if (arguments.length !== 1) return blockPublicOperation();
-  return inertBrowserOperation(args, PERFORM_SHARE_ARGUMENT_KEYS);
+  return invokeBrowserOperation(
+    'performViewerShare',
+    args,
+    PERFORM_SHARE_ARGUMENT_KEYS,
+    'viewerShareComplete',
+  );
 }
 
 const MAX_CONTRACT_BYTES = 262_144;
 const APPROVED_CONTRACT_DIGEST =
-  'sha256:eaa6c314b13daa4c56a75bfc29eb8b3c66b7315ad6f114475db4d5f9aee75cd8';
+  'sha256:47a1d778ca8b8cea333b10574ffbc2db488fd711c12a1c40faf9da5235e27184';
 const DIGEST_PATTERN = /^sha256:[0-9a-f]{64}$/;
 const ROOT_KEYS = Object.freeze([
   'aggregateContracts',
@@ -2927,6 +4563,7 @@ function compareOrdinal(left, right) {
 }
 
 function assertScalarString(value) {
+  let scalarLength = 0;
   for (let index = 0; index < value.length; index += 1) {
     const code = value.charCodeAt(index);
     if (code >= 0xd800 && code <= 0xdbff) {
@@ -2936,7 +4573,9 @@ function assertScalarString(value) {
     } else if (code >= 0xdc00 && code <= 0xdfff) {
       invalid();
     }
+    scalarLength += 1;
   }
+  return scalarLength;
 }
 
 function parseClosedJson(text) {
@@ -3148,8 +4787,563 @@ function exactParsedRecord(value, expectedKeys) {
   return value;
 }
 
+function parsedRecord(value) {
+  if (
+    value === null
+    || typeof value !== 'object'
+    || ARRAY_IS_ARRAY(value)
+    || OBJECT_GET_PROTOTYPE_OF(value) !== null
+  ) invalid();
+  return value;
+}
+
 function assertDigest(value) {
   if (typeof value !== 'string' || !DIGEST_PATTERN.test(value)) invalid();
+}
+
+const TABLESDB_SYSTEM_KEYS = Object.freeze([
+  '$id', '$sequence', '$tableId', '$databaseId', '$createdAt', '$updatedAt',
+  '$permissions',
+]);
+const TABLESDB_AUDIT_TRANSITIONS = Object.freeze([
+  'intent.absent', 'intent.cleanup_execution_recorded', 'intent.cleanup_progressed',
+  'intent.cleanup_proof_recorded', 'intent.cleanup_started', 'intent.created',
+  'intent.planned', 'intent.provider_bound', 'intent.provider_create_issued',
+  'intent.provider_id_discovered', 'intent.provider_operation_issued',
+  'intent.provider_operation_reconciled', 'intent.provider_phase_reconciled',
+  'intent.provider_values_bound', 'intent.recovery_absent', 'lease.acquire',
+  'lease.cleanup_debt', 'lease.close', 'lease.recover', 'lease.renew',
+  'observation.observed', 'observation.planned', 'recovery.checkpoint_started',
+  'recovery.mutation_issued', 'recovery.mutation_not_committed',
+  'recovery.resources_completed', 'recovery.step_blocked', 'recovery.step_committed',
+]);
+const TABLESDB_MATRIX_ADDITIONS = Object.freeze([
+  'intent.cleanup_started', 'intent.cleanup_progressed',
+  'intent.cleanup_proof_recorded', 'intent.cleanup_execution_recorded',
+  'intent.recovery_absent',
+]);
+const TABLESDB_MATRIX_RESOURCES = Object.freeze([
+  'primary-project', 'primary-graph', 'primary-share',
+]);
+const TABLESDB_TRANSITION_RESOURCE_MATRIX = Object.freeze([
+  ['intent.planned', ['primary-project', 'primary-graph', 'primary-share', 'account-session-set']],
+  ['intent.provider_bound', ['primary-project', 'primary-graph']],
+  ['intent.provider_values_bound', TABLESDB_MATRIX_RESOURCES],
+  ['intent.provider_operation_issued', ['primary-project', 'primary-graph']],
+  ['intent.provider_operation_reconciled', ['primary-project', 'primary-graph']],
+  ['intent.provider_phase_reconciled', TABLESDB_MATRIX_RESOURCES],
+  ['intent.provider_create_issued', ['primary-share']],
+  ['intent.provider_id_discovered', ['primary-share']],
+  ['intent.created', ['primary-project', 'primary-graph', 'primary-share', 'account-session-set']],
+  ['intent.absent', ['primary-project', 'primary-graph', 'primary-share', 'account-session-set']],
+  ['observation.planned', ['primary-execution']],
+  ['observation.observed', ['primary-execution']],
+  ['intent.cleanup_started', TABLESDB_MATRIX_RESOURCES],
+  ['intent.cleanup_progressed', TABLESDB_MATRIX_RESOURCES],
+  ['intent.cleanup_proof_recorded', TABLESDB_MATRIX_RESOURCES],
+  ['intent.cleanup_execution_recorded', TABLESDB_MATRIX_RESOURCES],
+  ['intent.recovery_absent', TABLESDB_MATRIX_RESOURCES],
+]);
+const TABLESDB_CORE_APPLICATION_KEYS = Object.freeze({
+  projects: Object.freeze([
+    'allowBranching', 'color', 'defaultEntrypointRef', 'name', 'ownerId',
+    'pinned', 'rootContainerArtifactId', 'sourceProjectId', 'sourceProjectName',
+    'status', 'tags',
+  ]),
+  'project-shares': Object.freeze([
+    'canRun', 'projectId', 'role', 'sharedBy', 'userEmail', 'userId', 'userName',
+  ]),
+  'project-snapshots': Object.freeze(['projectId']),
+  'project-artifacts': Object.freeze([
+    'artifactId', 'artifactRole', 'artifactType', 'containerProfile', 'createdBy',
+    'description', 'importedAt', 'latestDraftVersionId', 'latestPublishedVersionId',
+    'latestValidationId', 'lifecycleState', 'name', 'originArtifactId',
+    'originChecksum', 'originProjectId', 'originVersionId', 'parentContainerId',
+    'projectId', 'updatedBy',
+  ]),
+  'project-artifact-versions': Object.freeze([
+    'artifactId', 'artifactType', 'channelId', 'contentHash', 'createdBy',
+    'displayName', 'mimeType', 'parentVersionId', 'projectId', 'publishedAt',
+    'sizeBytes', 'sourceRunId', 'stability', 'storageBucketId', 'storageFileId',
+    'storageKind', 'validationId', 'versionId',
+  ]),
+  'project-artifact-references': Object.freeze(['projectId']),
+});
+const TABLESDB_FULL_ROW_BINDINGS = new Set([
+  'projects', 'project-shares', 'project-artifacts', 'project-artifact-versions',
+]);
+
+function tablesDbColumn({
+  key,
+  type,
+  required,
+  size = null,
+  min = null,
+  max = null,
+  elements = null,
+  array = false,
+}) {
+  return {
+    array,
+    default: null,
+    elements,
+    encrypt: type === 'string' ? false : null,
+    key,
+    max,
+    min,
+    required,
+    size,
+    type,
+  };
+}
+
+const TABLESDB_CONTROL_COLUMNS = Object.freeze({
+  'verification-leases': Object.freeze([
+    tablesDbColumn({ key: 'leaseRowId', type: 'string', required: true, size: 36 }),
+    tablesDbColumn({ key: 'leaseVersion', type: 'integer', required: true, min: 0, max: 2147483647 }),
+    tablesDbColumn({ key: 'state', type: 'enum', required: true, elements: ['active', 'cleanup-debt', 'idle', 'recovering'] }),
+    tablesDbColumn({ key: 'ownerRunId', type: 'string', required: false, size: 128 }),
+    tablesDbColumn({ key: 'ownerWorkflowRunId', type: 'string', required: false, size: 64 }),
+    tablesDbColumn({ key: 'environmentDigest', type: 'string', required: false, size: 71 }),
+    tablesDbColumn({ key: 'acquiredAt', type: 'datetime', required: false }),
+    tablesDbColumn({ key: 'renewedAt', type: 'datetime', required: false }),
+    tablesDbColumn({ key: 'expiresAt', type: 'datetime', required: false }),
+    tablesDbColumn({ key: 'ledgerDigest', type: 'string', required: true, size: 71 }),
+    tablesDbColumn({ key: 'leaseTokenDigest', type: 'string', required: false, size: 71 }),
+    tablesDbColumn({ key: 'cleanupDebt', type: 'boolean', required: true }),
+  ]),
+  'verification-intents': Object.freeze([
+    tablesDbColumn({ key: 'schemaVersion', type: 'enum', required: true, elements: ['verification-intent-snapshot.v1', 'verification-intent-snapshot.v2'] }),
+    tablesDbColumn({ key: 'intentId', type: 'string', required: true, size: 64 }),
+    tablesDbColumn({ key: 'runId', type: 'string', required: true, size: 128 }),
+    tablesDbColumn({ key: 'environmentDigest', type: 'string', required: true, size: 71 }),
+    tablesDbColumn({ key: 'resourceType', type: 'enum', required: true, elements: ['account-session-set', 'primary-execution', 'primary-graph', 'primary-project', 'primary-share'] }),
+    tablesDbColumn({ key: 'resourceId', type: 'string', required: true, size: 128 }),
+    tablesDbColumn({ key: 'providerResourceIds', type: 'string', required: false, size: 36, array: true }),
+    tablesDbColumn({ key: 'providerAggregateJson', type: 'string', required: false, size: 32768 }),
+    tablesDbColumn({ key: 'providerAggregateDigest', type: 'string', required: false, size: 71 }),
+    tablesDbColumn({ key: 'ownerMarker', type: 'string', required: true, size: 128 }),
+    tablesDbColumn({ key: 'dependencyOrder', type: 'integer', required: true, min: 0, max: 100 }),
+    tablesDbColumn({ key: 'lifecycleClass', type: 'enum', required: true, elements: ['fixture', 'provider-retained-observation', 'session-aggregate'] }),
+    tablesDbColumn({ key: 'state', type: 'enum', required: true, elements: ['absent', 'cleaning', 'created', 'planned'] }),
+    tablesDbColumn({ key: 'intentVersion', type: 'integer', required: true, min: 1, max: 2147483647 }),
+    tablesDbColumn({ key: 'observationDigest', type: 'string', required: false, size: 71 }),
+    tablesDbColumn({ key: 'retentionExpiresAt', type: 'datetime', required: false }),
+    tablesDbColumn({ key: 'createdAt', type: 'datetime', required: true }),
+    tablesDbColumn({ key: 'updatedAt', type: 'datetime', required: true }),
+    tablesDbColumn({ key: 'cleanupCursor', type: 'integer', required: false, min: 0, max: 16 }),
+    tablesDbColumn({ key: 'cleanupProgressDigest', type: 'string', required: false, size: 71 }),
+    tablesDbColumn({ key: 'cleanupProofDigest', type: 'string', required: false, size: 71 }),
+    tablesDbColumn({ key: 'cleanupRunnerExecutionPlanDigest', type: 'string', required: false, size: 71 }),
+    tablesDbColumn({ key: 'cleanupRunnerExecutionCursor', type: 'integer', required: false, min: 0, max: 55 }),
+    tablesDbColumn({ key: 'cleanupRunnerExecutionSlotsJson', type: 'string', required: false, size: 32768 }),
+    tablesDbColumn({ key: 'cleanupRunnerExecutionRecordDigest', type: 'string', required: false, size: 71 }),
+    tablesDbColumn({ key: 'cleanupRunnerExecutionRetentionAt', type: 'datetime', required: false }),
+    tablesDbColumn({ key: 'recoveryCheckpointDigest', type: 'string', required: false, size: 71 }),
+  ]),
+  'verification-audit-events': Object.freeze([
+    tablesDbColumn({ key: 'schemaVersion', type: 'enum', required: true, elements: ['verification-audit-event.v1'] }),
+    tablesDbColumn({ key: 'previousLedgerDigest', type: 'string', required: true, size: 71 }),
+    tablesDbColumn({ key: 'runId', type: 'string', required: true, size: 128 }),
+    tablesDbColumn({ key: 'leaseVersionBefore', type: 'integer', required: true, min: 0, max: 2147483647 }),
+    tablesDbColumn({ key: 'leaseVersionAfter', type: 'integer', required: true, min: 1, max: 2147483647 }),
+    tablesDbColumn({ key: 'transition', type: 'enum', required: true, elements: TABLESDB_AUDIT_TRANSITIONS }),
+    tablesDbColumn({ key: 'intentId', type: 'string', required: false, size: 64 }),
+    tablesDbColumn({ key: 'intentProjectionDigest', type: 'string', required: false, size: 71 }),
+    tablesDbColumn({ key: 'recoveryCheckpointJson', type: 'string', required: false, size: 32768 }),
+    tablesDbColumn({ key: 'recoveryCheckpointDigest', type: 'string', required: false, size: 71 }),
+    tablesDbColumn({ key: 'recoveryPreviousCheckpointDigest', type: 'string', required: false, size: 71 }),
+  ]),
+});
+const TABLESDB_CONTROL_ENVELOPES = Object.freeze({
+  'verification-leases': Object.freeze({ id: 'verification_leases' }),
+  'verification-intents': Object.freeze({ id: 'verification_intents' }),
+  'verification-audit-events': Object.freeze({ id: 'verification_audit_events' }),
+});
+const TABLESDB_CONTROL_DATABASE = Object.freeze({
+  enabled: true,
+  id: 'verification_control',
+  permissions: Object.freeze([]),
+});
+const TABLESDB_CONTROL_GENESIS = Object.freeze({
+  dataDigest: 'sha256:f7f485946a601986cf218c5a667868e24d4fdff16b6a23d38131060f376d43c1',
+  permissions: Object.freeze([]),
+  rowId: 'appwrite_test_verification',
+  tableBinding: 'verification-leases',
+});
+const TABLESDB_TRANSITION_RESOURCE_ORDER = Object.freeze([
+  'primary-project', 'primary-graph', 'primary-share', 'account-session-set',
+  'primary-execution',
+]);
+const TABLESDB_CORE_ID_SOURCES = Object.freeze({
+  projects: 'VERIFICATION_PROJECTS_TABLE_ID',
+  'project-shares': 'VERIFICATION_SHARES_TABLE_ID',
+  'project-snapshots': 'project_snapshots',
+  'project-artifacts': 'project_artifacts',
+  'project-artifact-versions': 'project_artifact_versions',
+  'project-artifact-references': 'project_artifact_references',
+});
+const TABLESDB_MEMBER_BINDINGS = Object.freeze({
+  'primary-project|rootManifestInitial': Object.freeze({ bindingName: 'project-files', providerKind: 'storage-file' }),
+  'primary-project|rootArtifact': Object.freeze({ bindingName: 'project-artifacts', providerKind: 'tablesdb-row' }),
+  'primary-project|rootVersionInitial': Object.freeze({ bindingName: 'project-artifact-versions', providerKind: 'tablesdb-row' }),
+  'primary-project|projectFacade': Object.freeze({ bindingName: 'projects', providerKind: 'tablesdb-row' }),
+  'primary-project|rootManifestSaved': Object.freeze({ bindingName: 'project-files', providerKind: 'storage-file' }),
+  'primary-project|rootVersionSaved': Object.freeze({ bindingName: 'project-artifact-versions', providerKind: 'tablesdb-row' }),
+  'primary-graph|entrypointSourceInitial': Object.freeze({ bindingName: 'project-files', providerKind: 'storage-file' }),
+  'primary-graph|entrypointArtifact': Object.freeze({ bindingName: 'project-artifacts', providerKind: 'tablesdb-row' }),
+  'primary-graph|entrypointVersionInitial': Object.freeze({ bindingName: 'project-artifact-versions', providerKind: 'tablesdb-row' }),
+  'primary-graph|entrypointSourceSaved': Object.freeze({ bindingName: 'project-files', providerKind: 'storage-file' }),
+  'primary-graph|entrypointVersionSaved': Object.freeze({ bindingName: 'project-artifact-versions', providerKind: 'tablesdb-row' }),
+  'primary-graph|visualModelSourceSaved': Object.freeze({ bindingName: 'project-files', providerKind: 'storage-file' }),
+  'primary-graph|visualModelArtifact': Object.freeze({ bindingName: 'project-artifacts', providerKind: 'tablesdb-row' }),
+  'primary-graph|visualModelVersionSaved': Object.freeze({ bindingName: 'project-artifact-versions', providerKind: 'tablesdb-row' }),
+  'primary-share|editorShare': Object.freeze({ bindingName: 'project-shares', providerKind: 'tablesdb-row' }),
+  'primary-share|viewerShare': Object.freeze({ bindingName: 'project-shares', providerKind: 'tablesdb-row' }),
+});
+const TABLESDB_MUTATION_ORDINALS = Object.freeze(Array.from({ length: 19 }, (_, index) => index));
+const TABLESDB_RESOURCE_ORDER = Object.freeze([
+  'primary-project', 'primary-graph', 'primary-share',
+]);
+const TABLESDB_OWNED_SLOT_ORDER = Object.freeze({
+  'primary-project': Object.freeze([
+    'rootManifestInitial', 'rootArtifact', 'rootVersionInitial', 'projectFacade',
+    'rootManifestSaved', 'rootVersionSaved',
+  ]),
+  'primary-graph': Object.freeze([
+    'entrypointSourceInitial', 'entrypointArtifact', 'entrypointVersionInitial',
+    'entrypointSourceSaved', 'entrypointVersionSaved', 'visualModelSourceSaved',
+    'visualModelArtifact', 'visualModelVersionSaved',
+  ]),
+  'primary-share': Object.freeze(['editorShare', 'viewerShare']),
+});
+const TABLESDB_MEMBER_TEMPLATE_DIGESTS = Object.freeze({
+  'primary-project|rootManifestInitial': 'sha256:5703de2ef745dfad3a444d5186d46f0003707dad74d919ebffa3c76a5af4c93a',
+  'primary-project|rootArtifact': 'sha256:3452ec9a636706b482d8e5231105359bb552fba9e7c2a038b989967e75bea907',
+  'primary-project|rootVersionInitial': 'sha256:780ee3b9b294e1f0461cafa2fe2d41982e2523dff70f899d2c69a57d6127eeff',
+  'primary-project|projectFacade': 'sha256:32436cfa967b4f67fea33a3cc5d9a704a763827f8a86d5b7ae09bb63ee1ffe37',
+  'primary-project|rootManifestSaved': 'sha256:54251d1244ad42efab996f4d36b2c78792b48e2a2c4ca91ecaf386089a288291',
+  'primary-project|rootVersionSaved': 'sha256:1c001257b2d283d0bd2f3ed091d81672db1e59a166ae8f3815093e41093200fe',
+  'primary-graph|entrypointSourceInitial': 'sha256:842c9690a0fa00d4083ea70f339562aa12183f3906999261355c5af98117fffd',
+  'primary-graph|entrypointArtifact': 'sha256:198956e8ca2857c635f95f08a0608de5326641f5a04f2f67baea126d63280c57',
+  'primary-graph|entrypointVersionInitial': 'sha256:23ec772603c70f26dfa885f0546c0e11b4f10642be1534c524738d8d113b775f',
+  'primary-graph|entrypointSourceSaved': 'sha256:866b1e0f9a7c053dbefa0396e4928168cc8a0b30d9c68b55c4cf9e8d235dc12e',
+  'primary-graph|entrypointVersionSaved': 'sha256:8daa44c29b957dc5b11ac8fc4fa651722bc2cf6462991734b0d81d6c3cc2e574',
+  'primary-graph|visualModelSourceSaved': 'sha256:748167f4d3333ab10cd6df24678507f5ed04fc822e3c11fc04ee81e2ac7e3dc0',
+  'primary-graph|visualModelArtifact': 'sha256:af263b4242b3a9326b2824c9207a5f346aeb6bb0d22cfe5f0908c067d3756ddb',
+  'primary-graph|visualModelVersionSaved': 'sha256:029aff65dddff181dbad180e477c2ef7269ead217697ad14b2ab892c714d456c',
+  'primary-share|editorShare': 'sha256:f29414dea0c061f6532de5e80d7b5e3e719dc1ce43705fd55dac3cb65a214570',
+  'primary-share|viewerShare': 'sha256:4f365fa610ee9b3507ca307979b8a48a49b8a25d16f1f7e7797aa2ff14ba5a4a',
+});
+const TABLESDB_DIRECT_OPERATION_ROUTES = Object.freeze({
+  'primary-project|rootArtifact|2': Object.freeze({ operation: 'tablesdb.createRow', tableBinding: 'project-artifacts' }),
+  'primary-project|rootArtifact|12': Object.freeze({ operation: 'tablesdb.updateRow', tableBinding: 'project-artifacts' }),
+  'primary-project|rootVersionInitial|4': Object.freeze({ operation: 'tablesdb.createRow', tableBinding: 'project-artifact-versions' }),
+  'primary-project|projectFacade|6': Object.freeze({ operation: 'tablesdb.createRow', tableBinding: 'projects' }),
+  'primary-project|projectFacade|13': Object.freeze({ operation: 'tablesdb.updateRow', tableBinding: 'projects' }),
+  'primary-project|rootVersionSaved|11': Object.freeze({ operation: 'tablesdb.createRow', tableBinding: 'project-artifact-versions' }),
+  'primary-graph|entrypointArtifact|3': Object.freeze({ operation: 'tablesdb.createRow', tableBinding: 'project-artifacts' }),
+  'primary-graph|entrypointArtifact|9': Object.freeze({ operation: 'tablesdb.updateRow', tableBinding: 'project-artifacts' }),
+  'primary-graph|entrypointVersionInitial|5': Object.freeze({ operation: 'tablesdb.createRow', tableBinding: 'project-artifact-versions' }),
+  'primary-graph|entrypointVersionSaved|8': Object.freeze({ operation: 'tablesdb.createRow', tableBinding: 'project-artifact-versions' }),
+  'primary-graph|visualModelArtifact|15': Object.freeze({ operation: 'tablesdb.createRow', tableBinding: 'project-artifacts' }),
+  'primary-graph|visualModelVersionSaved|16': Object.freeze({ operation: 'tablesdb.createRow', tableBinding: 'project-artifact-versions' }),
+});
+const TABLESDB_NON_DIRECT_OPERATION_ROUTES = Object.freeze({
+  'primary-project|rootManifestInitial|0': Object.freeze({ operation: 'storage.createFile', pathTemplate: '/storage/buckets/{bucketId}/files' }),
+  'primary-project|rootManifestSaved|10': Object.freeze({ operation: 'storage.createFile', pathTemplate: '/storage/buckets/{bucketId}/files' }),
+  'primary-graph|entrypointSourceInitial|1': Object.freeze({ operation: 'storage.createFile', pathTemplate: '/storage/buckets/{bucketId}/files' }),
+  'primary-graph|entrypointSourceSaved|7': Object.freeze({ operation: 'storage.createFile', pathTemplate: '/storage/buckets/{bucketId}/files' }),
+  'primary-graph|visualModelSourceSaved|14': Object.freeze({ operation: 'storage.createFile', pathTemplate: '/storage/buckets/{bucketId}/files' }),
+  'primary-share|editorShare|17': Object.freeze({ operation: 'sharing.createShare', pathTemplate: '/functions/sharing-py/executions' }),
+  'primary-share|viewerShare|18': Object.freeze({ operation: 'sharing.createShare', pathTemplate: '/functions/sharing-py/executions' }),
+});
+
+function sameOrdinalArray(actual, expected) {
+  return ARRAY_IS_ARRAY(actual)
+    && actual.length === expected.length
+    && actual.every((value, index) => value === expected[index]);
+}
+
+function tablesDbApplicationKeys(keys) {
+  const rows = exactOrdinaryArray(keys);
+  if (
+    rows.some((key) => typeof key !== 'string' || key.startsWith('$'))
+    || new Set(rows).size !== rows.length
+  ) invalid();
+  return rows;
+}
+
+function validateTablesDbAbiContract(providerContract) {
+  const controlProvider = providerContract.controlProvider;
+  exactParsedRecord(controlProvider, [
+    'database', 'genesis', 'tables', 'transitionResourceMatrix',
+  ]);
+  if (
+    canonicalJson(controlProvider.database) !== canonicalJson(TABLESDB_CONTROL_DATABASE)
+    || canonicalJson(controlProvider.genesis) !== canonicalJson(TABLESDB_CONTROL_GENESIS)
+  ) invalid();
+  const controlTables = exactOrdinaryArray(controlProvider?.tables);
+  if (controlTables.length !== 3) invalid();
+  for (const table of controlTables) {
+    exactParsedRecord(table, [
+      'bindingName', 'columns', 'enabled', 'id', 'indexes', 'permissions', 'rowSecurity',
+    ]);
+  }
+  const controlNames = controlTables.map((table) => table?.bindingName);
+  if (!sameOrdinalArray(controlNames, Object.keys(TABLESDB_CONTROL_COLUMNS))) invalid();
+  for (const table of controlTables) {
+    const expected = TABLESDB_CONTROL_COLUMNS[table.bindingName];
+    const envelope = TABLESDB_CONTROL_ENVELOPES[table.bindingName];
+    if (
+      canonicalJson(table.columns) !== canonicalJson(expected)
+      || table.enabled !== true
+      || table.id !== envelope.id
+      || !sameOrdinalArray(table.indexes, [])
+      || !sameOrdinalArray(table.permissions, [])
+      || table.rowSecurity !== true
+    ) invalid();
+  }
+
+  const intentColumns = TABLESDB_CONTROL_COLUMNS['verification-intents'];
+  const authorityRead = providerContract.aggregateContracts?.identityContract?.authorityRead;
+  if (
+    authorityRead?.databaseBinding !== 'verification-control'
+    || authorityRead?.tableBinding !== 'verification-intents'
+    || !sameOrdinalArray(
+      authorityRead?.projectionKeys,
+      [...TABLESDB_SYSTEM_KEYS, ...intentColumns.map(({ key }) => key)],
+    )
+  ) invalid();
+
+  const transitionResourceMatrix = exactParsedRecord(
+    controlProvider.transitionResourceMatrix,
+    ['resourceOrder', 'schemaVersion', 'transitions'],
+  );
+  if (
+    transitionResourceMatrix.schemaVersion !== 'verification-transition-resource-matrix.v1'
+    || !sameOrdinalArray(
+      transitionResourceMatrix.resourceOrder,
+      TABLESDB_TRANSITION_RESOURCE_ORDER,
+    )
+  ) invalid();
+  const matrixRows = exactOrdinaryArray(transitionResourceMatrix.transitions);
+  for (const row of matrixRows) {
+    exactParsedRecord(row, ['allowedResources', 'transition']);
+    exactOrdinaryArray(row.allowedResources);
+  }
+  const expectedMatrixRows = TABLESDB_TRANSITION_RESOURCE_MATRIX.map(
+    ([transition, allowedResources]) => ({ allowedResources: [...allowedResources], transition }),
+  );
+  if (canonicalJson(matrixRows) !== canonicalJson(expectedMatrixRows)) invalid();
+  const matrixNames = matrixRows.map(({ transition }) => transition);
+  if (new Set(matrixNames).size !== matrixNames.length) invalid();
+  for (const transition of TABLESDB_MATRIX_ADDITIONS) {
+    const matches = matrixRows.filter((row) => row.transition === transition);
+    if (
+      matches.length !== 1
+      || !sameOrdinalArray(matches[0].allowedResources, TABLESDB_MATRIX_RESOURCES)
+    ) invalid();
+  }
+  if (matrixRows.some(({ transition }) => transition.startsWith('recovery.'))) invalid();
+
+  if (providerContract.coreProvider?.databaseBindingSource !== 'VERIFICATION_PRIMARY_DATABASE_ID') {
+    invalid();
+  }
+  const bindings = exactOrdinaryArray(providerContract.coreProvider?.tableBindings);
+  const bindingNames = Object.keys(TABLESDB_CORE_APPLICATION_KEYS);
+  for (const binding of bindings) {
+    exactParsedRecord(binding, [
+      'bindingName', 'enabled', 'idSource', 'requiredColumnContract',
+    ]);
+  }
+  if (
+    bindings.length !== bindingNames.length
+    || new Set(bindings.map(({ bindingName }) => bindingName)).size !== bindingNames.length
+    || !sameOrdinalArray(bindings.map(({ bindingName }) => bindingName), bindingNames)
+  ) invalid();
+
+  const aggregateContracts = parsedRecord(providerContract.aggregateContracts);
+  if (!sameOrdinalArray(
+    exactOrdinaryArray(aggregateContracts.mutationOrdinals),
+    TABLESDB_MUTATION_ORDINALS,
+  )) invalid();
+  const resources = exactOrdinaryArray(aggregateContracts.resources);
+  for (const resource of resources) {
+    parsedRecord(resource);
+    if (typeof resource.resourceType !== 'string') invalid();
+  }
+  if (!sameOrdinalArray(
+    resources.map(({ resourceType }) => resourceType),
+    TABLESDB_RESOURCE_ORDER,
+  )) invalid();
+  const fixedQueryContracts = exactParsedRecord(providerContract.fixedQueryContracts, [
+    'queries', 'schemaVersion',
+  ]);
+  if (fixedQueryContracts.schemaVersion !== 'verification-fixed-project-query-set.v1') invalid();
+  const fixedQueries = exactOrdinaryArray(fixedQueryContracts.queries);
+  for (const query of fixedQueries) {
+    exactParsedRecord(query, [
+      'bindingName', 'filterField', 'limit', 'projectionKeys', 'total', 'transactionId',
+      'transactionMode',
+    ]);
+    if (typeof query.bindingName !== 'string' || typeof query.filterField !== 'string') invalid();
+    exactOrdinaryArray(query.projectionKeys);
+  }
+  const bindingNameSet = new Set(bindingNames);
+  const observedMembers = new Set();
+  const observedDirectOperations = new Set();
+  const observedNonDirectOperations = new Set();
+  for (const resource of resources) {
+    const expectedSlots = TABLESDB_OWNED_SLOT_ORDER[resource.resourceType];
+    const ownedSlots = exactOrdinaryArray(resource.ownedSlots);
+    const memberTemplates = exactOrdinaryArray(resource.memberTemplates);
+    for (const member of memberTemplates) {
+      parsedRecord(member);
+      if (typeof member.slot !== 'string') invalid();
+    }
+    if (
+      expectedSlots === undefined
+      || !sameOrdinalArray(ownedSlots, expectedSlots)
+      || !sameOrdinalArray(memberTemplates.map(({ slot }) => slot), expectedSlots)
+    ) invalid();
+    for (const member of memberTemplates) {
+      const memberKey = `${resource.resourceType}|${member.slot}`;
+      const expectedMember = TABLESDB_MEMBER_BINDINGS[memberKey];
+      const expectedTemplateDigest = TABLESDB_MEMBER_TEMPLATE_DIGESTS[memberKey];
+      const templatePreimage = { ...member };
+      delete templatePreimage.memberTemplateDigest;
+      if (
+        expectedMember === undefined
+        || expectedTemplateDigest === undefined
+        || observedMembers.has(memberKey)
+        || member.memberTemplateDigest !== expectedTemplateDigest
+        || sha256(BUFFER_FROM(canonicalJson(templatePreimage), 'utf8'))
+          !== expectedTemplateDigest
+        || member.bindingName !== expectedMember.bindingName
+        || member.providerKind !== expectedMember.providerKind
+        || (member.providerKind === 'tablesdb-row' && !bindingNameSet.has(member.bindingName))
+        || (bindingNameSet.has(member.bindingName) && member.providerKind !== 'tablesdb-row')
+      ) invalid();
+      observedMembers.add(memberKey);
+      for (const operation of exactOrdinaryArray(member.operations)) {
+        parsedRecord(operation);
+        const requestTemplate = operation.requestTemplate;
+        const routeKey = `${resource.resourceType}|${member.slot}|${operation.mutationOrdinal}`;
+        const expectedDirectRoute = TABLESDB_DIRECT_OPERATION_ROUTES[routeKey];
+        const expectedNonDirectRoute = TABLESDB_NON_DIRECT_OPERATION_ROUTES[routeKey];
+        if (expectedDirectRoute !== undefined) {
+          const expectedPath = expectedDirectRoute.operation === 'tablesdb.createRow'
+            ? '/tablesdb/{databaseId}/tables/{tableId}/rows'
+            : '/tablesdb/{databaseId}/tables/{tableId}/rows/{rowId}';
+          if (
+            observedDirectOperations.has(routeKey)
+            || operation.operation !== expectedDirectRoute.operation
+            || requestTemplate?.routeId !== expectedDirectRoute.operation
+            || requestTemplate?.pathTemplate !== expectedPath
+            || requestTemplate?.pathBindings?.databaseBinding
+              !== 'VERIFICATION_PRIMARY_DATABASE_ID'
+            || requestTemplate?.pathBindings?.tableBinding !== expectedDirectRoute.tableBinding
+            || member.bindingName !== expectedDirectRoute.tableBinding
+          ) invalid();
+          observedDirectOperations.add(routeKey);
+        } else if (expectedNonDirectRoute !== undefined) {
+          const expectedPathBindings = expectedNonDirectRoute.operation === 'storage.createFile'
+            ? { bucketBinding: 'project-files' }
+            : {};
+          if (
+            observedNonDirectOperations.has(routeKey)
+            || operation.operation !== expectedNonDirectRoute.operation
+            || requestTemplate?.routeId !== expectedNonDirectRoute.operation
+            || requestTemplate?.pathTemplate !== expectedNonDirectRoute.pathTemplate
+            || canonicalJson(requestTemplate?.pathBindings) !== canonicalJson(expectedPathBindings)
+          ) invalid();
+          observedNonDirectOperations.add(routeKey);
+        } else invalid();
+      }
+    }
+  }
+  if (
+    observedMembers.size !== Object.keys(TABLESDB_MEMBER_BINDINGS).length
+    || observedDirectOperations.size !== Object.keys(TABLESDB_DIRECT_OPERATION_ROUTES).length
+    || observedNonDirectOperations.size
+      !== Object.keys(TABLESDB_NON_DIRECT_OPERATION_ROUTES).length
+    || [...observedDirectOperations].some(
+      (routeKey) => !Object.hasOwn(TABLESDB_DIRECT_OPERATION_ROUTES, routeKey),
+    )
+    || [...observedNonDirectOperations].some(
+      (routeKey) => !Object.hasOwn(TABLESDB_NON_DIRECT_OPERATION_ROUTES, routeKey),
+    )
+  ) invalid();
+  if (fixedQueries.some((query) => !bindingNameSet.has(query.bindingName))) invalid();
+  for (const binding of bindings) {
+    exactParsedRecord(binding, [
+      'bindingName', 'enabled', 'idSource', 'requiredColumnContract',
+    ]);
+    if (
+      binding.enabled !== true
+      || binding.idSource !== TABLESDB_CORE_ID_SOURCES[binding.bindingName]
+    ) invalid();
+    const requiredColumnContract = exactParsedRecord(binding.requiredColumnContract, [
+      'applicationKeys', 'coverage', 'schemaVersion',
+    ]);
+    if (
+      requiredColumnContract.schemaVersion !== 'verification-required-application-columns.v1'
+      || requiredColumnContract.coverage !== 'runtime-required-subset'
+    ) invalid();
+    const expected = TABLESDB_CORE_APPLICATION_KEYS[binding.bindingName];
+    const requiredKeys = tablesDbApplicationKeys(requiredColumnContract.applicationKeys);
+    if (!sameOrdinalArray(requiredKeys, expected)) invalid();
+    const allowed = new Set(requiredKeys);
+    const observed = new Set();
+    let fullRowEvidence = false;
+
+    function consume(keys, requireFull = false) {
+      const applicationKeys = tablesDbApplicationKeys(keys);
+      if (applicationKeys.some((key) => !allowed.has(key))) invalid();
+      for (const key of applicationKeys) observed.add(key);
+      if (sameOrdinalArray([...applicationKeys].sort(compareOrdinal), requiredKeys)) {
+        fullRowEvidence = true;
+      } else if (requireFull) invalid();
+    }
+
+    for (const resource of resources) {
+      for (const member of exactOrdinaryArray(resource.memberTemplates)) {
+        if (member.bindingName !== binding.bindingName) continue;
+        if (member.readProjectionKeys !== null) {
+          const readKeys = exactOrdinaryArray(member.readProjectionKeys);
+          if (!sameOrdinalArray(readKeys.slice(0, TABLESDB_SYSTEM_KEYS.length), TABLESDB_SYSTEM_KEYS)) {
+            invalid();
+          }
+          consume(readKeys.slice(TABLESDB_SYSTEM_KEYS.length), TABLESDB_FULL_ROW_BINDINGS.has(binding.bindingName));
+        }
+        for (const operation of exactOrdinaryArray(member.operations)) {
+          const requestTemplate = operation.requestTemplate;
+          if (operation.operation !== requestTemplate?.routeId) invalid();
+          const bodyKeys = requestTemplate?.bodyTemplate?.dataKeys;
+          if (bodyKeys !== undefined) consume(bodyKeys);
+          const stateKeys = operation.expectedStateContract?.applicationKeys;
+          if (stateKeys !== undefined) {
+            consume(stateKeys, TABLESDB_FULL_ROW_BINDINGS.has(binding.bindingName));
+          }
+        }
+      }
+    }
+    for (const query of fixedQueries) {
+      if (query.bindingName !== binding.bindingName) continue;
+      if (!allowed.has(query.filterField)) invalid();
+      const projectionKeys = exactOrdinaryArray(query.projectionKeys);
+      if (!sameOrdinalArray(projectionKeys.slice(0, TABLESDB_SYSTEM_KEYS.length), TABLESDB_SYSTEM_KEYS)) {
+        invalid();
+      }
+      consume(projectionKeys.slice(TABLESDB_SYSTEM_KEYS.length));
+      observed.add(query.filterField);
+    }
+    if (
+      !sameOrdinalArray([...observed].sort(compareOrdinal), requiredKeys)
+      || (TABLESDB_FULL_ROW_BINDINGS.has(binding.bindingName) && !fullRowEvidence)
+    ) invalid();
+  }
 }
 
 function authenticateContractBytes({ bytes, expectedDigest, expectedEnvironmentDigest }) {
@@ -3193,6 +5387,7 @@ function authenticateContractBytes({ bytes, expectedDigest, expectedEnvironmentD
     providerContract.schemaVersion !== TEST_CLOUD_PROVIDER_CONTRACT_VERSION
     || providerContract.environmentClass !== 'appwrite-cloud-test'
   ) invalid();
+  validateTablesDbAbiContract(providerContract);
   deepFreezeJson(providerContract);
   return { providerContract, expectedEnvironmentDigest };
 }
@@ -3230,6 +5425,14 @@ const RAW_INTENT_KEYS = Object.freeze([
   '$sequence',
   '$tableId',
   '$updatedAt',
+  'cleanupCursor',
+  'cleanupProgressDigest',
+  'cleanupProofDigest',
+  'cleanupRunnerExecutionCursor',
+  'cleanupRunnerExecutionPlanDigest',
+  'cleanupRunnerExecutionRecordDigest',
+  'cleanupRunnerExecutionRetentionAt',
+  'cleanupRunnerExecutionSlotsJson',
   'createdAt',
   'dependencyOrder',
   'environmentDigest',
@@ -3241,6 +5444,7 @@ const RAW_INTENT_KEYS = Object.freeze([
   'providerAggregateDigest',
   'providerAggregateJson',
   'providerResourceIds',
+  'recoveryCheckpointDigest',
   'resourceId',
   'resourceType',
   'retentionExpiresAt',
@@ -3259,11 +5463,113 @@ const INTENT_V2_KEYS = Object.freeze([
   'schemaVersion', 'intentId', 'runId', 'environmentDigest', 'resourceType',
   'resourceId', 'providerAggregateJson', 'providerAggregateDigest', 'ownerMarker',
   'dependencyOrder', 'lifecycleClass', 'state', 'intentVersion',
-  'observationDigest', 'retentionExpiresAt', 'createdAt', 'updatedAt',
+  'observationDigest', 'retentionExpiresAt', 'cleanupCursor',
+  'cleanupProgressDigest', 'cleanupProofDigest', 'cleanupRunnerExecutionPlanDigest',
+  'cleanupRunnerExecutionCursor', 'cleanupRunnerExecutionSlotsJson',
+  'cleanupRunnerExecutionRecordDigest', 'cleanupRunnerExecutionRetentionExpiresAt',
+  'createdAt', 'updatedAt',
+]);
+const INTENT_V2_RECOVERY_KEYS = Object.freeze([
+  ...INTENT_V2_KEYS, 'recoveryCheckpointDigest',
+]);
+const INTENT_V2_STORAGE_ARM_KEYS = Object.freeze([
+  'providerAggregateJson', 'providerAggregateDigest', 'cleanupCursor',
+  'cleanupProgressDigest', 'cleanupProofDigest', 'cleanupRunnerExecutionPlanDigest',
+  'cleanupRunnerExecutionCursor', 'cleanupRunnerExecutionSlotsJson',
+  'cleanupRunnerExecutionRecordDigest', 'cleanupRunnerExecutionRetentionExpiresAt',
 ]);
 const V1_RESOURCES = Object.freeze(['account-session-set', 'primary-execution']);
+const V1_RESOURCE_CONTRACTS = Object.freeze({
+  'account-session-set': Object.freeze({
+    dependencyOrder: 40,
+    lifecycleClass: 'session-aggregate',
+  }),
+  'primary-execution': Object.freeze({
+    dependencyOrder: 50,
+    lifecycleClass: 'provider-retained-observation',
+  }),
+});
 const V2_RESOURCES = Object.freeze(['primary-project', 'primary-graph', 'primary-share']);
-const RFC3339_MILLISECONDS = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+const V2_RESOURCE_LOGICAL_CONTRACTS = Object.freeze({
+  'primary-project': Object.freeze({
+    dependencyOrder: 10,
+    terminalCleanupCursor: 6,
+    executionPlanDigest: 'sha256:eda026aa3f845f4e506eb96bd31694b3c7e595ef505dbf2ba418bb1fffc7e5ac',
+    executionCursorMaximum: 33,
+    createdExecutionCursorMaximum: 16,
+    executionSlotCount: 66,
+  }),
+  'primary-graph': Object.freeze({
+    dependencyOrder: 20,
+    terminalCleanupCursor: 8,
+    executionPlanDigest: 'sha256:21f425ffcf2bdffc9c14580cdf3a060b29b090aa98209bbacfa3d391b34ab22e',
+    executionCursorMaximum: 43,
+    createdExecutionCursorMaximum: 16,
+    executionSlotCount: 86,
+  }),
+  'primary-share': Object.freeze({
+    dependencyOrder: 30,
+    terminalCleanupCursor: 16,
+    executionPlanDigest: 'sha256:6a0490766d93ce9d658c77a380f466920e053b587f234283981904af7ad6d859',
+    executionCursorMaximum: 55,
+    createdExecutionCursorMaximum: 18,
+    executionSlotCount: 110,
+  }),
+});
+const V2_ORDINARY_INTENT_AGGREGATE_PHASES = Object.freeze({
+  'primary-project': Object.freeze({
+    planned: Object.freeze(['owner-baseline']),
+    created: Object.freeze([
+      'normal-owner', 'shared', 'after-share-cleanup', 'after-graph-cleanup',
+    ]),
+    cleaning: Object.freeze([
+      'normal-owner', 'shared', 'after-share-cleanup', 'after-graph-cleanup',
+    ]),
+    absent: Object.freeze([
+      'normal-owner', 'shared', 'after-share-cleanup', 'after-graph-cleanup',
+    ]),
+  }),
+  'primary-graph': Object.freeze({
+    planned: Object.freeze(['owner-baseline']),
+    created: Object.freeze(['normal-owner', 'shared', 'after-share-cleanup']),
+    cleaning: Object.freeze(['normal-owner', 'shared', 'after-share-cleanup']),
+    absent: Object.freeze(['normal-owner', 'shared', 'after-share-cleanup']),
+  }),
+  'primary-share': Object.freeze({
+    planned: Object.freeze(['owner-baseline', 'editor-issued', 'viewer-issued']),
+    created: Object.freeze(['shared']),
+    cleaning: Object.freeze(['shared']),
+    absent: Object.freeze(['shared']),
+  }),
+});
+
+function validateIntentAggregatePhase({
+  phase, recoveryCheckpointDigest, resourceType, state,
+}) {
+  if (recoveryCheckpointDigest !== null) return;
+  const allowed = V2_ORDINARY_INTENT_AGGREGATE_PHASES[resourceType]?.[state];
+  if (!Array.isArray(allowed) || !allowed.includes(phase)) invalid();
+}
+const RFC3339_MILLISECONDS =
+  /^(?!0000)\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}(?:Z|\+00:00)$/;
+const APPWRITE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,35}$/;
+
+function assertRfc3339Milliseconds(value) {
+  const normalized = typeof value === 'string' && value.endsWith('+00:00')
+    ? `${value.slice(0, -6)}Z`
+    : value;
+  if (
+    typeof value !== 'string'
+    || !RFC3339_MILLISECONDS.test(value)
+    || !Number.isFinite(Date.parse(normalized))
+    || new Date(normalized).toISOString() !== normalized
+  ) invalid();
+  return normalized;
+}
+
+function assertAppwriteSystemTimestamp(value) {
+  assertRfc3339Milliseconds(value);
+}
 
 function exactOrdinaryArray(value) {
   if (!ARRAY_IS_ARRAY(value)) invalid();
@@ -3271,6 +5577,146 @@ function exactOrdinaryArray(value) {
     if (!Object.hasOwn(value, index)) invalid();
   }
   return value;
+}
+
+function validateCleanupExecutionSlotsJson(value, expectedCount, expectedRetentionExpiresAt) {
+  if (
+    typeof value !== 'string'
+    || value.length < 1
+    || assertScalarString(value) > 32_768
+  ) invalid();
+  const slots = exactOrdinaryArray(parseClosedJson(value));
+  if (slots.length !== expectedCount) invalid();
+  for (const slot of slots) {
+    if (slot === null) continue;
+    const fields = exactParsedRecord(slot, [
+      'attemptOrdinal', 'logicalPosition', 'retainedExecutionId',
+      'retentionExpiresAt', 'safeStateDigest',
+    ]);
+    if (
+      !NUMBER_IS_SAFE_INTEGER(fields.logicalPosition)
+      || fields.logicalPosition < 0
+      || ![1, 2].includes(fields.attemptOrdinal)
+      || typeof fields.retainedExecutionId !== 'string'
+      || fields.retainedExecutionId.length < 1
+      || typeof fields.retentionExpiresAt !== 'string'
+    ) invalid();
+    const normalizedRetention = assertRfc3339Milliseconds(fields.retentionExpiresAt);
+    if (
+      normalizedRetention !== fields.retentionExpiresAt
+      || fields.retentionExpiresAt !== expectedRetentionExpiresAt
+    ) invalid();
+    assertDigest(fields.safeStateDigest);
+  }
+}
+
+function validateIntentV2StateArm(fields, logicalResource) {
+  const resource = V2_RESOURCE_LOGICAL_CONTRACTS[logicalResource];
+  if (
+    resource === undefined
+    || fields.resourceType !== logicalResource
+    || fields.dependencyOrder !== resource.dependencyOrder
+    || fields.observationDigest !== null
+    || fields.retentionExpiresAt !== null
+  ) invalid();
+
+  for (const key of [
+    'cleanupProgressDigest', 'cleanupProofDigest',
+    'cleanupRunnerExecutionPlanDigest', 'cleanupRunnerExecutionRecordDigest',
+    'recoveryCheckpointDigest',
+  ]) {
+    if (fields[key] !== null) assertDigest(fields[key]);
+  }
+  if (
+    fields.cleanupCursor !== null
+    && (!NUMBER_IS_SAFE_INTEGER(fields.cleanupCursor)
+      || fields.cleanupCursor < 0
+      || fields.cleanupCursor > resource.terminalCleanupCursor)
+  ) invalid();
+  if (
+    fields.cleanupRunnerExecutionCursor !== null
+    && (!NUMBER_IS_SAFE_INTEGER(fields.cleanupRunnerExecutionCursor)
+      || fields.cleanupRunnerExecutionCursor < 0
+      || fields.cleanupRunnerExecutionCursor > resource.executionCursorMaximum)
+  ) invalid();
+  if (
+    fields.cleanupRunnerExecutionPlanDigest !== null
+    && fields.cleanupRunnerExecutionPlanDigest !== resource.executionPlanDigest
+  ) invalid();
+  if (fields.cleanupRunnerExecutionSlotsJson !== null) {
+    validateCleanupExecutionSlotsJson(
+      fields.cleanupRunnerExecutionSlotsJson,
+      resource.executionSlotCount,
+      fields.cleanupRunnerExecutionRetentionExpiresAt,
+    );
+  }
+  if (
+    fields.cleanupRunnerExecutionRetentionExpiresAt !== null
+    && typeof fields.cleanupRunnerExecutionRetentionExpiresAt !== 'string'
+  ) invalid();
+
+  const runnerArm = [
+    fields.cleanupRunnerExecutionPlanDigest,
+    fields.cleanupRunnerExecutionCursor,
+    fields.cleanupRunnerExecutionSlotsJson,
+    fields.cleanupRunnerExecutionRecordDigest,
+    fields.cleanupRunnerExecutionRetentionExpiresAt,
+  ];
+  const runnerArmIsNull = runnerArm.every((value) => value === null);
+  const runnerArmIsComplete = runnerArm.every((value) => value !== null);
+  const cleanupArm = [
+    fields.cleanupCursor,
+    fields.cleanupProgressDigest,
+    fields.cleanupProofDigest,
+    ...runnerArm,
+    fields.recoveryCheckpointDigest,
+  ];
+
+  if (fields.state === 'planned') {
+    if (cleanupArm.some((value) => value !== null)) invalid();
+    return;
+  }
+  if (fields.state === 'created') {
+    const cleanupArmIsNull = cleanupArm.every((value) => value === null);
+    if (cleanupArmIsNull) return;
+    if (
+      fields.cleanupCursor !== 0
+      || fields.cleanupProgressDigest === null
+      || fields.cleanupProofDigest !== null
+      || fields.recoveryCheckpointDigest !== null
+      || !runnerArmIsComplete
+      || fields.cleanupRunnerExecutionCursor > resource.createdExecutionCursorMaximum
+    ) invalid();
+    return;
+  }
+  if (fields.state === 'cleaning') {
+    if (
+      fields.cleanupCursor === null
+      || fields.cleanupProgressDigest === null
+      || fields.recoveryCheckpointDigest !== null
+      || !runnerArmIsComplete
+    ) invalid();
+    if (
+      fields.cleanupProofDigest !== null
+      && (fields.cleanupCursor !== resource.terminalCleanupCursor
+        || fields.cleanupRunnerExecutionCursor !== resource.executionCursorMaximum - 1)
+    ) invalid();
+    return;
+  }
+  if (fields.state !== 'absent') invalid();
+  if (
+    fields.cleanupCursor !== resource.terminalCleanupCursor
+    || fields.cleanupProgressDigest === null
+    || fields.cleanupProofDigest === null
+  ) invalid();
+  if (fields.recoveryCheckpointDigest === null) {
+    if (
+      !runnerArmIsComplete
+      || fields.cleanupRunnerExecutionCursor !== resource.executionCursorMaximum
+    ) invalid();
+  } else if (!runnerArmIsNull && !runnerArmIsComplete) {
+    invalid();
+  }
 }
 
 function copyIntentProjection(fields, keys) {
@@ -3283,6 +5729,7 @@ function copyIntentProjection(fields, keys) {
 function validateIntentCommon(fields, expected) {
   if (
     fields.$id !== expected.expectedRowId
+    || !APPWRITE_ID.test(fields.$id)
     || fields.$databaseId !== 'verification_control'
     || fields.$tableId !== 'verification_intents'
     || !ARRAY_IS_ARRAY(fields.$permissions)
@@ -3290,19 +5737,24 @@ function validateIntentCommon(fields, expected) {
     || !NUMBER_IS_SAFE_INTEGER(fields.$sequence)
     || fields.$sequence < 0
     || fields.runId !== expected.expectedRunId
+    || typeof fields.runId !== 'string'
+    || Array.from(fields.runId).length > 128
     || fields.environmentDigest !== expected.expectedEnvironmentDigest
     || fields.resourceType !== expected.logicalResource
     || typeof fields.resourceId !== 'string'
     || fields.resourceId.length < 1
+    || Array.from(fields.resourceId).length > 128
     || typeof fields.intentId !== 'string'
     || !/^[0-9a-f]{64}$/.test(fields.intentId)
     || typeof fields.ownerMarker !== 'string'
     || !/^verification-owner\.v1:sha256:[0-9a-f]{64}$/.test(fields.ownerMarker)
     || !NUMBER_IS_SAFE_INTEGER(fields.dependencyOrder)
     || fields.dependencyOrder < 0
+    || fields.dependencyOrder > 100
     || !NUMBER_IS_SAFE_INTEGER(fields.intentVersion)
     || fields.intentVersion < 1
-    || !['planned', 'created', 'absent'].includes(fields.state)
+    || fields.intentVersion > 2_147_483_647
+    || !['planned', 'created', 'cleaning', 'absent'].includes(fields.state)
     || (fields.observationDigest !== null && !DIGEST_PATTERN.test(fields.observationDigest))
     || (fields.retentionExpiresAt !== null && typeof fields.retentionExpiresAt !== 'string')
     || typeof fields.createdAt !== 'string'
@@ -3509,7 +5961,7 @@ function validateMemberState(member, template, phase, fields, isShare) {
   const expectedStates = exactOrdinaryArray(template.memberStateContract.expectedStatesByPhase);
   const expectedStatesForPhase = expectedStates.filter((entry) => entry.phase === phase);
   if (expectedStatesForPhase.length !== 1) {
-    if (!['editor-issued', 'viewer-issued'].includes(phase)) invalid();
+    if (!isShare || !['editor-issued', 'viewer-issued'].includes(phase)) invalid();
     return;
   }
   const expectedState = exactParsedRecord(expectedStatesForPhase[0], [
@@ -3593,7 +6045,7 @@ function validateOwnedMember(member, template, bindingDigest, fields, aggregate)
     ]);
     if (
       typeof member.providerId !== 'string'
-      || member.providerId.length < 1
+      || !APPWRITE_ID.test(member.providerId)
       || identity.providerId !== member.providerId
       || identity.providerKind !== template.providerKind
       || identity.bindingName !== template.bindingName
@@ -3640,15 +6092,21 @@ function parseProviderAggregate(fields, expected, providerContract) {
     || fields.lifecycleClass !== resourceContract.lifecycleClass
     || !providerContract.aggregateContracts.phaseOrder.includes(aggregate.phase)
   ) invalid();
+  validateIntentAggregatePhase({ ...fields, phase: aggregate.phase });
 
   const members = exactOrdinaryArray(aggregate.ownedMembers);
   const templates = exactOrdinaryArray(resourceContract.memberTemplates);
   const ownedSlots = exactOrdinaryArray(resourceContract.ownedSlots);
   if (members.length !== templates.length || members.length !== ownedSlots.length) invalid();
+  const memberValidationFields = fields.recoveryCheckpointDigest === null
+    ? fields
+    : { ...fields, state: aggregate.phase === 'owner-baseline' ? 'planned' : 'created' };
   const identities = new Set();
   for (let index = 0; index < templates.length; index += 1) {
     if (templates[index].slot !== ownedSlots[index]) invalid();
-    validateOwnedMember(members[index], templates[index], bindingDigest, fields, aggregate);
+    validateOwnedMember(
+      members[index], templates[index], bindingDigest, memberValidationFields, aggregate,
+    );
     if (members[index].providerIdentity !== null) {
       const key = canonicalJson(members[index].providerIdentity);
       if (identities.has(key)) invalid();
@@ -3708,11 +6166,27 @@ function readIntent(args) {
   const envelope = exactDataRecord(values.value, INTENT_VALUE_KEYS);
   if (
     typeof envelope.expectedRowId !== 'string'
-    || envelope.expectedRowId.length < 1
+    || !APPWRITE_ID.test(envelope.expectedRowId)
     || typeof envelope.expectedRunId !== 'string'
     || envelope.expectedRunId.length < 1
   ) invalid();
-  const fields = exactDataRecord(envelope.rawRow, RAW_INTENT_KEYS);
+  const physicalFields = exactDataRecord(envelope.rawRow, RAW_INTENT_KEYS);
+  for (const key of ['$createdAt', '$updatedAt']) {
+    assertAppwriteSystemTimestamp(physicalFields[key]);
+  }
+  const fields = {};
+  for (const key of RAW_INTENT_KEYS) {
+    if (key !== 'cleanupRunnerExecutionRetentionAt') fields[key] = physicalFields[key];
+  }
+  fields.createdAt = assertRfc3339Milliseconds(physicalFields.createdAt);
+  fields.updatedAt = assertRfc3339Milliseconds(physicalFields.updatedAt);
+  fields.retentionExpiresAt = physicalFields.retentionExpiresAt === null
+    ? null
+    : assertRfc3339Milliseconds(physicalFields.retentionExpiresAt);
+  fields.cleanupRunnerExecutionRetentionExpiresAt =
+    physicalFields.cleanupRunnerExecutionRetentionAt === null
+      ? null
+      : assertRfc3339Milliseconds(physicalFields.cleanupRunnerExecutionRetentionAt);
   const expected = {
     expectedEnvironmentDigest: values.expectedEnvironmentDigest,
     expectedRowId: envelope.expectedRowId,
@@ -3726,11 +6200,20 @@ function readIntent(args) {
   if (fields.schemaVersion === 'verification-intent-snapshot.v1') {
     if (
       !V1_RESOURCES.includes(values.logicalResource)
-      || fields.providerAggregateJson !== null
-      || fields.providerAggregateDigest !== null
+      || INTENT_V2_STORAGE_ARM_KEYS.some((key) => fields[key] !== null)
+      || fields.recoveryCheckpointDigest !== null
     ) invalid();
     const providerIds = exactOrdinaryArray(fields.providerResourceIds);
-    if (providerIds.some((value) => typeof value !== 'string')) invalid();
+    const resourceContract = V1_RESOURCE_CONTRACTS[values.logicalResource];
+    if (
+      !['planned', 'created', 'absent'].includes(fields.state)
+      || new Set(providerIds).size !== providerIds.length
+      || providerIds.some(
+        (value) => typeof value !== 'string' || !APPWRITE_ID.test(value),
+      )
+      || fields.lifecycleClass !== resourceContract.lifecycleClass
+      || fields.dependencyOrder !== resourceContract.dependencyOrder
+    ) invalid();
     intent = copyIntentProjection(fields, INTENT_V1_KEYS);
   } else if (fields.schemaVersion === 'verification-intent-snapshot.v2') {
     if (
@@ -3738,6 +6221,7 @@ function readIntent(args) {
       || fields.providerResourceIds !== null
       || fields.lifecycleClass !== 'fixture'
     ) invalid();
+    validateIntentV2StateArm(fields, values.logicalResource);
     const identity = deriveV2Identity(expected, values.logicalResource);
     const resourceContract = findResourceContract(authenticated.providerContract, values.logicalResource);
     if (
@@ -3750,7 +6234,12 @@ function readIntent(args) {
     ) invalid();
     assertDigest(fields.providerAggregateDigest);
     providerProjection = parseProviderAggregate(fields, expected, authenticated.providerContract);
-    intent = copyIntentProjection(fields, INTENT_V2_KEYS);
+    intent = copyIntentProjection(
+      fields,
+      fields.recoveryCheckpointDigest === null
+        ? INTENT_V2_KEYS
+        : INTENT_V2_RECOVERY_KEYS,
+    );
   } else {
     invalid();
   }
@@ -3848,7 +6337,7 @@ const BROWSER_ROW_KEYS = Object.freeze([
   'responseBodyDigest', 'responseByteLength', 'responseHeaderBindings',
   'responseMimeEssence', 'responseOpaqueHeaderRules',
 ]);
-const PROFILE_BY_ORDINAL = Object.freeze([
+const LEGACY_PROFILE_BY_ORDINAL = Object.freeze([
   ...Array(25).fill('synthetic-immutable-asset'),
   'cors-preflight-owner-session-post',
   'owner-session-create',
@@ -3882,9 +6371,15 @@ const PROFILE_BY_ORDINAL = Object.freeze([
   'authenticated-appwrite-function-json-mutation',
   'authenticated-appwrite-function-json-mutation',
 ]);
+const PROFILE_BY_ORDINAL = Object.freeze([
+  ...LEGACY_PROFILE_BY_ORDINAL.slice(0, 27),
+  'cors-preflight-appwrite-account-get',
+  'authenticated-appwrite-account-read',
+  ...LEGACY_PROFILE_BY_ORDINAL.slice(27),
+]);
 
-function validateBrowserProfile(row, index) {
-  const profileId = PROFILE_BY_ORDINAL[index];
+function validateBrowserProfile(row, index, profileByOrdinal) {
+  const profileId = profileByOrdinal[index];
   if (profileId === undefined || row.profileId !== profileId) invalid();
   if (index <= 24) {
     if (
@@ -3900,13 +6395,18 @@ function validateBrowserProfile(row, index) {
     ) invalid();
     return;
   }
-  if ([25, 27, 29, 30, 31, 32, 33, 34, 35, 36].includes(index)) {
+  const shifted = profileByOrdinal.length === PROFILE_BY_ORDINAL.length;
+  const corsOrdinals = shifted
+    ? [25, 27, 29, 31, 32, 33, 34, 35, 36, 37, 38]
+    : [25, 27, 29, 30, 31, 32, 33, 34, 35, 36];
+  if (corsOrdinals.includes(index)) {
     if (
       row.requestClass !== 'cors-preflight'
       || row.credentialCarrier !== 'none'
       || row.method !== 'OPTIONS'
       || row.resourceType !== 'other'
-      || row.lifecyclePhase !== (index <= 27 ? 'OWNER_LOGIN' : 'APPLICATION_MUTATION')
+      || row.lifecyclePhase !== (index <= (shifted ? 29 : 27)
+        ? 'OWNER_LOGIN' : 'APPLICATION_MUTATION')
     ) invalid();
     return;
   }
@@ -3920,7 +6420,7 @@ function validateBrowserProfile(row, index) {
     ) invalid();
     return;
   }
-  if (index === 28) {
+  if (index === 28 || (shifted && index === 30)) {
     if (
       row.requestClass !== 'appwrite-read'
       || row.credentialCarrier !== 'browser-cookie-jar-only'
@@ -3930,8 +6430,9 @@ function validateBrowserProfile(row, index) {
     ) invalid();
     return;
   }
-  const multipart = [37, 38, 44, 47, 51].includes(index);
-  const patch = [46, 49, 50].includes(index);
+  const multipart = (shifted ? [39, 40, 46, 49, 53] : [37, 38, 44, 47, 51])
+    .includes(index);
+  const patch = (shifted ? [48, 51, 52] : [46, 49, 50]).includes(index);
   if (
     row.requestClass !== (multipart ? 'appwrite-multipart-mutation' : 'appwrite-json-mutation')
     || row.credentialCarrier !== 'browser-cookie-jar-only'
@@ -4042,7 +6543,12 @@ function validateSetupProjection(setup, expectedEnvironmentDigest, expectedProvi
     || policy.timeoutMilliseconds !== 5000
   ) invalid();
   const policyRows = exactOrdinaryArray(policy.rows);
-  if (policyRows.length !== PROFILE_BY_ORDINAL.length) invalid();
+  const profileByOrdinal = policyRows.length === PROFILE_BY_ORDINAL.length
+    ? PROFILE_BY_ORDINAL
+    : policyRows.length === LEGACY_PROFILE_BY_ORDINAL.length
+      ? LEGACY_PROFILE_BY_ORDINAL
+      : null;
+  if (profileByOrdinal === null) invalid();
   for (let index = 0; index < policyRows.length; index += 1) {
     const row = exactParsedRecord(policyRows[index], BROWSER_ROW_KEYS);
     if (
@@ -4051,7 +6557,7 @@ function validateSetupProjection(setup, expectedEnvironmentDigest, expectedProvi
       || row.exactCount < 1
       || row.exactCount > 256
     ) invalid();
-    validateBrowserProfile(row, index);
+    validateBrowserProfile(row, index, profileByOrdinal);
     validateHeaderRows(row.requestHeaderBindings, ['name', 'valueDigest']);
     validateHeaderRows(row.responseHeaderBindings, ['name', 'valueDigest']);
     validateHeaderRows(row.requestOpaqueHeaderRules, [
@@ -4169,6 +6675,16 @@ const RUNNER_VARIABLE_EVIDENCE_KEYS = OBJECT_FREEZE([
   'identityBindings',
   'providerSetupReadback',
 ]);
+const RUNNER_PROVIDER_BINDING_KEYS = OBJECT_FREEZE([
+  'runtimeQualification',
+  'context',
+  'providerContractQualification',
+  'providerSetupReadbackQualification',
+  'primaryDatabaseId',
+  'primaryDatabaseIdDigest',
+  'sharesTableId',
+  'sharesTableIdDigest',
+]);
 function activeQualificationIs(value) { return runtimeRecord.state === 'ACTIVE' && activationState === 'COMMITTED' && futureBootstrapHub === undefined && OBJECT_IS(value, activeRuntimeQualification); }
 function loadBlocked(kind, code) {
   const provider = kind === 'provider';
@@ -4260,6 +6776,57 @@ function readProtectedSetupValue(value) {
   assertScalarString(value);
   return value;
 }
+function browserArtifactSetupRowsMatch(originFreeRows, protectedRows) {
+  try {
+    if (
+      !ARRAY_IS_ARRAY(originFreeRows)
+      || !ARRAY_IS_ARRAY(protectedRows)
+      || originFreeRows.length !== 25
+      || protectedRows.length !== 25
+    ) return false;
+    for (let index = 0; index < 25; index += 1) {
+      const originFree = originFreeRows[index];
+      const protectedRow = protectedRows[index];
+      if (
+        originFree === null
+        || protectedRow === null
+        || typeof originFree !== 'object'
+        || typeof protectedRow !== 'object'
+        || originFree.ordinal !== index
+        || protectedRow.ordinal !== index
+        || typeof originFree.memberPath !== 'string'
+        || typeof originFree.role !== 'string'
+      ) return false;
+      const url = new URL(protectedRow.finalUrl);
+      if (
+        url.protocol !== 'https:'
+        || url.username !== ''
+        || url.password !== ''
+        || url.search !== ''
+        || url.hash !== ''
+        || url.pathname !== `/${originFree.memberPath}`
+      ) return false;
+      const originKeys = OBJECT_KEYS(originFree);
+      const protectedKeys = OBJECT_KEYS(protectedRow);
+      const sharedKeys = originKeys.filter(
+        (key) => key !== 'memberPath' && key !== 'role',
+      );
+      if (
+        protectedKeys.length !== sharedKeys.length + 1
+        || !OBJECT_HAS_OWN(protectedRow, 'finalUrl')
+        || sharedKeys.some((key) => (
+          !OBJECT_HAS_OWN(protectedRow, key)
+          || canonicalJson(originFree[key]) !== canonicalJson(protectedRow[key])
+        ))
+      ) return false;
+      const expectedKeys = new Set([...sharedKeys, 'finalUrl']);
+      if (protectedKeys.some((key) => !expectedKeys.has(key))) return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
 export async function loadQualifiedTestCloudProviderContract(args) {
   if (providerLoadRecord.state !== 'EMPTY') return loadBlocked('provider');
   try {
@@ -4286,6 +6853,8 @@ export async function loadQualifiedTestCloudProviderContract(args) {
 }
 export function loadQualifiedTestCloudSetupReadback(args) {
   let failureCode = 'TEST_CLOUD_SETUP_REQUEST_INVALID';
+  let artifactSetupHandoff;
+  let artifactSetupRuntimeQualification;
   if (setupLoadRecord.state !== 'EMPTY') {
     return loadBlocked('setup', 'TEST_CLOUD_SETUP_REQUEST_INVALID');
   }
@@ -4345,17 +6914,97 @@ export function loadQualifiedTestCloudSetupReadback(args) {
     if (setup.identityBindings.identityBindingsDigest !== identityPass.value.identityBindingsDigest) {
       return loadBlocked('setup', 'TEST_CLOUD_SETUP_IDENTITY_DIGEST_MISMATCH');
     }
+    failureCode = 'TEST_CLOUD_SETUP_BROWSER_ARTIFACT_BINDING_INVALID';
+    const artifactClaim = invokeBrowserArtifactSetupMethod(
+      'consumeCurrentBrowserArtifactSetHandoff',
+      { runtimeQualification, context },
+    );
+    let artifactBinding;
+    let protectedArtifactPolicyDigest;
+    if (artifactClaim !== false) {
+      if (
+        !exactOrderedPublicDataRecord(artifactClaim, [
+          'browserArtifactSetDigest', 'browserArtifactSetHandoff',
+        ])
+        || !exactDigestString(artifactClaim.browserArtifactSetDigest)
+        || artifactClaim.browserArtifactSetHandoff === null
+        || typeof artifactClaim.browserArtifactSetHandoff !== 'object'
+      ) throw new TypeError('browser artifact setup binding mismatch');
+      artifactSetupHandoff = artifactClaim.browserArtifactSetHandoff;
+      artifactSetupRuntimeQualification = runtimeQualification;
+      artifactBinding = invokeBrowserArtifactSetupMethod(
+        'beginBrowserArtifactSetSetupBinding',
+        {
+          runtimeQualification,
+          context,
+          browserArtifactSetHandoff: artifactSetupHandoff,
+          providerContractQualification: providerPass.value.qualification,
+          identityBindingsQualification: identityPass.value.qualification,
+          expectedEnvironmentDigest: providerRecord.environmentDigest,
+          expectedProviderContractDigest: providerRecord.providerContractDigest,
+          expectedIdentityBindingsDigest: identityPass.value.identityBindingsDigest,
+        },
+      );
+      const protectedRows = setup.browserRequestPolicy.rows.slice(0, 25);
+      protectedArtifactPolicyDigest = sha256(
+        BUFFER_FROM(canonicalJson(protectedRows), 'utf8'),
+      );
+      if (
+        !exactOrderedPublicDataRecord(artifactBinding, [
+          'browserArtifactSetDigest',
+          'originFreeArtifactPolicyDigest',
+          'originFreeArtifactPolicyRows',
+        ])
+        || artifactBinding.browserArtifactSetDigest
+          !== artifactClaim.browserArtifactSetDigest
+        || !exactDigestString(artifactBinding.originFreeArtifactPolicyDigest)
+        || sha256(BUFFER_FROM(
+          canonicalJson(artifactBinding.originFreeArtifactPolicyRows),
+          'utf8',
+        )) !== artifactBinding.originFreeArtifactPolicyDigest
+        || !browserArtifactSetupRowsMatch(
+          artifactBinding.originFreeArtifactPolicyRows,
+          protectedRows,
+        )
+      ) throw new TypeError('browser artifact setup projection mismatch');
+    }
     failureCode = 'TEST_CLOUD_SETUP_FINALIZATION_INVALID';
     const runnerVariableExpectationDigest = sha256(BUFFER_FROM(canonicalJson(setup.expectedRunnerVariables), 'utf8'));
     const qualification = OBJECT_FREEZE(OBJECT_CREATE(null));
     const passResult = runtimeOperationPassResult(['qualification', 'identityBindingsDigest', 'providerSetupReadbackDigest', 'runnerVariableExpectationDigest'], { qualification, identityBindingsDigest: identityPass.value.identityBindingsDigest, providerSetupReadbackDigest: expectedDigest, runnerVariableExpectationDigest });
-    const qualified = OBJECT_FREEZE({ state: 'QUALIFIED', version: 3, runtimeQualification, context, providerQualification: providerPass.value.qualification, identityQualification: identityPass.value.qualification, identityPassResult: identityPass.result, environmentDigest: providerRecord.environmentDigest, providerContractDigest: providerRecord.providerContractDigest, identityBindingsDigest: identityPass.value.identityBindingsDigest, providerSetupReadbackDigest: expectedDigest, runnerVariableExpectationDigest, qualification, passResult });
+    if (
+      artifactSetupHandoff !== undefined
+      && invokeBrowserArtifactSetupMethod(
+        'commitBrowserArtifactSetSetupBinding',
+        {
+          runtimeQualification,
+          context,
+          browserArtifactSetHandoff: artifactSetupHandoff,
+          providerContractQualification: providerPass.value.qualification,
+          identityBindingsQualification: identityPass.value.qualification,
+          providerSetupReadbackQualification: qualification,
+          browserArtifactSetDigest: artifactBinding.browserArtifactSetDigest,
+          originFreeArtifactPolicyDigest: artifactBinding.originFreeArtifactPolicyDigest,
+          protectedArtifactPolicyDigest,
+          browserRequestPolicyDigest: setup.browserRequestPolicy.digest,
+        },
+      ) !== true
+    ) throw new TypeError('browser artifact setup commit mismatch');
+    const qualified = OBJECT_FREEZE({ state: 'QUALIFIED', version: 3, runtimeQualification, context, providerQualification: providerPass.value.qualification, identityQualification: identityPass.value.qualification, identityPassResult: identityPass.result, environmentDigest: providerRecord.environmentDigest, providerContractDigest: providerRecord.providerContractDigest, identityBindingsDigest: identityPass.value.identityBindingsDigest, providerSetupReadbackDigest: expectedDigest, runnerVariableExpectationDigest, browserRequestPolicy: safePrivateJsonCopy(setup.browserRequestPolicy), qualification, passResult });
     setupLoadRecord = qualified; SETUP_TUPLES.set(context, qualified); SETUP_QUALIFICATIONS.set(qualification, qualified);
     if (!OBJECT_IS(setupLoadRecord, qualified) || !OBJECT_IS(SETUP_TUPLES.get(context), qualified) || !OBJECT_IS(SETUP_QUALIFICATIONS.get(qualification), qualified)) {
       return loadBlocked('setup', 'TEST_CLOUD_SETUP_FINALIZATION_INVALID');
     }
     return passResult;
-  } catch { return loadBlocked('setup', failureCode); }
+  } catch {
+    if (artifactSetupHandoff !== undefined) {
+      invokeBrowserArtifactSetupMethod('abortBrowserArtifactSetSetupBinding', {
+        runtimeQualification: artifactSetupRuntimeQualification,
+        browserArtifactSetHandoff: artifactSetupHandoff,
+      });
+    }
+    return loadBlocked('setup', failureCode);
+  }
 }
 function authenticateRunnerVariableReadbackRequestEvidence(args) {
   try {
@@ -4443,6 +7092,55 @@ function authenticateRunnerVariableReadbackRequestEvidence(args) {
       && OBJECT_IS(currentProviderRecord.passResult, providerPass.result)
       && OBJECT_IS(currentSetupRecord.passResult, setupPass.result)
       && OBJECT_IS(currentSetupRecord.identityPassResult, identityPass.result);
+  } catch {
+    return false;
+  }
+}
+
+function consumeQualifiedRunnerProviderBindings(args) {
+  try {
+    if (
+      arguments.length !== 1
+      || !OBJECT_IS(this, runnerVariableAuthorityReceiver)
+      || qualifiedRunnerProviderBindings !== undefined
+      || !exactOrderedPublicDataRecord(args, RUNNER_PROVIDER_BINDING_KEYS)
+      || !activeQualificationIs(args.runtimeQualification)
+      || typeof args.primaryDatabaseId !== 'string'
+      || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u.test(args.primaryDatabaseId)
+      || typeof args.sharesTableId !== 'string'
+      || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u.test(args.sharesTableId)
+      || !exactDigestString(args.primaryDatabaseIdDigest)
+      || !exactDigestString(args.sharesTableIdDigest)
+      || args.primaryDatabaseIdDigest !== sha256(BUFFER_FROM(args.primaryDatabaseId, 'utf8'))
+      || args.sharesTableIdDigest !== sha256(BUFFER_FROM(args.sharesTableId, 'utf8'))
+    ) return false;
+    const providerRecord = providerRecordFor(args.providerContractQualification);
+    const setupRecord = setupRecordFor(args.providerSetupReadbackQualification);
+    if (
+      providerRecord === undefined
+      || setupRecord === undefined
+      || !OBJECT_IS(providerRecord.runtimeQualification, args.runtimeQualification)
+      || !OBJECT_IS(setupRecord.runtimeQualification, args.runtimeQualification)
+      || !OBJECT_IS(providerRecord.context, args.context)
+      || !OBJECT_IS(setupRecord.context, args.context)
+      || !OBJECT_IS(
+        setupRecord.providerQualification,
+        args.providerContractQualification,
+      )
+      || providerRecord.providerContractDigest !== setupRecord.providerContractDigest
+    ) return false;
+    const retained = createClosedNullRecord(RUNNER_PROVIDER_BINDING_KEYS, {
+      runtimeQualification: args.runtimeQualification,
+      context: args.context,
+      providerContractQualification: args.providerContractQualification,
+      providerSetupReadbackQualification: args.providerSetupReadbackQualification,
+      primaryDatabaseId: args.primaryDatabaseId,
+      primaryDatabaseIdDigest: args.primaryDatabaseIdDigest,
+      sharesTableId: args.sharesTableId,
+      sharesTableIdDigest: args.sharesTableIdDigest,
+    });
+    qualifiedRunnerProviderBindings = retained;
+    return OBJECT_IS(qualifiedRunnerProviderBindings, retained);
   } catch {
     return false;
   }

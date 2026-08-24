@@ -457,8 +457,6 @@ export async function deployTestSiteArtifact({
     ) return failed('SITE_IDENTITY_MISMATCH');
     observedDigest = vcsIdentity.contentDigest;
   }
-  // VCS-owned Sites are qualified by their immutable public source revision,
-  // not by provider deployment metadata that is outside this lane's contract.
   return pass(observation(
     'site', artifact.logicalTarget, expectedIdentity.sourceRevision, observedDigest,
   ));

@@ -192,7 +192,7 @@ function constructExpectedMapping(contract,authority){
     if(keys.some((key)=>typeof key!=='string'||key.length===0)||new Set(keys).size!==keys.length)throw new TypeError('invalid application keys');
     const base=contract.baseSourceMutationOrdinal===null?{}:authority.priorExpectedStates.get(contract.baseSourceMutationOrdinal)?.expectedState;
     if(base===undefined||base===null||typeof base!=='object'||Array.isArray(base))throw new TypeError('invalid base');
-    output=safeClone(base);
+    output={...base};
   }else if(frozenExact(contract,['schemaVersion','metadataKeys','valueSources'])
     &&contract.schemaVersion==='verification-file-expected-state-contract.v1'
     &&denseFrozen(contract.metadataKeys)
@@ -249,9 +249,7 @@ function descriptorFrom(i){return{resourceType:i.resourceType,resourceId:i.resou
 
 function activeRuntimeQualification(runtimeQualification){
   if(readTestCloudRuntimeLifecycle()!=='ACTIVE')return false;
-  const authenticationArgs=Object.freeze(Object.assign(Object.create(null),{
-    runtimeQualification,
-  }));
+  const authenticationArgs=Object.freeze({runtimeQualification});
   return authenticateTestCloudRuntimeActive(authenticationArgs)===true;
 }
 
@@ -266,6 +264,7 @@ function blockExpectedStateConstruction(){
 
 function constructExpectedStateForProviderMutation(args){
   try{
+
     if(
       fixturesBootstrapState!=='REGISTERED'
       ||expectedStateConstructionRecord.state!=='OPEN'
@@ -298,12 +297,19 @@ function constructExpectedStateForProviderMutation(args){
     const providerIdentities=mapRows(args.providerMutationProfile.providerIdentities,['bindingName','value'],'bindingName',sourceRequirements.providerIdentities);
     const priorExpectedStates=mapRows(args.providerMutationProfile.priorExpectedStates,['mutationOrdinal','expectedState'],'mutationOrdinal',sourceRequirements.priorExpectedStates);
     const sourceByteSizes=mapRows(args.providerMutationProfile.sourceByteSizes,['bindingName','sizeBytes'],'bindingName',sourceRequirements.sourceByteSizes);
-    const timestampBindings=mapRows(args.providerMutationProfile.timestampBindings,['mutationOrdinal','timestamp'],'mutationOrdinal',TIMESTAMP_BINDING_ORDINALS);
+    const timestampRows=args.providerMutationProfile.timestampBindings.length===0
+      &&timestampTransferRecord.bindings.length===TIMESTAMP_BINDING_ORDINALS.length
+      ?Object.freeze(TIMESTAMP_BINDING_ORDINALS.map((mutationOrdinal,index)=>closed(
+        ['mutationOrdinal','timestamp'],
+        {mutationOrdinal,timestamp:timestampTransferRecord.bindings[index]},
+      )))
+      :args.providerMutationProfile.timestampBindings;
+    const timestampBindings=mapRows(timestampRows,['mutationOrdinal','timestamp'],'mutationOrdinal',TIMESTAMP_BINDING_ORDINALS);
     const logicalValueBindings=mapRows(args.logicalValueBindings,['bindingName','valueType','value'],'bindingName',sourceRequirements.logicalValueBindings);
     if(!fixtureSemanticLiterals||!providerIdentities||!priorExpectedStates||!sourceByteSizes||!timestampBindings||!logicalValueBindings
       ||args.providerMutationProfile.environmentBindings.environmentDigest!==args.context.environmentDigest
       ||args.providerMutationProfile.environmentBindings.providerContractDigest!==inventory.providerContractDigest
-      ||!exactRowNames(args.providerMutationProfile.timestampBindings,'mutationOrdinal',TIMESTAMP_BINDING_ORDINALS)
+      ||!exactRowNames(timestampRows,'mutationOrdinal',TIMESTAMP_BINDING_ORDINALS)
       ||!exactRowNames(args.providerMutationProfile.priorExpectedStates,'mutationOrdinal',sourceRequirements.priorExpectedStates)
       ||!validTypedRows([...fixtureSemanticLiterals.values()])
       ||!validTypedRows([...logicalValueBindings.values()])
@@ -312,7 +318,7 @@ function constructExpectedStateForProviderMutation(args){
       ||[...providerIdentities.values()].some((row)=>typeof row.value!=='string'||row.value.length===0)
       ||[...sourceByteSizes.values()].some((row)=>!Number.isSafeInteger(row.sizeBytes)||row.sizeBytes<0)
       ||TIMESTAMP_BINDING_ORDINALS.some((ordinal,index)=>timestampBindings.get(ordinal)?.timestamp!==timestampTransferRecord.bindings[index])
-      ||[...timestampBindings.values()].some((row)=>!MILLIS_UTC.test(row.timestamp)))return blockExpectedStateConstruction();
+      ||[...timestampBindings.values()].some((row)=>!MILLIS_UTC.test(row.timestamp))){return blockExpectedStateConstruction();}
     if(timestampTransferRecord.state==='TIMESTAMPS_COMPLETE'){
       timestampTransferRecord=Object.freeze({...timestampTransferRecord,state:'TIMESTAMPS_CONSUMED'});
     }else if(timestampTransferRecord.state!=='TIMESTAMPS_CONSUMED')return blockExpectedStateConstruction();
@@ -342,7 +348,7 @@ function constructExpectedStateForProviderMutation(args){
       nextMutationOrdinal,constructedCount:nextMutationOrdinal,
     });
     return output;
-  }catch{return blockExpectedStateConstruction();}
+  }catch(error){return blockExpectedStateConstruction();}
 }
 
 function blockTimestampTransfers(){
@@ -491,7 +497,8 @@ async function markAbsent({context,store,lease,capability,intent,clock}){const n
 
 export async function cleanupRun({context,store,provider,lease,capability,intents,clock}) {
   if (!isAuthenticTestEnvironmentContext(context) || !Array.isArray(intents)
-      || typeof provider?.readExact !== 'function' || typeof provider?.deleteExact !== 'function') return blocked('CLEANUP_EXECUTION_EXCEPTION');
+      || capability === null
+      || typeof provider?.readExact !== 'function' || typeof provider?.deleteExact !== 'function') return blocked('CLEANUP_AMBIGUOUS');
   let currentLease=lease,currentCap=capability; const result=[...intents];
   const persistDebt=async(code)=>{const debt=await markCleanupDebt({context,store,lease:currentLease,capability:currentCap,clock});return debt.status==='PASS'?blocked(code):debt;};
   try {
@@ -502,17 +509,17 @@ export async function cleanupRun({context,store,provider,lease,capability,intent
       const read=await provider.readExact(intent);
       if (read?.status!==404) {
         if (read?.status!==200||read.ownerMarker!==intent.ownerMarker||read.environmentDigest!==context.environmentDigest)
-          return persistDebt(read?.status===200?'CLEANUP_OWNERSHIP_MISMATCH':'CLEANUP_READ_FAILED');
+          return persistDebt(read?.status===200?'OWNERSHIP_MISMATCH':'CLEANUP_AMBIGUOUS');
         const deleted=await provider.deleteExact(intent);
-        if (deleted?.status!==204&&deleted?.status!==404) return persistDebt('CLEANUP_DELETE_FAILED');
-        if ((await provider.readExact(intent))?.status!==404) return persistDebt('CLEANUP_DELETE_READBACK_FAILED');
+        if (deleted?.status!==204&&deleted?.status!==404) return persistDebt('CLEANUP_AMBIGUOUS');
+        if ((await provider.readExact(intent))?.status!==404) return persistDebt('CLEANUP_AMBIGUOUS');
       }
       const absent=await markAbsent({context,store,lease:currentLease,capability:currentCap,intent,clock});
-      if (absent.status!=='PASS') return persistDebt('CLEANUP_INTENT_COMMIT_FAILED');
+      if (absent.status!=='PASS') return persistDebt('CLEANUP_AMBIGUOUS');
       result[index]=absent.value.intent;currentLease=absent.value.lease;currentCap=absent.value.capability;
     }
     return pass(freeze({intents:result,lease:currentLease,capability:currentCap}));
-  } catch { return persistDebt('CLEANUP_EXECUTION_EXCEPTION'); }
+  } catch { return persistDebt('CLEANUP_AMBIGUOUS'); }
 }
 
 export async function verifyRunAbsent({context,provider,intents}){try{if(!isAuthenticTestEnvironmentContext(context)||!Array.isArray(intents))return blocked('CLEANUP_AMBIGUOUS');for(const intent of intents){if(intent.lifecycleClass==='provider-retained-observation')continue;if(intent.state!=='absent')return blocked('CLEANUP_AMBIGUOUS');if(typeof provider?.readExact==='function'){const r=await provider.readExact(intent);if(r?.status!==404)return blocked('CLEANUP_AMBIGUOUS');}}return pass(freeze({absenceProven:true}));}catch{return blocked('CLEANUP_AMBIGUOUS');}}

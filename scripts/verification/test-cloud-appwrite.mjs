@@ -220,6 +220,8 @@ const DEDICATED_CAPTURE_VALID = typeof CAPTURED_FETCH === 'function'
 let runnerVariableRequestRecord = Object.freeze({ state: 'EMPTY', version: 0 });
 let authenticateRunnerVariableReadbackRequestEvidence;
 let authenticateRunnerVariableReadbackRequestEvidenceReceiver;
+let consumeQualifiedRunnerProviderBindings;
+let consumeQualifiedRunnerProviderBindingsReceiver;
 
 const {
   auditTableId: AUDIT_TABLE_ID,
@@ -1877,6 +1879,7 @@ function projectRunnerVariableObservation(raw, expected) {
   ) throw new RunnerVariableResponseError();
   const ids = new Set();
   const digests = new Map();
+  const values = new Map();
   for (const candidate of root.variables) {
     const fields = readDedicatedRunnerObject(candidate, RUNNER_VARIABLE_RAW_KEYS);
     if (
@@ -1889,8 +1892,10 @@ function projectRunnerVariableObservation(raw, expected) {
     const createdAt = normalizedRunnerTimestamp(fields.$createdAt);
     const updatedAt = normalizedRunnerTimestamp(fields.$updatedAt);
     if (createdAt > updatedAt) throw new RunnerVariableResponseError();
+    const scalarBytes = assertRunnerScalar(fields.value);
     ids.add(fields.$id);
-    digests.set(fields.key, runnerDigest(assertRunnerScalar(fields.value)));
+    values.set(fields.key, fields.value);
+    digests.set(fields.key, runnerDigest(scalarBytes));
   }
   if (digests.size !== RUNNER_VARIABLE_KEYS.length) throw new RunnerVariableResponseError();
   if (
@@ -1918,7 +1923,17 @@ function projectRunnerVariableObservation(raw, expected) {
     functionIdDigest: runnerDigest(Buffer.from(RUNNER_FUNCTION_ID, 'utf8')),
     variables,
   }), 'utf8'));
-  return deepFreeze({ total: 16, variables, runnerVariableReadbackDigest });
+  return deepFreeze({
+    total: 16,
+    variables,
+    runnerVariableReadbackDigest,
+    providerBindings: {
+      primaryDatabaseId: values.get('VERIFICATION_PRIMARY_DATABASE_ID'),
+      primaryDatabaseIdDigest: digests.get('VERIFICATION_PRIMARY_DATABASE_ID'),
+      sharesTableId: values.get('VERIFICATION_SHARES_TABLE_ID'),
+      sharesTableIdDigest: digests.get('VERIFICATION_SHARES_TABLE_ID'),
+    },
+  });
 }
 
 function assertNoDuplicateRunnerJsonKeys(text) {
@@ -2118,7 +2133,8 @@ function registerTestCloudRunnerVariableAuthority(registration) {
       || isAuthenticTestCloudBootstrapHub(hubDescriptor.value) !== true
     ) return false;
     const fields = readDedicatedRunnerObject(registration, [
-      'receiver', 'authenticateRunnerVariableReadbackRequestEvidence', 'moduleUrl',
+      'receiver', 'authenticateRunnerVariableReadbackRequestEvidence',
+      'consumeQualifiedRunnerProviderBindings', 'moduleUrl',
     ]);
     if (
       fields === null || !Object.isFrozen(registration)
@@ -2129,6 +2145,12 @@ function registerTestCloudRunnerVariableAuthority(registration) {
       || fields.authenticateRunnerVariableReadbackRequestEvidence.name
         !== 'authenticateRunnerVariableReadbackRequestEvidence'
       || utilTypes.isAsyncFunction(fields.authenticateRunnerVariableReadbackRequestEvidence)
+      || typeof fields.consumeQualifiedRunnerProviderBindings !== 'function'
+      || CAPTURED_IS_PROXY(fields.consumeQualifiedRunnerProviderBindings)
+      || fields.consumeQualifiedRunnerProviderBindings.length !== 1
+      || fields.consumeQualifiedRunnerProviderBindings.name
+        !== 'consumeQualifiedRunnerProviderBindings'
+      || utilTypes.isAsyncFunction(fields.consumeQualifiedRunnerProviderBindings)
       || fields.moduleUrl !== RUNNER_VARIABLE_PROVIDER_MODULE_URL
       || !Reflect.deleteProperty(
         qualifyTestCloudRunnerVariableReadbackRequest, RUNNER_VARIABLE_AUTHORITY_PROPERTY,
@@ -2140,6 +2162,8 @@ function registerTestCloudRunnerVariableAuthority(registration) {
     authenticateRunnerVariableReadbackRequestEvidence =
       fields.authenticateRunnerVariableReadbackRequestEvidence;
     authenticateRunnerVariableReadbackRequestEvidenceReceiver = fields.receiver;
+    consumeQualifiedRunnerProviderBindings = fields.consumeQualifiedRunnerProviderBindings;
+    consumeQualifiedRunnerProviderBindingsReceiver = fields.receiver;
     return true;
   } catch {
     return false;
@@ -2453,6 +2477,26 @@ export function createTestCloudRunnerVariableReadbackOperator(args) {
             expectationDigest: consumed.runnerVariableExpectationDigest,
           }),
         );
+        const fixedBindingsAccepted = typeof consumeQualifiedRunnerProviderBindings === 'function'
+          && CAPTURED_REFLECT_APPLY(
+            consumeQualifiedRunnerProviderBindings,
+            consumeQualifiedRunnerProviderBindingsReceiver,
+            [Object.freeze({
+              runtimeQualification: consumed.runtimeQualification,
+              context: consumed.context,
+              providerContractQualification: consumed.providerContractQualification,
+              providerSetupReadbackQualification:
+                consumed.providerSetupReadbackQualification,
+              primaryDatabaseId: projection.providerBindings.primaryDatabaseId,
+              primaryDatabaseIdDigest:
+                projection.providerBindings.primaryDatabaseIdDigest,
+              sharesTableId: projection.providerBindings.sharesTableId,
+              sharesTableIdDigest: projection.providerBindings.sharesTableIdDigest,
+            })],
+          ) === true;
+        if (!fixedBindingsAccepted || !requestRecordIsCurrent(consumed)) {
+          return blocked('TEST_SETUP_READBACK_MISMATCH');
+        }
         const result = pass({
           total: projection.total, variables: projection.variables,
           runnerVariableReadbackDigest: projection.runnerVariableReadbackDigest,

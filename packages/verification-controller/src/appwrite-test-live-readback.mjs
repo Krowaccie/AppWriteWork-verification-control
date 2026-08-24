@@ -37,9 +37,9 @@ const RESPONSE_FAILURE_CLASSES = Object.freeze([
   'STATUS_INVALID',
 ]);
 const ENVIRONMENT_DIGEST =
-  'sha256:e83dac9cc615ccf37fd027683690edb2ff7332ac523d57130c1e86fa8617f302';
+  'sha256:02560e84745ed7b577b334a3412885f6a547b2a22f164f4978b255d3b35c0044';
 const PROVIDER_CONTRACT_DIGEST =
-  'sha256:eaa6c314b13daa4c56a75bfc29eb8b3c66b7315ad6f114475db4d5f9aee75cd8';
+  'sha256:47a1d778ca8b8cea333b10574ffbc2db488fd711c12a1c40faf9da5235e27184';
 const FIXTURE_PREFERENCES = Object.freeze({
   onboardingCompletedAt: '2026-08-01T00:00:00.000Z',
   onboardingHintsEnabled: false,

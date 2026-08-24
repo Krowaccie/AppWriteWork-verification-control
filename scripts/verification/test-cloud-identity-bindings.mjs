@@ -214,7 +214,7 @@ const MAX_IDENTITY_BYTES = 16_384;
 const MAX_RESPONSE_BYTES = 262_144;
 const REQUEST_TIMEOUT_MILLISECONDS = 10_000;
 const APPROVED_PROVIDER_CONTRACT_DIGEST =
-  'sha256:eaa6c314b13daa4c56a75bfc29eb8b3c66b7315ad6f114475db4d5f9aee75cd8';
+  'sha256:47a1d778ca8b8cea333b10574ffbc2db488fd711c12a1c40faf9da5235e27184';
 const DIGEST_PATTERN = /^sha256:[0-9a-f]{64}$/;
 const ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,35}$/;
 const PRINTABLE_ASCII_PATTERN = /^[\x20-\x7e]+$/;
@@ -1415,6 +1415,10 @@ function createShareBinding(identity, identityBindingsQualification, ownerSlot, 
     pair,
     ownerUserId: owner.userId,
     targetUserId: target.userId,
+    targetUserName: target.name,
+    targetRole: target.role,
+    targetCanRun: pair.canRun,
+    sharePermissions: permissions,
     canonicalTargetEmail: target.email,
     sharePermissionsDigest,
     targetIdentityDigest,
@@ -1491,7 +1495,7 @@ function readShareBindingDigestsCore(args) {
   let shareBindingQualification;
   try {
     if (readTestCloudRuntimeLifecycle() !== 'ACTIVE' || arguments.length !== 1) invalid();
-    const fields = exactObject(args, DIGEST_KEYS);
+    const fields = exactObject(args, DIGEST_KEYS, null);
     if (fields === null) invalid();
     shareBindingQualification = fields.shareBindingQualification;
     assertActive(fields.runtimeQualification);
@@ -1554,21 +1558,26 @@ function readShareBindingDigestsCore(args) {
 export function readAuthenticatedShareBindingDigests(args) {
   try {
     if (readTestCloudRuntimeLifecycle() !== 'ACTIVE' || arguments.length !== 1) return blockedOperation();
-    return pass(readShareBindingDigestsCore(args));
+    const fields = exactObject(args, DIGEST_KEYS);
+    if (fields === null) return blockedOperation();
+    return pass(readShareBindingDigestsCore(closedNullRecord(DIGEST_KEYS, fields)));
   } catch {
     return blockedOperation();
   }
 }
 
 export async function createShareIdentityBindingHandoff(args) {
+
   let shareBindingQualification;
   let preparation;
   let runtimeQualification;
   let prepared = false;
   try {
     if (readTestCloudRuntimeLifecycle() !== 'ACTIVE' || arguments.length !== 1) return blockedOperation();
-    const fields = exactObject(args, HANDOFF_KEYS);
+    const fields = exactObject(args, HANDOFF_KEYS, null)
+      ?? exactObject(args, HANDOFF_KEYS);
     if (fields === null || registrationState !== 'REGISTERED') return blockedOperation();
+
     runtimeQualification = fields.runtimeQualification;
     assertActive(runtimeQualification);
     if (!isAuthenticTestEnvironmentContext(fields.context)
@@ -1576,6 +1585,7 @@ export async function createShareIdentityBindingHandoff(args) {
     const identity = identityFor(fields.identityBindingsQualification);
     if (identity === undefined || !OBJECT_IS(identity.runtimeQualification, runtimeQualification)
       || !OBJECT_IS(identity.context, fields.context)) return blockedBindings();
+
     const pair = sharePair(fields.ownerSlot);
     shareBindingQualification = makeToken();
     const unprepared = createShareBinding(
@@ -1596,23 +1606,29 @@ export async function createShareIdentityBindingHandoff(args) {
         mutationOrdinal: pair.mutationOrdinal,
       }]);
     assertLocalPromise(preparePromise);
+
     const preparedValue = await preparePromise;
+
     preparation = ownDataValue(preparedValue, 'preparation');
     prepared = exactNominalToken(preparation);
     assertActive(runtimeQualification);
     if (identityFor(fields.identityBindingsQualification) !== identity) forbidden();
     const preparedFields = exactObject(preparedValue,
       ['preparation', 'projectIdentityDigest', 'targetIdentityDigest', 'tupleDigest'], null);
+
     if (preparedFields === null || !prepared
       || !OBJECT_IS(preparedFields.preparation, preparation)) invalid();
     const current = SHARE_BINDINGS.get(shareBindingQualification);
     if (current === undefined || current.state !== 'DIGESTS_READ') forbidden();
+
     if (preparedFields.projectIdentityDigest !== current.projectIdentityDigest
       || preparedFields.targetIdentityDigest !== current.targetIdentityDigest
       || preparedFields.tupleDigest !== current.tupleDigest) invalid();
     const projection = safeProjection(current, current.projectIdentityDigest,
       current.tupleDigest, current.boundValuesDigest);
+
     casShareBinding(shareBindingQualification, current, 'PREPARED');
+
     const handoff = makeToken();
     const handoffRecord = OBJECT_FREEZE({
       state: 'UNUSED',
@@ -1625,12 +1641,18 @@ export async function createShareIdentityBindingHandoff(args) {
       safeDigestProjection: projection,
     });
     HANDOFFS.set(handoff, handoffRecord);
+
     if (!OBJECT_IS(HANDOFFS.get(handoff), handoffRecord)) forbidden();
-    return pass(closedNullRecord(['handoff', 'safeDigestProjection'], {
+    const handoffValue = closedNullRecord(['handoff', 'safeDigestProjection'], {
       handoff,
       safeDigestProjection: projection,
-    }));
+    });
+
+    const handoffResult = pass(handoffValue);
+
+    return handoffResult;
   } catch (error) {
+
     if (prepared) {
       try {
         if (REFLECT_APPLY(abortShareValuesTransition, registrationObject.receiver, [{
@@ -1645,11 +1667,14 @@ export async function createShareIdentityBindingHandoff(args) {
 }
 
 export async function bindQualifiedShareIdentityValues(args) {
+
   let handoff;
   try {
     if (readTestCloudRuntimeLifecycle() !== 'ACTIVE' || arguments.length !== 1) return blockedOperation();
-    const fields = exactObject(args, BIND_KEYS);
+    const fields = exactObject(args, BIND_KEYS, null)
+      ?? exactObject(args, BIND_KEYS);
     if (fields === null || registrationState !== 'REGISTERED') return blockedOperation();
+
     assertActive(fields.runtimeQualification);
     handoff = fields.handoff;
     if (!exactNominalToken(handoff)) invalid();
@@ -1671,14 +1696,29 @@ export async function bindQualifiedShareIdentityValues(args) {
         preparation: committingHandoff.preparation,
         bindingNames: committingShare.bindingNames,
         boundValues: committingShare.boundValues,
+        expectedShareIdentity: closedNullRecord([
+          'userId', 'userEmail', 'userName', 'role', 'canRun',
+          'sharedBy', 'permissions',
+        ], {
+          userId: committingShare.targetUserId,
+          userEmail: committingShare.canonicalTargetEmail,
+          userName: committingShare.targetUserName,
+          role: committingShare.targetRole,
+          canRun: committingShare.targetCanRun,
+          sharedBy: committingShare.ownerUserId,
+          permissions: committingShare.sharePermissions,
+        }),
       }]);
     assertLocalPromise(commitPromise);
+
     const committed = await commitPromise;
+
     assertActive(fields.runtimeQualification);
     if (!OBJECT_IS(HANDOFFS.get(handoff), committingHandoff)
       || !OBJECT_IS(SHARE_BINDINGS.get(committingHandoff.shareBindingQualification), committingShare)
       || identityForCurrentShare(committingShare) === undefined) invalid();
     const commitFields = exactObject(committed, ['commitReceipt'], null);
+
     if (commitFields === null || !exactNominalToken(commitFields.commitReceipt)) invalid();
     const finalizingHandoff = casHandoff(
       handoff,
@@ -1692,6 +1732,7 @@ export async function bindQualifiedShareIdentityValues(args) {
       commitReceipt: commitFields.commitReceipt,
       handoff,
     }]) !== true) invalid();
+
     assertActive(fields.runtimeQualification);
     if (!OBJECT_IS(HANDOFFS.get(handoff), finalizingHandoff)
       || !OBJECT_IS(SHARE_BINDINGS.get(finalizingHandoff.shareBindingQualification), committingShare)
@@ -1729,7 +1770,8 @@ export async function bindQualifiedShareIdentityValues(args) {
         finalizingHandoff.safeDigestProjection,
       ),
     }));
-  } catch {
+  } catch (error) {
+
     blockHandoff(handoff);
     return blockedOperation();
   }
@@ -1745,7 +1787,14 @@ function ownerAuthenticator(args) {
     if (fields === null || !exactNominalToken(fields.identityBindingsQualification)) return false;
     assertActive(fields.runtimeQualification);
     const identity = identityFor(fields.identityBindingsQualification);
-    const observed = exactObject(fields.observedOwnerProjection, ['$id', 'email', 'name', 'status']);
+    const observed = exactObject(
+      fields.observedOwnerProjection,
+      ['$id', 'email', 'name', 'status'],
+    ) ?? exactObject(
+      fields.observedOwnerProjection,
+      ['$id', 'email', 'name', 'status'],
+      null,
+    );
     if (identity === undefined || observed === null
       || !OBJECT_IS(identity.runtimeQualification, fields.runtimeQualification)
       || identity.record.environmentDigest !== fields.expectedEnvironmentDigest
@@ -1760,18 +1809,32 @@ function ownerAuthenticator(args) {
 
 function readAuthenticatedBrowserIdentityEmail(args) {
   try {
-    if (readTestCloudRuntimeLifecycle() !== 'ACTIVE' || arguments.length !== 1) return false;
+
+    if (readTestCloudRuntimeLifecycle() !== 'ACTIVE' || arguments.length !== 1) {
+
+      return false;
+    }
     const fields = exactObject(args, [
       'runtimeQualification', 'context', 'identityBindingsQualification', 'role',
     ]);
-    if (fields === null || !exactNominalToken(fields.identityBindingsQualification)) return false;
+    if (fields === null || !exactNominalToken(fields.identityBindingsQualification)) {
+
+      return false;
+    }
+
     assertActive(fields.runtimeQualification);
+
     const identity = identityFor(fields.identityBindingsQualification);
     const index = ROLE_ORDER.indexOf(fields.role);
     if (identity === undefined || index < 0 || !OBJECT_IS(identity.context, fields.context)
-      || !OBJECT_IS(identity.runtimeQualification, fields.runtimeQualification)) return false;
+      || !OBJECT_IS(identity.runtimeQualification, fields.runtimeQualification)) {
+
+      return false;
+    }
+
     return identity.record.roles[index].email;
   } catch {
+
     return false;
   }
 }
@@ -1800,7 +1863,7 @@ function authenticateShareIdentityFinalState(args) {
   try {
     if (readTestCloudRuntimeLifecycle() !== 'ACTIVE' || arguments.length !== 1) return false;
     const fields = exactObject(args,
-      ['runtimeQualification', 'handoff', 'commitReceipt', 'ownerSlot']);
+      ['runtimeQualification', 'handoff', 'commitReceipt', 'ownerSlot'], null);
     if (fields === null || !exactNominalToken(fields.handoff)
       || !exactNominalToken(fields.commitReceipt)) return false;
     handoff = fields.handoff;

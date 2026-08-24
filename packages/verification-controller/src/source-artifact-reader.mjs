@@ -91,8 +91,7 @@ export function extractSourceArtifactZip(archive) {
 
 function validateToken(body, config) {
   if (!body || typeof body.token !== 'string' || body.token.length === 0 ||
-      !exactKeys(body.permissions, ['actions', 'metadata']) ||
-      body.permissions.actions !== 'read' || body.permissions.metadata !== 'read' ||
+      JSON.stringify(body.permissions) !== JSON.stringify({ actions: 'read' }) ||
       !Array.isArray(body.repositories) || body.repositories.length !== 1 ||
       body.repositories[0]?.id !== config.sourceRepositoryId ||
       body.repositories[0]?.full_name !== SOURCE_REPOSITORY) {

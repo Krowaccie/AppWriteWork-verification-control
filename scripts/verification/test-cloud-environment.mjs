@@ -35,7 +35,6 @@ const RECOVERY_ARGUMENT_KEYS = Object.freeze([
   'executionObservationQualification',
   'originalWorkflowRunId',
   'recoveryHandle',
-  'sourceWorkflowRunId',
 ]);
 const RECOVERY_CONTEXT_KEYS = Object.freeze([
   'approvalRef',
@@ -46,7 +45,6 @@ const RECOVERY_CONTEXT_KEYS = Object.freeze([
   'projectId',
   'publicOrigin',
   'siteId',
-  'sourceWorkflowRunId',
 ]);
 const ENVIRONMENT_KEYS = Object.freeze(['endpoint', 'origin', 'projectId', 'siteId']);
 const HANDLE_KEYS = Object.freeze(['credentialClass', 'readSecret', 'scopes', 'variableName']);
@@ -101,7 +99,7 @@ const FIXED_INVENTORY_PROJECTION = Object.freeze({
   schemaVersion: 'test-cloud-inventory.v1',
   environmentClass: 'appwrite-cloud-test',
   providerContractDigest:
-    'sha256:eaa6c314b13daa4c56a75bfc29eb8b3c66b7315ad6f114475db4d5f9aee75cd8',
+    'sha256:47a1d778ca8b8cea333b10574ffbc2db488fd711c12a1c40faf9da5235e27184',
   sourceBranch: 'main',
   environment: TEST_ENVIRONMENT,
   deploymentModes: Object.freeze({ function: 'artifact-upload', site: 'artifact-upload' }),
@@ -544,8 +542,6 @@ export function createTestRecoveryEnvironmentContext(args) {
       || typeof fields.controllerBundleSha !== 'string'
       || !FULL_GIT_SHA_PATTERN.test(fields.controllerBundleSha)
       || !validRecoveryApprovalRef(fields.approvalRef, fields.originalWorkflowRunId)
-      || typeof fields.sourceWorkflowRunId !== 'string'
-      || !POSITIVE_DECIMAL_PATTERN.test(fields.sourceWorkflowRunId)
       || !validRecoveryHandle(fields.recoveryHandle)
     ) return blocked('TEST_RECOVERY_SCOPE_INVALID');
 
@@ -563,7 +559,6 @@ export function createTestRecoveryEnvironmentContext(args) {
       controllerBundleSha: fields.controllerBundleSha,
       approvalRef: fields.approvalRef,
       originalWorkflowRunId: fields.originalWorkflowRunId,
-      sourceWorkflowRunId: fields.sourceWorkflowRunId,
     };
     const contextKeys = Object.keys(context).sort(ordinalCompare);
     if (contextKeys.some((key, index) => key !== RECOVERY_CONTEXT_KEYS[index])) {

@@ -1,0 +1,86 @@
+name: Verify Main
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout candidate
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node.js 24.11.1
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '24.11.1'
+          package-manager-cache: false
+
+      - name: Assert exact Node.js and npm versions
+        shell: bash
+        run: |
+          test "$(node --version)" = "v24.11.1"
+          test "$(npm --version)" = "11.6.2"
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.12'
+
+      - name: Install Node.js dependencies
+        run: |
+          npm ci
+          npm ci --prefix packages/verification-controller --ignore-scripts --no-audit --no-fund
+          npm ci --prefix packages/salmora-mcp
+
+      - name: Install hash-locked Python dependencies
+        run: python -m pip install --require-hashes -r dev/verification/python-local-requirements.lock
+
+      - name: Resolve verification base
+        shell: bash
+        run: |
+          case "${{ github.event_name }}" in
+            pull_request)
+              echo "VERIFY_BASE_SHA=${{ github.event.pull_request.base.sha }}" >> "$GITHUB_ENV"
+              ;;
+            push)
+              echo "VERIFY_BASE_SHA=${{ github.event.before }}" >> "$GITHUB_ENV"
+              ;;
+            workflow_dispatch)
+              echo "VERIFY_BASE_SHA=$(git merge-base origin/main HEAD)" >> "$GITHUB_ENV"
+              ;;
+            *)
+              exit 2
+              ;;
+          esac
+
+      - name: Run local verification
+        shell: bash
+        run: npm run verify -- --lane local --base "$VERIFY_BASE_SHA" --head "$GITHUB_SHA"
+
+      - name: Diagnose verifier self-test failure
+        if: failure()
+        shell: bash
+        run: node scripts/verification/run-tests.mjs
+
+      - name: Bind hosted source artifact request
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        id: source-artifact-request
+        shell: bash
+        run: node scripts/verification/hosted-source-artifact-request.mjs
+
+      - name: Publish validated hosted source artifact
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        uses: Krowaccie/AppWriteWork-verification-control/.github/actions/a1-source-artifact-launcher@eeaaaf7619bdac124101cfb1d8c628e8447d83be
+        with:
+          request: ${{ steps.source-artifact-request.outputs.request }}
