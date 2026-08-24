@@ -7,8 +7,8 @@ import { fileURLToPath } from 'node:url';
 
 const workflowPath = 'packages/verification-controller/workflows/recover-appwrite-test.yml';
 const repositoryRoot = fileURLToPath(new URL('../../../', import.meta.url));
-const REVIEWED_WORKFLOW_BYTES = 8164;
-const REVIEWED_WORKFLOW_SHA256 = '40147edb5d53ba43f815090f07bfb47840695911b13b91aa9ed31a37cfd34178';
+const REVIEWED_WORKFLOW_BYTES = 12095;
+const REVIEWED_WORKFLOW_SHA256 = '325772e560c262a70eb6246e84f8571b0c58a65efe1b328441a93b34943a50b8';
 
 test('recovery workflow resolves to exact LF checkout policy', () => {
   const attribute = execFileSync(
@@ -181,10 +181,25 @@ function assertRecoveryWorkflowContract(workflow) {
     '|| commit.commit?.verification?.verified !== true',
     "|| commit.commit.verification.reason !== 'valid'",
   ]);
+  assert.deepEqual(
+    exactGuardClauses(approvalStep, 'BLOCKED RECOVERY_ORIGINAL_CONTROLLER_INVALID'),
+    [
+      'originalCommit.sha !== process.env.ORIGINAL_CONTROLLER_SHA',
+      '|| originalCommit.commit?.verification?.verified !== true',
+      "|| originalCommit.commit.verification.reason !== 'valid'",
+    ],
+  );
+  assert.deepEqual(exactGuardClauses(approvalStep, 'BLOCKED RECOVERY_APPROVAL_TIME_INVALID'), [
+    "typeof run.created_at !== 'string'",
+    '|| !/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$/u.test(run.created_at)',
+    '|| !Number.isFinite(evaluationMilliseconds)',
+    '|| evaluationMilliseconds % 1000 !== 0',
+  ]);
   for (const sourceRead of [
     'read(`actions/runs/${process.env.ORIGINAL_WORKFLOW_RUN_ID}`)',
     "read('git/ref/heads/main')",
     'read(`commits/${process.env.TRUSTED_CONTROLLER_SHA}`)',
+    'read(`commits/${process.env.ORIGINAL_CONTROLLER_SHA}`)',
   ]) {
     assert.equal(
       approvalScript.split(sourceRead).length - 1,
@@ -210,6 +225,14 @@ test('recovery workflow proves the failed owner, old binding, and protected sign
   );
   assert.match(workflow, /run\.workflow_id !== 336735803/u);
   assert.match(workflow, /run\.conclusion !== 'failure'/u);
+  assert.match(workflow, /run\.created_at/u);
+  assert.match(workflow, /binding_evaluation_epoch_seconds/u);
+  assert.match(workflow, /steps\.validate-failed-owner\.outputs\.binding_evaluation_epoch_seconds/u);
+  assert.match(workflow, /evaluationEpochSeconds/u);
+  assert.match(workflow, /path: original-controller/u);
+  assert.match(workflow, /verifyOriginalBindingArtifact/u);
+  assert.match(workflow, /metadata\.expired !== false/u);
+  assert.match(workflow, /expiresAtMilliseconds <= Date\.now\(\)/u);
   assert.match(workflow, /CONTROLLER_REVISION: \$\{\{ inputs\.original_controller_sha \}\}/u);
   assert.match(workflow, /TRUSTED_CONTROLLER_SHA: \$\{\{ vars\.TRUSTED_CONTROLLER_SHA \}\}/u);
   assert.match(workflow, /git\/ref\/heads\/main/u);
@@ -249,11 +272,19 @@ test('workflow guard mutations are rejected structurally', async () => {
     'commit.sha !== process.env.TRUSTED_CONTROLLER_SHA',
     'commit.commit?.verification?.verified !== true',
     "commit.commit.verification.reason !== 'valid'",
+    'originalCommit.sha !== process.env.ORIGINAL_CONTROLLER_SHA',
+    'originalCommit.commit?.verification?.verified !== true',
+    "originalCommit.commit.verification.reason !== 'valid'",
+    "typeof run.created_at !== 'string'",
+    '!/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$/u.test(run.created_at)',
+    '!Number.isFinite(evaluationMilliseconds)',
+    'evaluationMilliseconds % 1000 !== 0',
   ];
   const sourceReads = [
     'read(`actions/runs/${process.env.ORIGINAL_WORKFLOW_RUN_ID}`)',
     "read('git/ref/heads/main')",
     'read(`commits/${process.env.TRUSTED_CONTROLLER_SHA}`)',
+    'read(`commits/${process.env.ORIGINAL_CONTROLLER_SHA}`)',
   ];
   const keyLine = '          APPWRITE_TEST_RECOVERY_API_KEY: ${{ secrets.APPWRITE_TEST_RECOVERY_API_KEY }}';
   const mutations = [

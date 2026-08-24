@@ -295,3 +295,30 @@ test('CLI materializes only the eight verified binding files', async () => {
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test('CLI can delegate semantic validation to the exact historical controller', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'binding-verifier-recovery-time-'));
+  try {
+    const value = fixture();
+    const inputPath = path.join(root, 'input.json');
+    const outputPath = path.join(root, 'bindings');
+    const { authorization, repository, ...cliInput } = value.pointer;
+    const expiredNow = (NOW_SECONDS + 21_601) * 1000;
+    await writeFile(inputPath, `${canonicalJson(cliInput)}\n`, 'utf8');
+    const outcome = await runTestCloudBindingArtifactVerifierCli(
+      ['--input', inputPath, '--output', outputPath],
+      { GITHUB_TOKEN: authorization, GITHUB_REPOSITORY: repository },
+      {
+        artifactVerifier: (input) => verifyGithubTestCloudBindingArtifact(input, {
+          fetchImpl: value.fetchImpl,
+          now: () => NOW_SECONDS * 1000,
+        }),
+        fetchImpl: value.fetchImpl,
+        now: () => expiredNow,
+      },
+    );
+    assert.equal(outcome.status, 'PASS', outcome.diagnostics?.[0]?.code);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
