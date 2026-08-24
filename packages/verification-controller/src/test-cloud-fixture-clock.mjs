@@ -248,18 +248,26 @@ function exactPolicy(value) {
 }
 
 function parseProviderTuple(providerContract) {
-  const outer = readExactRecord(providerContract, ['status', 'value', 'diagnostics']);
+
+  const outer = readExactRecord(
+    providerContract,
+    ['status', 'value', 'diagnostics'],
+    true,
+  );
+
   if (
     outer.status !== 'PASS'
     || !ARRAY_IS_ARRAY(outer.diagnostics)
     || outer.diagnostics.length !== 0
     || !OBJECT_IS_FROZEN(outer.diagnostics)
   ) invalid();
+
   const value = readExactRecord(
     outer.value,
     ['qualification', 'providerContractDigest'],
     true,
   );
+
   if (!isNominalToken(value.qualification) || !DIGEST_PATTERN.test(value.providerContractDigest)) {
     invalid();
   }
@@ -345,7 +353,14 @@ function invokeDispatcher(name, args) {
   const dispatcher = bootstrapBindings[name];
   if (typeof dispatcher !== 'function') forbidden();
   assertActive(args.runtimeQualification);
-  return REFLECT_APPLY(dispatcher, bootstrapBindings.hubReceiver, [args]);
+  return REFLECT_APPLY(
+    dispatcher,
+    bootstrapBindings.hubReceiver,
+    [name === 'readFixtureClockPolicy'
+      || name === 'authenticateSessionLineage'
+      || name === 'deliverBrowserScenarioAutosaveCompletion'
+      ? frozenNullRecord(args) : args],
+  );
 }
 
 function readFacadeMethod(name) {
@@ -403,7 +418,7 @@ async function invokeFacade(record, methodName, args) {
 }
 
 function validateOwnerProjection(value) {
-  const fields = readExactRecord(value, ['$id', 'email', 'name', 'status']);
+  const fields = readExactRecord(value, ['$id', 'email', 'name', 'status'], true);
   if (
     typeof fields.$id !== 'string'
     || typeof fields.email !== 'string'
@@ -494,15 +509,18 @@ function consumeExpectedStateResult(args) {
 function deliverMutationReconciliationQualification(args) {
   let clock;
   try {
+
     const fields = startOperation(args, arguments.length, [
       'runtimeQualification',
       'clock',
       'mutationOrdinal',
       'qualification',
     ]);
+
     clock = fields.clock;
     const record = clockRecord(clock);
     const aggregate = mapGet(RECONCILIATION_AGGREGATES, clock);
+
     if (
       aggregate === undefined
       || aggregate.state !== 'RECONCILIATIONS_ACCEPTING'
@@ -513,12 +531,14 @@ function deliverMutationReconciliationQualification(args) {
       || (aggregate.cursor < 2 && record.lifecycle !== 'AUTHENTICATED')
       || (aggregate.cursor >= 2 && record.lifecycle !== 'ADVANCING')
     ) forbidden();
-    if (invokeDispatcher('authenticateMutationReconciliation', {
+    const authenticated = invokeDispatcher('authenticateMutationReconciliation', {
       runtimeQualification: fields.runtimeQualification,
       clock,
       mutationOrdinal: fields.mutationOrdinal,
       qualification: fields.qualification,
-    }) !== true) forbidden();
+    });
+
+    if (authenticated !== true) forbidden();
     const qualifications = OBJECT_FREEZE([
       ...aggregate.qualifications,
       fields.qualification,
@@ -540,7 +560,8 @@ function deliverMutationReconciliationQualification(args) {
       ]),
     });
     return true;
-  } catch {
+  } catch (error) {
+
     if (isNominalToken(clock)) blockClock(clock);
     return false;
   }
@@ -680,17 +701,23 @@ export function prepareTestCloudFixtureClock(args) {
   let clock;
   let contextKey;
   try {
+
     const fields = startOperation(args, arguments.length, [
       'runtimeQualification',
       'context',
       'providerContract',
       'identityBindingsQualification',
     ]);
+
     if (!isNominalToken(fields.identityBindingsQualification)) invalid();
+
     const contextTuple = parseContext(fields.context);
+
     const providerTuple = parseProviderTuple(fields.providerContract);
+
     contextKey = fields.context;
     if (mapHas(CLOCK_RUN_BINDINGS, contextKey)) forbidden();
+
     const reservation = frozenNullRecord({
       version: 1,
       state: 'PREPARING',
@@ -698,6 +725,7 @@ export function prepareTestCloudFixtureClock(args) {
       clock: null,
     });
     mapSet(CLOCK_RUN_BINDINGS, contextKey, reservation);
+
     if (invokeDispatcher('authenticateProviderQualification', {
       runtimeQualification: fields.runtimeQualification,
       context: fields.context,
@@ -705,6 +733,7 @@ export function prepareTestCloudFixtureClock(args) {
       expectedEnvironmentDigest: contextTuple.environmentDigest,
       expectedProviderContractDigest: providerTuple.providerContractDigest,
     }) !== true) forbidden();
+
     const policyEnvelope = invokeDispatcher('readFixtureClockPolicy', {
       runtimeQualification: fields.runtimeQualification,
       context: fields.context,
@@ -715,7 +744,9 @@ export function prepareTestCloudFixtureClock(args) {
       ['fixtureClockPolicy'],
       true,
     );
+
     if (!exactPolicy(policyFields.fixtureClockPolicy)) invalid();
+
     const sampledNow = REFLECT_APPLY(DATE_NOW, DATE, []);
     if (!Number.isSafeInteger(sampledNow) || sampledNow < 0) invalid();
     const scheduleTuple = makeSchedule(contextTuple, providerTuple, sampledNow);
@@ -779,11 +810,13 @@ export function prepareTestCloudFixtureClock(args) {
 export async function installTestCloudFixtureClock(args) {
   let clock;
   try {
+
     const fields = startOperation(args, arguments.length, [
       'runtimeQualification', 'clock',
     ]);
     clock = fields.clock;
     const record = clockRecord(clock);
+
     if (
       record.runtimeQualification !== fields.runtimeQualification
       || record.lifecycle !== 'PREPARED'
@@ -792,16 +825,19 @@ export async function installTestCloudFixtureClock(args) {
       lifecycle: 'INSTALLING',
       operationEpoch: record.operationEpoch + 1,
     });
+
     const result = await invokeFacade(
       pending,
       'installPausedBeforeNavigation',
       frozenNullRecord({ baseUtc: pending.baseUtc }),
     );
+
     assertActive(pending.runtimeQualification);
     if (!OBJECT_IS(clockRecord(clock), pending) || result !== true) forbidden();
     replaceClockRecord(clock, pending, { lifecycle: 'INSTALLED' });
     return pass({ clock });
   } catch (error) {
+
     return sanitizeOperationFailure(error, clock);
   }
 }
@@ -809,12 +845,14 @@ export async function installTestCloudFixtureClock(args) {
 export async function authenticateTestCloudFixtureClock(args) {
   let clock;
   try {
+
     const fields = startOperation(args, arguments.length, [
       'runtimeQualification', 'clock', 'sessionIntentQualification',
     ]);
     clock = fields.clock;
     if (!isNominalToken(fields.sessionIntentQualification)) invalid();
     const record = clockRecord(clock);
+
     if (
       record.runtimeQualification !== fields.runtimeQualification
       || record.lifecycle !== 'INSTALLED'
@@ -829,6 +867,7 @@ export async function authenticateTestCloudFixtureClock(args) {
       'proveOwnerUiReady',
       frozenNullRecord(),
     );
+
     if (ready !== true || !OBJECT_IS(clockRecord(clock), pending)) forbidden();
     if (invokeDispatcher('authenticateSessionLineage', {
       runtimeQualification: pending.runtimeQualification,
@@ -836,12 +875,14 @@ export async function authenticateTestCloudFixtureClock(args) {
       identityBindingsQualification: pending.identityBindingsQualification,
       sessionIntentQualification: fields.sessionIntentQualification,
     }) !== true) forbidden();
+
     const account = await invokeFacade(
       pending,
       'readOwnerAccount',
       frozenNullRecord(),
     );
     const ownerProjection = validateOwnerProjection(account);
+
     if (!OBJECT_IS(clockRecord(clock), pending)) forbidden();
     if (invokeDispatcher('ownerAuthenticator', {
       runtimeQualification: pending.runtimeQualification,
@@ -850,6 +891,7 @@ export async function authenticateTestCloudFixtureClock(args) {
       expectedEnvironmentDigest: pending.environmentDigest,
       expectedProviderContractDigest: pending.providerContractDigest,
     }) !== true) forbidden();
+
     if (!OBJECT_IS(clockRecord(clock), pending)) forbidden();
     replaceClockRecord(clock, pending, {
       lifecycle: 'AUTHENTICATED',
@@ -857,6 +899,7 @@ export async function authenticateTestCloudFixtureClock(args) {
     });
     return pass({ clock });
   } catch (error) {
+
     return sanitizeOperationFailure(error, clock);
   }
 }
@@ -864,11 +907,13 @@ export async function authenticateTestCloudFixtureClock(args) {
 export function readTestCloudFixtureExpectedState(args) {
   let clock;
   try {
+
     const fields = startOperation(args, arguments.length, [
       'runtimeQualification', 'clock', 'mutationOrdinal',
     ]);
     clock = fields.clock;
     const record = clockRecord(clock);
+
     if (
       record.runtimeQualification !== fields.runtimeQualification
       || record.lifecycle !== 'AUTHENTICATED'
@@ -876,6 +921,7 @@ export function readTestCloudFixtureExpectedState(args) {
     ) forbidden();
     const publishedAt = expectedTimestamp(record, fields.mutationOrdinal);
     const result = pass({ mutationOrdinal: fields.mutationOrdinal, publishedAt });
+
     mapSet(AUTHENTIC_EXPECTED_RESULTS, result, frozenNullRecord({
       clock,
       runId: record.runId,
@@ -885,14 +931,17 @@ export function readTestCloudFixtureExpectedState(args) {
       consumed: false,
     }));
     replaceClockRecord(clock, record, { readCursor: record.readCursor + 1 });
+
     if (invokeDispatcher('deliverTimestampBindingResult', {
       runtimeQualification: fields.runtimeQualification,
       expectedStateResult: result,
       clock,
       mutationOrdinal: fields.mutationOrdinal,
     }) !== true) forbidden();
+
     return result;
   } catch (error) {
+
     return sanitizeOperationFailure(error, clock);
   }
 }
@@ -906,6 +955,7 @@ export async function advanceTestCloudFixtureClock(args) {
     clock = fields.clock;
     const record = clockRecord(clock);
     const aggregate = mapGet(RECONCILIATION_AGGREGATES, clock);
+
     if (
       record.runtimeQualification !== fields.runtimeQualification
       || record.lifecycle !== 'AUTHENTICATED'
@@ -936,29 +986,36 @@ export async function advanceTestCloudFixtureClock(args) {
       'runForExactly800Milliseconds',
       frozenNullRecord(),
     );
+
     const resultFields = readExactRecord(
       payload,
       ['advancedMilliseconds', 'autosaveCount'],
     );
+
     if (
       resultFields.advancedMilliseconds !== 800
       || resultFields.autosaveCount !== 1
     ) forbidden();
     assertActive(advancing.runtimeQualification);
+
     const current = clockRecord(clock);
     if (
       current.lifecycle !== 'ADVANCING'
       || current.operationEpoch !== advancing.operationEpoch
       || current.reconciliationOrdinals.length !== CLOCK_ORDINALS.length
     ) forbidden();
+
     authenticateCompleteMutationReconciliationAggregate(current, clock);
+
     const advanced = replaceClockRecord(clock, current, { lifecycle: 'ADVANCED' });
     if (invokeDispatcher('deliverBrowserScenarioAutosaveCompletion', {
       runtimeQualification: advanced.runtimeQualification,
       clock,
     }) !== true) forbidden();
+
     return pass({ clock });
   } catch (error) {
+
     return sanitizeOperationFailure(error, clock);
   }
 }

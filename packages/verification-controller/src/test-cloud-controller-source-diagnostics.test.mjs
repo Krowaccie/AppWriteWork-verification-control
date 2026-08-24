@@ -1,13 +1,7 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
-import {
-  githubSourceRequest,
-  runHostedTestCloudController,
-  selectSafeDiagnosticCode,
-  selectSafePreflightDiagnosticCode,
-} from './test-cloud-controller.mjs';
+import { runHostedTestCloudController } from './test-cloud-controller.mjs';
 
 const SHA = '1'.repeat(40);
 
@@ -18,18 +12,27 @@ function stage(status, value, code = null) {
     diagnostics: code === null ? [] : [{
       code,
       retryable: false,
-      safeMessage: 'safe diagnostic',
+      safeMessage: 'untrusted diagnostic text',
     }],
   };
 }
 
 function dependencies(sourceCode) {
+  const diagnostic = typeof sourceCode === 'string'
+    ? {
+      code: sourceCode,
+      retryable: false,
+      safeMessage: 'untrusted diagnostic text',
+    }
+    : sourceCode;
   return {
     async bootstrapRuntime() { return stage('PASS', {}); },
     async createOrdinaryLane() { return stage('PASS', {}); },
     async createPlaywrightFacade() { return stage('PASS', {}); },
     async qualifyContainment() { return stage('PASS', {}); },
-    async consumeSourceArtifact() { return stage('BLOCKED', null, sourceCode); },
+    async consumeSourceArtifact() {
+      return { status: 'BLOCKED', value: null, diagnostics: [diagnostic] };
+    },
     async reattestController() { return stage('PASS', {}); },
     async runLane() { return stage('PASS', {}); },
     async validateSetupBindings() { return stage('PASS', {}); },
@@ -49,7 +52,7 @@ async function run(sourceCode) {
   });
 }
 
-test('preserves an allowlisted source-reader diagnostic', async () => {
+test('preserves an allowlisted source-reader diagnostic with fixed safe text', async () => {
   const outcome = await run('SOURCE_INSTALLATION_TOKEN_CREATE_FAILED');
   assert.equal(outcome.status, 'BLOCKED');
   assert.equal(
@@ -62,144 +65,39 @@ test('preserves an allowlisted source-reader diagnostic', async () => {
   );
 });
 
-test('collapses an unknown source-reader diagnostic', async () => {
+test('collapses an unknown source-reader diagnostic without reflecting it', async () => {
   const outcome = await run('SECRET_VALUE_DO_NOT_EXPOSE');
   assert.equal(outcome.status, 'BLOCKED');
   assert.equal(outcome.diagnostics[0].code, 'SOURCE_ARTIFACT_INVALID');
+  assert.equal(JSON.stringify(outcome).includes('SECRET_VALUE_DO_NOT_EXPOSE'), false);
 });
 
-test('downloads a bounded source artifact through one trusted redirect', async () => {
-  const archive = Uint8Array.from({ length: 24 }, (_, index) => index);
-  const redirectUrl =
-    'https://productionresultssa2.blob.core.windows.net/actions-results/run/artifact.zip?sig=test';
-  const calls = [];
-  const outcome = await githubSourceRequest(async (url, options) => {
-    calls.push([url, options]);
-    if (calls.length === 1) {
-      return new Response(null, { status: 302, headers: { location: redirectUrl } });
-    }
-    return new Response(archive, {
-      status: 200,
-      headers: { 'content-length': String(archive.byteLength) },
+test('does not invoke or reflect stateful and throwing source diagnostic accessors', async (t) => {
+  const cases = [
+    ['stateful', (calls) => (
+      calls === 1
+        ? 'SOURCE_INSTALLATION_TOKEN_CREATE_FAILED'
+        : 'SECRET_VALUE_DO_NOT_EXPOSE'
+    )],
+    ['throwing', () => { throw new Error('SECRET_ACCESSOR_VALUE'); }],
+  ];
+  for (const [name, readCode] of cases) {
+    await t.test(name, async () => {
+      let getterCalls = 0;
+      const diagnostic = { retryable: false, safeMessage: 'untrusted' };
+      Object.defineProperty(diagnostic, 'code', {
+        enumerable: true,
+        get() {
+          getterCalls += 1;
+          return readCode(getterCalls);
+        },
+      });
+      const outcome = await run(diagnostic);
+      assert.equal(outcome.status, 'BLOCKED');
+      assert.equal(outcome.diagnostics[0].code, 'SOURCE_ARTIFACT_INVALID');
+      assert.equal(getterCalls, 0);
+      assert.equal(JSON.stringify(outcome).includes('SECRET_VALUE_DO_NOT_EXPOSE'), false);
+      assert.equal(JSON.stringify(outcome).includes('SECRET_ACCESSOR_VALUE'), false);
     });
-  }, '/repos/Krowaccie/AppWriteWork/actions/artifacts/9420071362/zip', {
-    method: 'GET',
-    headers: { Authorization: 'Bearer source-token' },
-    redirect: 'error',
-    expectedBytes: archive.byteLength,
-  });
-  assert.deepEqual(outcome.bytes, archive);
-  assert.equal(calls[0][1].redirect, 'manual');
-  assert.equal(calls[1][0], redirectUrl);
-  assert.equal(calls[1][1].redirect, 'error');
-  assert.equal(Object.hasOwn(calls[1][1].headers, 'Authorization'), false);
-});
-
-test('rejects a source artifact redirect outside trusted storage', async () => {
-  await assert.rejects(
-    githubSourceRequest(async () => new Response(null, {
-      status: 302,
-      headers: { location: 'https://example.invalid/artifact.zip?sig=test' },
-    }), '/repos/Krowaccie/AppWriteWork/actions/artifacts/9420071362/zip', {
-      method: 'GET',
-      headers: { Authorization: 'Bearer source-token' },
-      redirect: 'error',
-      expectedBytes: 24,
-    }),
-    (error) => error?.code === 'SOURCE_ARTIFACT_DOWNLOAD_FAILED',
-  );
-});
-
-test('selects only an explicitly safe stage diagnostic', () => {
-  const allowed = new Set(['TEST_CLOUD_RUNNER_VARIABLE_READBACK_INVALID']);
-  const outcome = stage(
-    'BLOCKED',
-    null,
-    'TEST_CLOUD_RUNNER_VARIABLE_READBACK_INVALID',
-  );
-  assert.equal(
-    selectSafeDiagnosticCode(
-      outcome,
-      'TEST_CLOUD_PREFLIGHT_BLOCKED',
-      allowed,
-    ),
-    'TEST_CLOUD_RUNNER_VARIABLE_READBACK_INVALID',
-  );
-  outcome.diagnostics[0].code = 'SECRET_VALUE_DO_NOT_EXPOSE';
-  assert.equal(
-    selectSafeDiagnosticCode(
-      outcome,
-      'TEST_CLOUD_PREFLIGHT_BLOCKED',
-      allowed,
-    ),
-    'TEST_CLOUD_PREFLIGHT_BLOCKED',
-  );
-});
-
-test('preserves only allowlisted identity-shape diagnostics at preflight', () => {
-  assert.equal(
-    selectSafePreflightDiagnosticCode(stage(
-      'BLOCKED',
-      null,
-      'TEST_CLOUD_SETUP_IDENTITY_QUALIFICATION_INVALID',
-    )),
-    'TEST_CLOUD_SETUP_IDENTITY_QUALIFICATION_INVALID',
-  );
-  assert.equal(
-    selectSafePreflightDiagnosticCode(stage(
-      'BLOCKED',
-      null,
-      'TEST_IDENTITY_USER_KEYS_INVALID',
-    )),
-    'TEST_IDENTITY_USER_KEYS_INVALID',
-  );
-  assert.equal(
-    selectSafePreflightDiagnosticCode(stage(
-      'BLOCKED',
-      null,
-      'SECRET_VALUE_DO_NOT_EXPOSE',
-    )),
-    'TEST_CLOUD_PREFLIGHT_BLOCKED',
-  );
-});
-
-test('ordinary lane reports the exact cleanup phase without exposing provider details', async () => {
-  const [source, fixtures] = await Promise.all([
-    readFile('scripts/verification/test-cloud-lane.mjs', 'utf8'),
-    readFile('scripts/verification/test-cloud-fixtures.mjs', 'utf8'),
-  ]);
-  for (const code of [
-    'CLEANUP_EXECUTION_FAILED',
-    'CLEANUP_ABSENCE_PROOF_FAILED',
-    'CLEANUP_LEASE_CLOSE_FAILED',
-  ]) {
-    assert.match(source, new RegExp(`'${code}'`, 'u'));
   }
-  assert.match(
-    source,
-    /cleanupFailure = result\('BLOCKED', null, 'CLEANUP_EXECUTION_FAILED'\);/u,
-  );
-  assert.match(
-    source,
-    /cleanupFailure = result\('BLOCKED', null, 'CLEANUP_ABSENCE_PROOF_FAILED'\);/u,
-  );
-  assert.match(
-    source,
-    /cleanupFailure = result\('BLOCKED', null, 'CLEANUP_LEASE_CLOSE_FAILED'\);/u,
-  );
-  for (const code of [
-    'CLEANUP_READ_FAILED',
-    'CLEANUP_OWNERSHIP_MISMATCH',
-    'CLEANUP_DELETE_FAILED',
-    'CLEANUP_DELETE_READBACK_FAILED',
-    'CLEANUP_INTENT_COMMIT_FAILED',
-    'CLEANUP_EXECUTION_EXCEPTION',
-  ]) {
-    assert.match(source, new RegExp(`'${code}'`, 'u'));
-    assert.match(fixtures, new RegExp(`'${code}'`, 'u'));
-  }
-  assert.match(
-    source,
-    /stageFailure\(cleaned, 'CLEANUP_EXECUTION_FAILED', true\)/u,
-  );
 });

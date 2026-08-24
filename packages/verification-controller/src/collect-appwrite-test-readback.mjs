@@ -15,8 +15,8 @@ import { createAppwriteTestSetupBindings } from './appwrite-test-setup-bindings.
 import {
   extractSourceArtifactZip,
   readBoundedSourceArtifactArchive,
-  readSourceArtifact,
-} from './source-artifact-reader.mjs';
+  readTestCloudSourceArtifact,
+} from './test-cloud-source-artifact-reader.mjs';
 import { projectTestCloudBrowserArtifactPolicyRows } from
   './test-cloud-browser-artifact-set.mjs';
 
@@ -110,52 +110,23 @@ const SAFE_BINDING_DIAGNOSTIC_CODES = new Set([
   'APPWRITE_TEST_SETUP_READBACK_INVALID',
 ]);
 for (const field of [
-  'COMMANDS',
-  'DEPLOYMENT_ID',
-  'ENABLED',
-  'ENTRYPOINT',
-  'EVENTS',
-  'EXECUTE',
-  'ID',
-  'LOGGING',
-  'NAME',
-  'PROVIDER_ROOT_DIRECTORY',
-  'RUNTIME',
-  'SCHEDULE',
-  'SCOPES',
-  'SHAPE',
-  'TIMEOUT',
+  'COMMANDS', 'DEPLOYMENT_ID', 'ENABLED', 'ENTRYPOINT', 'EVENTS', 'EXECUTE',
+  'ID', 'LOGGING', 'NAME', 'PROVIDER_ROOT_DIRECTORY', 'RUNTIME', 'SCHEDULE',
+  'SCOPES', 'SHAPE', 'TIMEOUT',
 ]) {
   SAFE_LIVE_READBACK_DIAGNOSTIC_CODES.add(`APPWRITE_TEST_FUNCTION_${field}_INVALID`);
 }
 for (const field of [
-  'COMMANDS',
-  'ENABLED',
-  'ENTRYPOINT',
-  'EVENTS',
-  'EXECUTE',
-  'ID',
-  'LOGGING',
-  'NAME',
-  'PROVIDER_ROOT_DIRECTORY',
-  'RUNTIME',
-  'SCHEDULE',
-  'SCOPES',
-  'TIMEOUT',
+  'COMMANDS', 'ENABLED', 'ENTRYPOINT', 'EVENTS', 'EXECUTE', 'ID', 'LOGGING',
+  'NAME', 'PROVIDER_ROOT_DIRECTORY', 'RUNTIME', 'SCHEDULE', 'SCOPES', 'TIMEOUT',
 ]) {
   SAFE_LIVE_READBACK_DIAGNOSTIC_CODES.add(`APPWRITE_TEST_RUNNER_${field}_INVALID`);
 }
 for (const routeClass of ['FUNCTION', 'IDENTITY', 'LEASE', 'RUNNER_VARIABLE', 'SITE']) {
   for (const failureClass of [
-    'BODY_INVALID',
-    'CONTENT_LENGTH_INVALID',
-    'CONTENT_TYPE_INVALID',
-    'CONTRACT_INVALID',
-    'FETCH_INVALID',
-    'JSON_INVALID',
-    'REDIRECT_INVALID',
-    'SECRET_REFLECTION_INVALID',
-    'STATUS_INVALID',
+    'BODY_INVALID', 'CONTENT_LENGTH_INVALID', 'CONTENT_TYPE_INVALID',
+    'CONTRACT_INVALID', 'FETCH_INVALID', 'JSON_INVALID', 'REDIRECT_INVALID',
+    'SECRET_REFLECTION_INVALID', 'STATUS_INVALID',
   ]) {
     SAFE_LIVE_READBACK_DIAGNOSTIC_CODES.add(
       `APPWRITE_TEST_${routeClass}_RESPONSE_${failureClass}`,
@@ -266,12 +237,50 @@ function sourceArtifactDownloadFailure() {
   return error;
 }
 
+function ownDataValue(value, key) {
+  try {
+    if (
+      value === null
+      || (typeof value !== 'object' && typeof value !== 'function')
+      || utilTypes.isProxy(value)
+    ) return undefined;
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    return descriptor !== undefined && Object.hasOwn(descriptor, 'value')
+      ? descriptor.value
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function ownDataErrorCode(error) {
+  const code = ownDataValue(error, 'code');
+  return typeof code === 'string' ? code : null;
+}
+
+function selectSafeDiagnosticCode(outcome, safeCodes, fallback) {
+  const diagnostics = ownDataValue(outcome, 'diagnostics');
+  if (
+    !Array.isArray(diagnostics)
+    || utilTypes.isProxy(diagnostics)
+    || Object.getPrototypeOf(diagnostics) !== Array.prototype
+    || diagnostics.length !== 1
+  ) return fallback;
+  const diagnostic = ownDataValue(diagnostics, '0');
+  const code = ownDataValue(diagnostic, 'code');
+  return typeof code === 'string' && safeCodes.has(code) ? code : fallback;
+}
+
 function trustedArtifactRedirect(value) {
   if (typeof value !== 'string' || value.length < 1 || value.length > 8192) return null;
   try {
     const url = new URL(value);
+    const rawAuthority = value.startsWith('https://')
+      ? value.slice('https://'.length).split(/[/?#]/u, 1)[0]
+      : null;
     if (
       url.protocol !== 'https:'
+      || rawAuthority !== url.hostname
       || url.username !== ''
       || url.password !== ''
       || url.port !== ''
@@ -310,12 +319,13 @@ export async function githubSourceRequest(fetchImpl, requestPath, options = {}) 
           redirect: 'error',
         });
       }
+      if (response?.status !== 200) throw sourceArtifactDownloadFailure();
       return Object.freeze({
         status: response.status,
         bytes: await readBoundedSourceArtifactArchive(response, options.expectedBytes),
       });
     } catch (error) {
-      if (error?.code === 'SOURCE_ARTIFACT_DOWNLOAD_FAILED') throw error;
+      if (ownDataErrorCode(error) === 'SOURCE_ARTIFACT_DOWNLOAD_FAILED') throw error;
       throw sourceArtifactDownloadFailure();
     }
   }
@@ -370,7 +380,7 @@ function materializeSiteArtifact(source) {
 }
 
 const DEFAULT_DEPENDENCIES = Object.freeze({
-  readSourceArtifactImpl: readSourceArtifact,
+  readSourceArtifactImpl: readTestCloudSourceArtifact,
   projectRowsImpl: projectTestCloudBrowserArtifactPolicyRows,
   readLiveImpl: readAppwriteTestLiveProjection,
   createPolicyImpl: createAppwriteTestBrowserPolicy,
@@ -427,18 +437,18 @@ export async function collectAppwriteTestReadback(args) {
       clock: Object.freeze({ nowEpochSeconds: () => Math.floor(Date.now() / 1000) }),
     });
     if (live?.status !== 'PASS') {
-      const code = Array.isArray(live?.diagnostics)
-        && live.diagnostics.length === 1
-        && SAFE_LIVE_READBACK_DIAGNOSTIC_CODES.has(live.diagnostics[0]?.code)
-        ? live.diagnostics[0].code
-        : 'APPWRITE_TEST_LIVE_PROJECTION_INVALID';
+      const code = selectSafeDiagnosticCode(
+        live,
+        SAFE_LIVE_READBACK_DIAGNOSTIC_CODES,
+        'APPWRITE_TEST_LIVE_PROJECTION_INVALID',
+      );
       return blocked(code);
     }
     const policy = dependencies.createPolicyImpl({
       browserArtifactProjection: projected.value,
-      environmentDigest: 'sha256:e83dac9cc615ccf37fd027683690edb2ff7332ac523d57130c1e86fa8617f302',
+      environmentDigest: 'sha256:02560e84745ed7b577b334a3412885f6a547b2a22f164f4978b255d3b35c0044',
       providerContractDigest:
-        'sha256:eaa6c314b13daa4c56a75bfc29eb8b3c66b7315ad6f114475db4d5f9aee75cd8',
+        'sha256:47a1d778ca8b8cea333b10574ffbc2db488fd711c12a1c40faf9da5235e27184',
     });
     if (policy?.status !== 'PASS') return blocked('APPWRITE_TEST_BROWSER_POLICY_INVALID');
     const bindings = dependencies.createBindingsImpl({
@@ -452,11 +462,11 @@ export async function collectAppwriteTestReadback(args) {
       controllerArtifact: input.controllerArtifact,
     });
     if (bindings?.status !== 'PASS') {
-      const code = Array.isArray(bindings?.diagnostics)
-        && bindings.diagnostics.length === 1
-        && SAFE_BINDING_DIAGNOSTIC_CODES.has(bindings.diagnostics[0]?.code)
-        ? bindings.diagnostics[0].code
-        : 'APPWRITE_TEST_BINDING_OUTPUT_INVALID';
+      const code = selectSafeDiagnosticCode(
+        bindings,
+        SAFE_BINDING_DIAGNOSTIC_CODES,
+        'APPWRITE_TEST_BINDING_OUTPUT_INVALID',
+      );
       return blocked(code);
     }
     if (
@@ -468,10 +478,9 @@ export async function collectAppwriteTestReadback(args) {
       evidence: bindings.value.evidence,
     });
   } catch (error) {
-    const code = error !== null && typeof error === 'object'
-      && typeof error.code === 'string'
-      && SAFE_SOURCE_READER_DIAGNOSTIC_CODES.has(error.code)
-      ? error.code
+    const errorCode = ownDataErrorCode(error);
+    const code = errorCode !== null && SAFE_SOURCE_READER_DIAGNOSTIC_CODES.has(errorCode)
+      ? errorCode
       : 'APPWRITE_TEST_COLLECT_INVALID';
     return blocked(code);
   }

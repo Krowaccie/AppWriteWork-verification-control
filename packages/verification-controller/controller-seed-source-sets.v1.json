@@ -15,6 +15,7 @@
         "a1-oci/host/github-artifact-client.mjs",
         "a1-oci/host/hosted-runtime.mjs",
         "a1-oci/host/network-policy-probe.mjs",
+        "a1-oci/host/typecheck-driver.mjs",
         "a1-oci/host/validated-artifact-upload.mjs",
         "a1-oci/host/workspace-kernel-driver.mjs",
         "a1-oci/launcher/repository/dev/verification/environments/test-cloud.inventory.v1.json",
@@ -57,6 +58,7 @@
         "a1-oci/supervisor-input.v1.json",
         "a1-oci/tests/a1-supervisor-client.test.mjs",
         "a1-oci/tests/hosted-runtime.test.mjs",
+        "a1-oci/tests/typecheck-driver.test.mjs",
         "a1-oci/tests/validated-artifact-upload.test.mjs",
         "a1-oci/tests/workspace-kernel-driver.test.mjs",
         "a1-oci/vendor/actions-artifact/.gitattributes",
@@ -71,7 +73,9 @@
         "a1-oci/vendor/actions-artifact/upstream/action.yml",
         "a1-oci/vendor/actions-artifact/upstream/package-lock.json",
         "a1-oci/workspace-parent/.controller-owned",
-        "a1-oci/workspace-parent/controller-upload/.controller-owned"
+        "a1-oci/workspace-parent/artifacts/.verification/artifacts/.controller-owned",
+        "a1-oci/workspace-parent/controller-upload/.controller-owned",
+        "a1-oci/workspace-parent/launcher/.controller-owned"
       ],
       "relocations": []
     },
@@ -130,17 +134,21 @@
         "packages/verification-controller/src/test-cloud-binding-artifact-verifier.mjs",
         "packages/verification-controller/src/test-cloud-browser-artifact-set.mjs",
         "packages/verification-controller/src/test-cloud-browser-route-adapter.mjs",
+        "packages/verification-controller/src/test-cloud-cleanup-driver.mjs",
         "packages/verification-controller/src/test-cloud-contained-browser-scenario-adapter.mjs",
         "packages/verification-controller/src/test-cloud-contained-scenario-launcher.mjs",
         "packages/verification-controller/src/test-cloud-controller.mjs",
         "packages/verification-controller/src/test-cloud-fixture-clock.mjs",
+        "packages/verification-controller/src/test-cloud-fixture-intent-producer.mjs",
         "packages/verification-controller/src/test-cloud-playwright-facade.mjs",
         "packages/verification-controller/src/test-cloud-recovery-controller.mjs",
         "packages/verification-controller/src/test-cloud-scenario-driver.mjs",
+        "packages/verification-controller/src/test-cloud-source-artifact-reader.mjs",
         "packages/verification-controller/src/verified-production-handoff.mjs",
         "packages/verification-controller/src/verified-release-record-handoff.mjs",
         "packages/verification-controller/src/verify-production-browser-policy.mjs",
         "packages/verification-controller/workflows/collect-appwrite-test-readback.yml",
+        "packages/verification-controller/workflows/controller-validation.yml",
         "packages/verification-controller/workflows/production-readonly.yml",
         "packages/verification-controller/workflows/publish-controller-bundle.yml",
         "packages/verification-controller/workflows/recover-appwrite-test.yml",
@@ -170,6 +178,7 @@
         "scripts/verification/test-cloud-provider-contract.mjs",
         "scripts/verification/test-cloud-provider-control-runtime.mjs",
         "scripts/verification/test-cloud-provider-control-store.mjs",
+        "scripts/verification/test-cloud-recovery.mjs",
         "scripts/verification/test-cloud-row-id.mjs",
         "scripts/verification/test-cloud-setup-attestation.mjs",
         "scripts/verification/test-cloud-setup-check.mjs",
@@ -192,12 +201,24 @@
           "destination": ".github/workflows/collect-appwrite-test-readback.yml"
         },
         {
+          "source": "packages/verification-controller/workflows/controller-validation.yml",
+          "destination": ".github/workflows/controller-validation.yml"
+        },
+        {
+          "source": "packages/verification-controller/workflows/production-readonly.yml",
+          "destination": ".github/workflows/production-readonly.yml"
+        },
+        {
           "source": "packages/verification-controller/workflows/publish-controller-bundle.yml",
           "destination": ".github/workflows/publish-controller-bundle.yml"
         },
         {
           "source": "packages/verification-controller/workflows/recover-appwrite-test.yml",
           "destination": ".github/workflows/recover-appwrite-test.yml"
+        },
+        {
+          "source": "packages/verification-controller/workflows/release-production.yml",
+          "destination": ".github/workflows/release-production.yml"
         },
         {
           "source": "packages/verification-controller/workflows/verify-test-cloud.yml",
@@ -228,7 +249,51 @@
         "scripts/verification/canonical-json.mjs",
         "scripts/verification/controller-bundle.mjs",
         "scripts/verification/controller-seed-materializer-v1.mjs",
+        "scripts/verification/controller-source-set-contract.mjs",
         "scripts/verification/controller-trust-materials.mjs"
+      ],
+      "relocations": []
+    },
+    {
+      "name": "validation-only",
+      "sourceRoot": "",
+      "files": [
+        ".gitattributes",
+        ".github/workflows/verify-main.yml",
+        ".gitignore",
+        "dev/verification/fixtures/test-cloud-provider-contract.v1.corpus.json",
+        "dev/verification/fixtures/test-cloud-setup-readback.v1.corpus.json",
+        "docs/verification/APPWRITE-TEST-SETUP.md",
+        "docs/verification/CONTROLLER-SETUP.md",
+        "packages/verification-controller/src/appwrite-test-browser-policy.test.mjs",
+        "packages/verification-controller/src/appwrite-test-live-readback.test.mjs",
+        "packages/verification-controller/src/appwrite-test-setup-bindings.test.mjs",
+        "packages/verification-controller/src/collect-appwrite-test-readback-workflow.test.mjs",
+        "packages/verification-controller/src/collect-appwrite-test-readback.test.mjs",
+        "packages/verification-controller/src/controller-bundle-publisher.test.mjs",
+        "packages/verification-controller/src/controller-seed-source-sets-schema.test.mjs",
+        "packages/verification-controller/src/prepare-controller-artifact.test.mjs",
+        "packages/verification-controller/src/production-exact-sha-git-adapter.test.mjs",
+        "packages/verification-controller/src/recover-appwrite-test-workflow.test.mjs",
+        "packages/verification-controller/src/source-artifact-reader.test.mjs",
+        "packages/verification-controller/src/test-cloud-binding-artifact-verifier.test.mjs",
+        "packages/verification-controller/src/test-cloud-binding-workflows.test.mjs",
+        "packages/verification-controller/src/test-cloud-browser-artifact-set.test.mjs",
+        "packages/verification-controller/src/test-cloud-browser-route-adapter.test.mjs",
+        "packages/verification-controller/src/test-cloud-cleanup-driver.test.mjs",
+        "packages/verification-controller/src/test-cloud-contained-browser-scenario-adapter.test.mjs",
+        "packages/verification-controller/src/test-cloud-controller-binding-directory.test.mjs",
+        "packages/verification-controller/src/test-cloud-controller-source-diagnostics.test.mjs",
+        "packages/verification-controller/src/test-cloud-controller.test.mjs",
+        "packages/verification-controller/src/test-cloud-fixture-clock.test.mjs",
+        "packages/verification-controller/src/test-cloud-fixture-intent-producer.test.mjs",
+        "packages/verification-controller/src/test-cloud-provider-bootstrap.test.mjs",
+        "packages/verification-controller/src/test-cloud-recovery-controller.test.mjs",
+        "packages/verification-controller/src/test-cloud-source-artifact-reader.test.mjs",
+        "scripts/verification/controller-trust-materials-test-helper.mjs",
+        "scripts/verification/hosted-artifact-handoff.mjs",
+        "scripts/verification/test-cloud-control-test-helper.mjs",
+        "scripts/verification/test-cloud-real-composition-fixture.mjs"
       ],
       "relocations": []
     }

@@ -5,8 +5,10 @@ import inventory from '../../dev/verification/environments/test-cloud.inventory.
   type: 'json',
 };
 import { validateArtifactManifest } from './artifact-manifest.mjs';
+import { canonicalJson } from './canonical-json.mjs';
 import { isTrustedControllerContext } from './controller-bundle.mjs';
 import { validateHostedSiteBuildIdentity } from './hosted-site-build-identity.mjs';
+import { QUALIFIED_CLEANUP_PROTOCOL } from './test-cloud-cleanup-protocol.mjs';
 
 const FULL_SHA = /^[0-9a-f]{40}$/;
 const DIGEST = /^sha256:[0-9a-f]{64}$/;
@@ -56,8 +58,6 @@ const CLIENT_KEYS = Object.freeze([
   'qualifyRunner',
   'runE2E',
   'cleanup',
-  'proveAbsence',
-  'closeLease',
 ].sort());
 const CLOCK_KEYS = Object.freeze(['now']);
 const WRITER_KEYS = Object.freeze(['write']);
@@ -113,15 +113,32 @@ const SAFE_OPERATION_DIAGNOSTIC_CODES = new Set([
   'TEST_CLOUD_PREFLIGHT_INTERNAL_INVALID',
   'SITE_IDENTITY_MISMATCH',
   'SITE_IDENTITY_READBACK_FAILED',
-  'CLEANUP_READ_FAILED',
-  'CLEANUP_OWNERSHIP_MISMATCH',
-  'CLEANUP_DELETE_FAILED',
-  'CLEANUP_DELETE_READBACK_FAILED',
-  'CLEANUP_INTENT_COMMIT_FAILED',
-  'CLEANUP_EXECUTION_EXCEPTION',
 ]);
 const E2E_PASS_KEYS = Object.freeze(['capability', 'lease', 'passed']);
 const E2E_FAILURE_STATE_KEYS = Object.freeze(['capability', 'lease']);
+const E2E_LEASE_KEYS = Object.freeze([
+  'acquiredAt', 'cleanupDebt', 'environmentDigest', 'expiresAt', 'leaseRowId',
+  'leaseTokenDigest', 'leaseVersion', 'ledgerDigest', 'ownerRunId',
+  'ownerWorkflowRunId', 'renewedAt', 'state',
+].sort());
+const E2E_STABLE_SUCCESSOR_LEASE_KEYS = Object.freeze([
+  'acquiredAt', 'environmentDigest', 'leaseRowId', 'leaseTokenDigest',
+  'ownerRunId', 'ownerWorkflowRunId',
+]);
+const CLOSED_LEASE_KEYS = Object.freeze([
+  'acquiredAt', 'cleanupDebt', 'environmentDigest', 'expiresAt', 'leaseRowId',
+  'leaseTokenDigest', 'leaseVersion', 'ledgerDigest', 'ownerRunId',
+  'ownerWorkflowRunId', 'renewedAt', 'state',
+].sort());
+const CLOSE_PROOF_KEYS = Object.freeze(['event', 'predecessorLease']);
+const CLOSE_EVENT_KEYS = Object.freeze([
+  'intentId', 'intentProjectionDigest', 'leaseVersionAfter', 'leaseVersionBefore',
+  'previousLedgerDigest', 'runId', 'schemaVersion', 'transition',
+].sort());
+const CLEANUP_STABLE_LEASE_KEYS = Object.freeze([
+  'acquiredAt', 'cleanupDebt', 'environmentDigest', 'expiresAt', 'leaseRowId',
+  'leaseTokenDigest', 'ownerRunId', 'ownerWorkflowRunId', 'renewedAt', 'state',
+]);
 const BUILD_IDENTITY_KEYS = Object.freeze([
   'schemaVersion',
   'sourceRevision',
@@ -174,15 +191,6 @@ function safeMessage(code) {
     RUNNER_QUALIFICATION_FAILED: 'The trusted runner qualification failed.',
     E2E_FAILED: 'The trusted test-cloud browser scenarios failed.',
     CLEANUP_DEBT: 'Cleanup absence could not be proved.',
-    CLEANUP_EXECUTION_FAILED: 'Cleanup execution did not reach a valid terminal state.',
-    CLEANUP_READ_FAILED: 'Cleanup could not read the current resource projection.',
-    CLEANUP_OWNERSHIP_MISMATCH: 'Cleanup found a resource outside the expected ownership boundary.',
-    CLEANUP_DELETE_FAILED: 'Cleanup could not delete an owned test resource.',
-    CLEANUP_DELETE_READBACK_FAILED: 'Cleanup could not prove deletion by readback.',
-    CLEANUP_INTENT_COMMIT_FAILED: 'Cleanup could not commit the terminal intent state.',
-    CLEANUP_EXECUTION_EXCEPTION: 'Cleanup stopped at a bounded internal execution boundary.',
-    CLEANUP_ABSENCE_PROOF_FAILED: 'Cleanup ran but resource absence could not be proved.',
-    CLEANUP_LEASE_CLOSE_FAILED: 'Cleanup absence was proved but the lease could not be closed.',
     EVIDENCE_WRITE_BLOCKED: 'The closed test-cloud evidence could not be written.',
   };
   return messages[code] ?? 'The test-cloud lane was blocked.';
@@ -643,7 +651,43 @@ function validDiagnostic(value) {
     && typeof value.retryable === 'boolean';
 }
 
-function validControllerResult(value, { allowFailureState = false } = {}) {
+function exactCleanupDebtFailureLease(candidate, prior) {
+  try {
+    return exactDataObject(candidate, E2E_LEASE_KEYS)
+      && exactDataObject(prior, E2E_LEASE_KEYS)
+      && Object.isFrozen(candidate)
+      && Object.isFrozen(prior)
+      && prior.state === 'active'
+      && prior.cleanupDebt === false
+      && candidate.state === 'cleanup-debt'
+      && candidate.cleanupDebt === true
+      && Number.isSafeInteger(prior.leaseVersion)
+      && prior.leaseVersion >= 0
+      && Number.isSafeInteger(candidate.leaseVersion)
+      && candidate.leaseVersion > prior.leaseVersion
+      && candidate.leaseVersion - prior.leaseVersion <= 256
+      && DIGEST.test(prior.environmentDigest)
+      && DIGEST.test(prior.leaseTokenDigest)
+      && DIGEST.test(prior.ledgerDigest)
+      && DIGEST.test(candidate.ledgerDigest)
+      && candidate.ledgerDigest !== prior.ledgerDigest
+      && Number.isFinite(Date.parse(prior.renewedAt))
+      && Number.isFinite(Date.parse(prior.expiresAt))
+      && Number.isFinite(Date.parse(candidate.renewedAt))
+      && Number.isFinite(Date.parse(candidate.expiresAt))
+      && Date.parse(candidate.renewedAt) >= Date.parse(prior.renewedAt)
+      && Date.parse(candidate.expiresAt) >= Date.parse(prior.expiresAt)
+      && Date.parse(candidate.expiresAt) > Date.parse(candidate.renewedAt)
+      && E2E_STABLE_SUCCESSOR_LEASE_KEYS.every((key) => candidate[key] === prior[key]);
+  } catch {
+    return false;
+  }
+}
+
+function validControllerResult(
+  value,
+  { allowFailureState = false, failureLease = null } = {},
+) {
   if (
     !exactDataObject(value, CONTROLLER_RESULT_KEYS)
     || !['PASS', 'FAIL', 'BLOCKED'].includes(value.status)
@@ -656,8 +700,11 @@ function validControllerResult(value, { allowFailureState = false } = {}) {
     && exactDataObject(value.value, E2E_FAILURE_STATE_KEYS)
     && value.value.lease !== null
     && value.value.lease !== undefined
-    && value.value.capability !== null
-    && value.value.capability !== undefined
+    && (
+      value.value.capability === null
+        ? exactCleanupDebtFailureLease(value.value.lease, failureLease)
+        : value.value.capability !== undefined
+    )
   );
   return validFailureValue
     && value.diagnostics.length > 0
@@ -692,7 +739,10 @@ async function invoke(method, request) {
 async function invokeE2E(method, request) {
   try {
     const outcome = await method(deepFreeze(request));
-    if (!validControllerResult(outcome, { allowFailureState: true })) {
+    if (!validControllerResult(outcome, {
+      allowFailureState: true,
+      failureLease: request.lease,
+    })) {
       return result('BLOCKED', null, 'TEST_CLOUD_PREFLIGHT_BLOCKED');
     }
     if (outcome.status === 'PASS') return result('PASS', outcome.value);
@@ -710,6 +760,113 @@ async function invokeE2E(method, request) {
     );
   } catch {
     return result('BLOCKED', null, 'TEST_CLOUD_PREFLIGHT_BLOCKED');
+  }
+}
+
+function exactFrozenOrdinaryDataRecord(value, keys) {
+  return exactDataObject(value, keys)
+    && Object.getPrototypeOf(value) === Object.prototype
+    && Object.isFrozen(value);
+}
+
+function exactIdleCleanupSuccessor(candidate, closeProof, cleanupEntryLease) {
+  try {
+    if (!exactFrozenOrdinaryDataRecord(closeProof, CLOSE_PROOF_KEYS)) return false;
+    const prior = closeProof.predecessorLease;
+    const suppliedEvent = closeProof.event;
+    if (
+      !exactFrozenOrdinaryDataRecord(prior, CLOSED_LEASE_KEYS)
+      || !exactFrozenOrdinaryDataRecord(candidate, CLOSED_LEASE_KEYS)
+      || !exactFrozenOrdinaryDataRecord(cleanupEntryLease, CLOSED_LEASE_KEYS)
+      || !exactFrozenOrdinaryDataRecord(suppliedEvent, CLOSE_EVENT_KEYS)
+      || closeProof === prior
+      || closeProof === suppliedEvent
+      || prior === suppliedEvent
+      || prior === candidate
+      || cleanupEntryLease === prior
+      || cleanupEntryLease.state !== 'active'
+      || cleanupEntryLease.cleanupDebt !== false
+      || !Number.isSafeInteger(cleanupEntryLease.leaseVersion)
+      || prior.leaseVersion - cleanupEntryLease.leaseVersion
+        < QUALIFIED_CLEANUP_PROTOCOL.counts.knownRunnerCalls
+      || prior.leaseVersion - cleanupEntryLease.leaseVersion
+        > QUALIFIED_CLEANUP_PROTOCOL.counts.maximumRunnerCalls
+      || CLEANUP_STABLE_LEASE_KEYS.some(
+        (key) => prior[key] !== cleanupEntryLease[key],
+      )
+      || prior.leaseRowId !== inventory.control.leaseRowId
+      || prior.state !== 'active'
+      || prior.cleanupDebt !== false
+      || !Number.isSafeInteger(prior.leaseVersion)
+      || prior.leaseVersion < 0
+      || !DIGEST.test(prior.ledgerDigest)
+      || !DIGEST.test(prior.environmentDigest)
+      || !DIGEST.test(prior.leaseTokenDigest)
+      || typeof prior.ownerRunId !== 'string'
+      || !SAFE_ID.test(prior.ownerRunId)
+      || typeof prior.ownerWorkflowRunId !== 'string'
+      || !SAFE_ID.test(prior.ownerWorkflowRunId)
+      || !Number.isFinite(Date.parse(prior.acquiredAt))
+      || !Number.isFinite(Date.parse(prior.renewedAt))
+      || !Number.isFinite(Date.parse(prior.expiresAt))
+      || Date.parse(prior.renewedAt) < Date.parse(prior.acquiredAt)
+      || Date.parse(prior.expiresAt) <= Date.parse(prior.renewedAt)
+    ) return false;
+    const event = {
+      schemaVersion: 'verification-audit-event.v1',
+      previousLedgerDigest: prior.ledgerDigest,
+      runId: prior.ownerRunId,
+      leaseVersionBefore: prior.leaseVersion,
+      leaseVersionAfter: prior.leaseVersion + 1,
+      transition: 'lease.close',
+      intentId: null,
+      intentProjectionDigest: null,
+    };
+    const expected = {
+      ...prior,
+      leaseVersion: prior.leaseVersion + 1,
+      state: 'idle',
+      ownerRunId: null,
+      ownerWorkflowRunId: null,
+      environmentDigest: null,
+      acquiredAt: null,
+      renewedAt: null,
+      expiresAt: null,
+      ledgerDigest: digestBytes(Buffer.from(canonicalJson(event))),
+      leaseTokenDigest: null,
+      cleanupDebt: false,
+    };
+    return canonicalJson(suppliedEvent) === canonicalJson(event)
+      && canonicalJson(candidate) === canonicalJson(expected);
+  } catch {
+    return false;
+  }
+}
+
+async function invokeAtomicCleanup(method, request) {
+  try {
+    const outcome = await method(deepFreeze(request));
+    if (
+      !exactDataObject(outcome, CONTROLLER_RESULT_KEYS)
+      || Object.getPrototypeOf(outcome) !== Object.prototype
+      || !Object.isFrozen(outcome)
+      || outcome.status !== 'PASS'
+      || !denseDataArray(outcome.diagnostics)
+      || !Object.isFrozen(outcome.diagnostics)
+      || outcome.diagnostics.length !== 0
+      || !exactDataObject(outcome.value, ['closeProof', 'closed', 'lease'])
+      || Object.getPrototypeOf(outcome.value) !== Object.prototype
+      || !Object.isFrozen(outcome.value)
+      || outcome.value.closed !== true
+      || !exactIdleCleanupSuccessor(
+        outcome.value.lease,
+        outcome.value.closeProof,
+        request.lease,
+      )
+    ) return result('BLOCKED', null, 'CLEANUP_DEBT');
+    return result('PASS', { closed: true, lease: outcome.value.lease });
+  } catch {
+    return result('BLOCKED', null, 'CLEANUP_DEBT');
   }
 }
 
@@ -858,46 +1015,15 @@ export async function runTestCloudLane(args) {
       }
     }
   } finally {
-    const cleaned = await invoke(args.clients.cleanup, {
+    const cleaned = await invokeAtomicCleanup(args.clients.cleanup, {
       controller: args.controller,
       selection: args.selection,
       ...leaseState,
       functionDeployments: functionDeployments ?? [],
       siteDeployment,
     });
-    const cleanedFailure = stageFailure(cleaned, 'CLEANUP_EXECUTION_FAILED', true);
-    if (cleanedFailure !== null) {
-      cleanupFailure = cleanedFailure;
-    } else if (
-      !isPlainObject(cleaned.value)
-      || cleaned.value.lease === undefined
-      || cleaned.value.capability === undefined
-      || !Array.isArray(cleaned.value.intents)
-    ) {
-      cleanupFailure = result('BLOCKED', null, 'CLEANUP_EXECUTION_FAILED');
-    } else {
-      leaseState = {
-        lease: cleaned.value.lease,
-        capability: cleaned.value.capability,
-      };
-      const absent = await invoke(args.clients.proveAbsence, {
-        controller: args.controller,
-        selection: args.selection,
-        ...leaseState,
-        intents: cleaned.value.intents,
-      });
-      if (absent.status !== 'PASS' || absent.value?.absenceProven !== true) {
-        cleanupFailure = result('BLOCKED', null, 'CLEANUP_ABSENCE_PROOF_FAILED');
-      } else {
-        const closed = await invoke(args.clients.closeLease, {
-          controller: args.controller,
-          selection: args.selection,
-          ...leaseState,
-        });
-        if (closed.status !== 'PASS') {
-          cleanupFailure = result('BLOCKED', null, 'CLEANUP_LEASE_CLOSE_FAILED');
-        }
-      }
+    if (cleaned.status !== 'PASS') {
+      cleanupFailure = result('BLOCKED', null, 'CLEANUP_DEBT');
     }
   }
 

@@ -24,9 +24,9 @@ const ORIGIN_ROW_KEYS = Object.freeze([
 const DIGEST = /^sha256:[0-9a-f]{64}$/u;
 const SAFE_PATH = /^(?!\/)(?!.*(?:^|\/)\.\.(?:\/|$))(?!.*\\)(?!.*[?#])[\x20-\x7e]+$/u;
 const ENVIRONMENT_DIGEST =
-  'sha256:e83dac9cc615ccf37fd027683690edb2ff7332ac523d57130c1e86fa8617f302';
+  'sha256:02560e84745ed7b577b334a3412885f6a547b2a22f164f4978b255d3b35c0044';
 const PROVIDER_CONTRACT_DIGEST =
-  'sha256:eaa6c314b13daa4c56a75bfc29eb8b3c66b7315ad6f114475db4d5f9aee75cd8';
+  'sha256:47a1d778ca8b8cea333b10574ffbc2db488fd711c12a1c40faf9da5235e27184';
 
 const STATIC_HEADER_DIGESTS = Object.freeze({
   preflightJsonHeaders:
@@ -64,18 +64,20 @@ const APPWRITE_ALLOW_HEADERS_DIGEST =
   'sha256:f05abc62ccc4f904e51d2631f67cdc520edbf2e880ae9f51d72f8fc1bdaf96a1';
 
 const REQUEST_HEADER_PATTERN_IDS = Object.freeze([
-  0, 1, 2, 3, 4, 0, 0, 0, 5, 5, 5, 0, 3, 3, 1, 1, 1, 1, 1, 3, 1, 1, 3, 1, 1, 1, 3, 1, 1, 1, 1,
+  0, 1, 2, 3, 2, 3, 4, 0, 0, 0, 5, 5, 5, 0, 3, 3, 1, 1, 1, 1, 1, 3, 1, 1, 3, 1, 1, 1, 3, 1, 1, 1, 1,
 ]);
 const REQUEST_OPAQUE_PATTERN_IDS = Object.freeze([
-  0, 1, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
+  0, 1, 0, 2, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
 ]);
 const RESPONSE_OPAQUE_PATTERN_IDS = Object.freeze([
-  0, 1, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2, 2,
+  0, 1, 0, 2, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2, 2,
 ]);
 
 const TAIL = Object.freeze([
   ['cors-preflight-owner-session-post', 'none', 204, '/account/sessions/email', 'OPTIONS', 'cors-preflight', 'other', null],
   ['owner-session-create', 'raw-playwright-request-body-only', 201, '/account/sessions/email', 'POST', 'owner-session-create', 'fetch', 'application/json'],
+  ['cors-preflight-appwrite-account-get', 'none', 204, '/account', 'OPTIONS', 'cors-preflight', 'other', null],
+  ['authenticated-appwrite-account-read', 'browser-cookie-jar-only', 200, '/account', 'GET', 'appwrite-read', 'fetch', 'application/json'],
   ['cors-preflight-appwrite-prefs-get', 'none', 204, '/account/prefs', 'OPTIONS', 'cors-preflight', 'other', null],
   ['authenticated-appwrite-read', 'browser-cookie-jar-only', 200, '/account/prefs', 'GET', 'appwrite-read', 'fetch', 'application/json'],
   ['cors-preflight-appwrite-multipart-post', 'none', 204, '/storage/buckets/project-files/files', 'OPTIONS', 'cors-preflight', 'other', null],
@@ -296,7 +298,7 @@ function buildNetworkRows() {
       exactCount: 1,
       expectedResponseStatus,
       finalUrl: `${inventory.environment.endpoint}${path}`,
-      lifecyclePhase: index < 4 ? 'OWNER_LOGIN' : 'APPLICATION_MUTATION',
+      lifecyclePhase: index < 6 ? 'OWNER_LOGIN' : 'APPLICATION_MUTATION',
       method,
       ordinal: index + 25,
       profileId,
@@ -334,7 +336,7 @@ export function createAppwriteTestBrowserPolicy(args) {
     const protectedArtifactPolicyDigest = digestJson(protectedRows);
     const rows = [...protectedRows, ...buildNetworkRows()];
     if (
-      rows.length !== 56
+      rows.length !== 58
       || rows.some((row, ordinal) => row.ordinal !== ordinal)
       || rows.some((row, ordinal) => {
         const url = new URL(row.finalUrl);

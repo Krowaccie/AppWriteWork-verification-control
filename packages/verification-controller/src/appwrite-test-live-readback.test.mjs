@@ -16,9 +16,9 @@ const EMAILS = Object.freeze({
   viewer: 'viewer@appwrite-test.invalid',
 });
 const ENVIRONMENT_DIGEST =
-  'sha256:e83dac9cc615ccf37fd027683690edb2ff7332ac523d57130c1e86fa8617f302';
+  'sha256:02560e84745ed7b577b334a3412885f6a547b2a22f164f4978b255d3b35c0044';
 const PROVIDER_CONTRACT_DIGEST =
-  'sha256:eaa6c314b13daa4c56a75bfc29eb8b3c66b7315ad6f114475db4d5f9aee75cd8';
+  'sha256:47a1d778ca8b8cea333b10574ffbc2db488fd711c12a1c40faf9da5235e27184';
 
 function digest(value) {
   return `sha256:${createHash('sha256').update(value, 'utf8').digest('hex')}`;
@@ -316,27 +316,31 @@ test('normalizes an empty Appwrite deployment ID to no active deployment', async
       },
     },
   });
-
   assert.equal(result.status, 'PASS', result.diagnostics?.[0]?.code);
 });
 
 test('requires the test runner to remain disconnected from a VCS provider', async () => {
   const runner = inventory.testOnlyFunctions[0];
+  const baseline = await run();
+  assert.equal(baseline.result.status, 'PASS', baseline.result.diagnostics?.[0]?.code);
   const { result } = await run({
     transport: {
       before(url) {
         if (new URL(url).pathname.endsWith(`/${runner.functionId}`)) {
           return jsonResponse(url, {
             ...functionResponse(runner),
-            providerRootDirectory: '',
+            providerRootDirectory: 'src/functions/verification-runner-py',
           });
         }
         return undefined;
       },
     },
   });
-
-  assert.equal(result.status, 'PASS', result.diagnostics?.[0]?.code);
+  assert.equal(result.status, 'BLOCKED');
+  assert.equal(
+    result.diagnostics[0].code,
+    'APPWRITE_TEST_RUNNER_PROVIDER_ROOT_DIRECTORY_INVALID',
+  );
 });
 
 test('does not read either credential before the fixed inventory is accepted', async () => {

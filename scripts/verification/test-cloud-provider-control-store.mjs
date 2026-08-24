@@ -40,6 +40,7 @@ import {
   intentProjectionRowMatches,
 } from './test-cloud-row-id.mjs';
 import inventory from '../../dev/verification/environments/test-cloud.inventory.v1.json' with { type: 'json' };
+import providerContract from '../../src/functions/verification-runner-py/provider-contract/test-cloud.provider-contract.v1.json' with { type: 'json' };
 
 const DIGEST = /^sha256:[0-9a-f]{64}$/u;
 const INTENT_ID = /^[0-9a-f]{64}$/u;
@@ -139,7 +140,11 @@ const {
   leaseTableId: LEASE_TABLE_ID,
 } = inventory.control;
 const encoder = new TextEncoder();
+const APPROVED_PROVIDER_CONTRACT_DIGEST = sha256Bytes(encoder.encode(
+  `${canonicalJson(providerContract)}\n`,
+));
 const providerControlStoreRecords = new WeakMap();
+const sessionIntentQualificationRecords = new WeakMap();
 const providerRecoveryControlStoreRecords = new WeakMap();
 const providerRecoveryReadOperationRecords = new WeakMap();
 const providerRecoveryCommitOperationRecords = new WeakMap();
@@ -175,6 +180,14 @@ function result(status, value, code = null) {
       retryable: false,
     }],
   });
+}
+
+function privatePass(value) {
+  return Object.freeze(Object.assign(Object.create(null), {
+    status: 'PASS',
+    value,
+    diagnostics: Object.freeze([]),
+  }));
 }
 
 function exactDataObject(value, expectedKeys) {
@@ -267,7 +280,12 @@ function transitionMatchesSnapshot(transition, snapshot) {
     return transition === `intent.${snapshot.state}`;
   }
   if (snapshot.state === 'planned') return transition === 'intent.planned' || transition.startsWith('intent.provider_');
-  if (snapshot.state === 'created') return transition === 'intent.created';
+  if (snapshot.state === 'created') {
+    return transition === 'intent.created'
+      || (snapshot.cleanupRunnerExecutionCursor !== null
+        && (transition === 'intent.cleanup_progressed'
+          || transition === 'intent.cleanup_execution_recorded'));
+  }
   if (snapshot.state === 'absent') return transition === 'intent.absent';
   return snapshot.state === 'cleaning' && transition.startsWith('intent.cleanup_');
 }
@@ -623,57 +641,6 @@ function recoveryFailure(error) {
     null,
     error instanceof StoreMismatch ? error.code : 'TEST_CLOUD_SETUP_INCOMPLETE',
   );
-}
-
-function recoveryProviderProofFailureCode(error) {
-  if (!(error instanceof TypeError)) return 'RECOVERY_ACCOUNT_SESSION_PROVIDER_PROOF_INVALID';
-  const groups = new Map([
-    ['Ordinary audit evidence follows recovery.', 'RECOVERY_ACCOUNT_SESSION_PROOF_RECOVERY_EVENT_INVALID'],
-    ['Recovery source lease acquisition is invalid.', 'RECOVERY_ACCOUNT_SESSION_PROOF_LEASE_ACQUIRE_INVALID'],
-    ['Recovery source run chain is invalid.', 'RECOVERY_ACCOUNT_SESSION_PROOF_LEASE_RUN_CHAIN_INVALID'],
-    ['Recovery source lease renewal is invalid.', 'RECOVERY_ACCOUNT_SESSION_PROOF_LEASE_RENEW_INVALID'],
-    ['Recovery source cleanup debt is invalid.', 'RECOVERY_ACCOUNT_SESSION_PROOF_LEASE_CLEANUP_DEBT_INVALID'],
-    ['Recovery source lease recovery is invalid.', 'RECOVERY_ACCOUNT_SESSION_PROOF_LEASE_RECOVER_INVALID'],
-    ['Recovery source lease close is invalid.', 'RECOVERY_ACCOUNT_SESSION_PROOF_LEASE_CLOSE_INVALID'],
-    ['Recovery source provider binding is invalid.', 'RECOVERY_ACCOUNT_SESSION_PROOF_PROVIDER_BINDING_INVALID'],
-    ['Recovery source intent evidence is invalid.', 'RECOVERY_ACCOUNT_SESSION_PROOF_INTENT_EVIDENCE_INVALID'],
-    ['Recovery source global cleanup evidence is invalid.', 'RECOVERY_ACCOUNT_SESSION_PROOF_GLOBAL_CLEANUP_INVALID'],
-    ['Recovery source account-session intent is invalid.', 'RECOVERY_ACCOUNT_SESSION_PROOF_SESSION_INVALID'],
-    ['Recovery source account-session intent is duplicated.', 'RECOVERY_ACCOUNT_SESSION_PROOF_SESSION_INVALID'],
-    ['Recovery event run is invalid.', 'RECOVERY_ACCOUNT_SESSION_PROOF_RECOVERY_EVENT_INVALID'],
-    ['Recovery source lease state is invalid.', 'RECOVERY_ACCOUNT_SESSION_PROOF_LEASE_SOURCE_STATE_INVALID'],
-    ['Recovery source primary-share intent is missing.', 'RECOVERY_ACCOUNT_SESSION_PROOF_PRIMARY_SHARE_MISSING'],
-    ['Recovery source primary-share intent is duplicated.', 'RECOVERY_ACCOUNT_SESSION_PROOF_PRIMARY_SHARE_DUPLICATED'],
-    ['Recovery source primary-graph intent is missing.', 'RECOVERY_ACCOUNT_SESSION_PROOF_PRIMARY_GRAPH_MISSING'],
-    ['Recovery source primary-graph intent is duplicated.', 'RECOVERY_ACCOUNT_SESSION_PROOF_PRIMARY_GRAPH_DUPLICATED'],
-    ['Recovery source primary-project intent is missing.', 'RECOVERY_ACCOUNT_SESSION_PROOF_PRIMARY_PROJECT_MISSING'],
-    ['Recovery source primary-project intent is duplicated.', 'RECOVERY_ACCOUNT_SESSION_PROOF_PRIMARY_PROJECT_DUPLICATED'],
-    ['Recovery source missing resource set is 001.', 'RECOVERY_ACCOUNT_SESSION_PROOF_MISSING_PROJECT'],
-    ['Recovery source missing resource set is 010.', 'RECOVERY_ACCOUNT_SESSION_PROOF_MISSING_GRAPH'],
-    ['Recovery source missing resource set is 011.', 'RECOVERY_ACCOUNT_SESSION_PROOF_MISSING_GRAPH_PROJECT'],
-    ['Recovery source missing resource set is 100.', 'RECOVERY_ACCOUNT_SESSION_PROOF_MISSING_SHARE'],
-    ['Recovery source missing resource set is 101.', 'RECOVERY_ACCOUNT_SESSION_PROOF_MISSING_SHARE_PROJECT'],
-    ['Recovery source missing resource set is 110.', 'RECOVERY_ACCOUNT_SESSION_PROOF_MISSING_SHARE_GRAPH'],
-    ['Recovery source missing resource set is 111.', 'RECOVERY_ACCOUNT_SESSION_PROOF_MISSING_ALL_RESOURCES'],
-    ['Recovery source intent position is invalid.', 'RECOVERY_ACCOUNT_SESSION_PROOF_INTENT_SET_POSITION_INVALID'],
-    ['Recovery source intent run is invalid.', 'RECOVERY_ACCOUNT_SESSION_PROOF_INTENT_SET_RUN_INVALID'],
-    ['Recovery source intent environment is invalid.', 'RECOVERY_ACCOUNT_SESSION_PROOF_INTENT_SET_ENVIRONMENT_INVALID'],
-    ['Recovery source account-session evidence is invalid.', 'RECOVERY_ACCOUNT_SESSION_PROOF_INTENT_SET_ACCOUNT_SESSION_INVALID'],
-    ['Recovery genesis proof is invalid.', 'RECOVERY_ACCOUNT_SESSION_PROOF_RECOVERY_EVENT_INVALID'],
-    ['Recovery terminal intent proof is invalid.', 'RECOVERY_ACCOUNT_SESSION_PROOF_RECOVERY_EVENT_INVALID'],
-    ['Recovery event snapshot is invalid.', 'RECOVERY_ACCOUNT_SESSION_PROOF_RECOVERY_EVENT_INVALID'],
-    ['Recovery successor source proof is invalid.', 'RECOVERY_ACCOUNT_SESSION_PROOF_RECOVERY_EVENT_INVALID'],
-    ['Recovery source owner run is invalid.', 'RECOVERY_ACCOUNT_SESSION_PROOF_LEASE_OWNER_RUN_INVALID'],
-    ['Recovery source owner debt is invalid.', 'RECOVERY_ACCOUNT_SESSION_PROOF_LEASE_OWNER_DEBT_INVALID'],
-    ['Recovery source owner workflow type is invalid.', 'RECOVERY_ACCOUNT_SESSION_PROOF_LEASE_OWNER_WORKFLOW_TYPE_INVALID'],
-    ['Recovery source owner workflow is invalid.', 'RECOVERY_ACCOUNT_SESSION_PROOF_LEASE_OWNER_WORKFLOW_INVALID'],
-    ['Recovery lease state is invalid.', 'RECOVERY_ACCOUNT_SESSION_PROOF_LEASE_RECOVERY_STATE_INVALID'],
-    ['Recovery projection evidence is invalid.', 'RECOVERY_ACCOUNT_SESSION_PROOF_PROJECTION_INVALID'],
-    ['Recovery projection evidence is missing.', 'RECOVERY_ACCOUNT_SESSION_PROOF_PROJECTION_MISSING'],
-    ['Recovery projection evidence is unexpected.', 'RECOVERY_ACCOUNT_SESSION_PROOF_PROJECTION_UNEXPECTED'],
-    ['Recovery projection evidence is mismatched.', 'RECOVERY_ACCOUNT_SESSION_PROOF_PROJECTION_MISMATCH'],
-  ]);
-  return groups.get(error.message) ?? 'RECOVERY_ACCOUNT_SESSION_PROVIDER_PROOF_INVALID';
 }
 
 function recoveryPositionEvidence(checkpoint) {
@@ -1283,31 +1250,13 @@ function providerRecoveryGenesisPosition(sourceIntents) {
   }
 }
 
-function recoverableSourceLeaseState(state, cleanupDebt) {
-  return (state === 'active' && cleanupDebt === false)
-    || (state === 'cleanup-debt' && cleanupDebt === true);
-}
-
-function recoverableCurrentLeaseState(state, cleanupDebt) {
-  return recoverableSourceLeaseState(state, cleanupDebt)
-    || (state === 'recovering' && cleanupDebt === true);
-}
-
 function recoverySourceIntentSet(latest) {
   const matches = QUALIFIED_CLEANUP_PROTOCOL.resourceOrder.map((resourceType) => (
     [...latest.values()].filter((intent) => intent.resourceType === resourceType)
   ));
-  for (let index = 0; index < matches.length; index += 1) {
-    if (matches[index].length > 1) {
-      throw new TypeError(
-        `Recovery source ${QUALIFIED_CLEANUP_PROTOCOL.resourceOrder[index]} intent is duplicated.`,
-      );
-    }
-  }
-  const missingMask = matches.map((items) => items.length === 0 ? '1' : '0').join('');
-  if (missingMask === '111') return [];
-  if (missingMask !== '000') {
-    throw new TypeError(`Recovery source missing resource set is ${missingMask}.`);
+  if (matches.every((items) => items.length === 0)) return [];
+  if (matches.some((items) => items.length !== 1)) {
+    throw new TypeError('Recovery source intent set is invalid.');
   }
   return matches.map(([intent]) => intent);
 }
@@ -1416,26 +1365,17 @@ function reconstructProviderRecoveryProof(snapshot, recoveryContext) {
       throw new TypeError('Recovery event run is invalid.');
     }
     if (!recoveryStarted) {
-      if (!['active', 'cleanup-debt'].includes(ordinaryLeaseState)) {
-        throw new TypeError('Recovery source lease state is invalid.');
-      }
+      if (ordinaryLeaseState !== 'cleanup-debt') throw new TypeError('Recovery source lease state is invalid.');
       recoveryStarted = true;
       sourceAuditHeadDigest = entry.event.previousLedgerDigest;
       sourceLeaseVersion = entry.event.leaseVersionBefore;
       sourceIntents = recoverySourceIntentSet(latest);
       const genesisPosition = providerRecoveryGenesisPosition(sourceIntents);
-      if (accountSessionObserved) {
-        throw new TypeError('Recovery source account-session evidence is invalid.');
-      }
-      if (genesisPosition === null) {
-        throw new TypeError('Recovery source intent position is invalid.');
-      }
-      if (sourceIntents.some((intent) => intent.runId !== activeRun)) {
-        throw new TypeError('Recovery source intent run is invalid.');
-      }
-      if (sourceIntents.some((intent) => (
-        intent.environmentDigest !== snapshot.lease.environmentDigest
-      ))) throw new TypeError('Recovery source intent environment is invalid.');
+      if (sourceIntents.length !== 3 || accountSessionObserved
+        || genesisPosition === null || sourceIntents.some((intent) => (
+        intent.runId !== activeRun
+        || intent.environmentDigest !== snapshot.lease.environmentDigest
+      ))) throw new TypeError('Recovery source intent set is invalid.');
       currentIntents = sourceIntents.map(safeCopy);
       const proof = { environmentDigest: snapshot.lease.environmentDigest, sourceAuditHeadDigest,
         sourceLeaseVersion, sourceIntents, genesisPosition };
@@ -1471,63 +1411,44 @@ function reconstructProviderRecoveryProof(snapshot, recoveryContext) {
     predecessorRecoveryEvent = entry.event;
   }
 
-  if (activeRun !== snapshot.lease.ownerRunId) {
-    throw new TypeError('Recovery source owner run is invalid.');
-  }
-  if (!recoverableCurrentLeaseState(snapshot.lease.state, snapshot.lease.cleanupDebt)) {
-    throw new TypeError('Recovery source owner debt is invalid.');
-  }
-  if (typeof snapshot.lease.ownerWorkflowRunId !== 'string') {
-    throw new TypeError('Recovery source owner workflow type is invalid.');
-  }
-  if (snapshot.lease.ownerWorkflowRunId !== recoveryContext.sourceWorkflowRunId) {
-    throw new TypeError('Recovery source owner workflow is invalid.');
+  if (activeRun !== snapshot.lease.ownerRunId
+    || snapshot.lease.cleanupDebt !== true
+    || typeof snapshot.lease.ownerWorkflowRunId !== 'string'
+    || snapshot.lease.ownerWorkflowRunId !== recoveryContext.originalWorkflowRunId) {
+    throw new TypeError('Recovery source owner is invalid.');
   }
   if (!recoveryStarted) {
-    if (ordinaryLeaseState !== snapshot.lease.state
-      || !recoverableSourceLeaseState(snapshot.lease.state, snapshot.lease.cleanupDebt)) {
+    if (ordinaryLeaseState !== 'cleanup-debt' || snapshot.lease.state !== 'cleanup-debt') {
       throw new TypeError('Recovery source lease state is invalid.');
     }
     sourceAuditHeadDigest = snapshot.lease.ledgerDigest;
     sourceLeaseVersion = snapshot.lease.leaseVersion;
     sourceIntents = recoverySourceIntentSet(latest);
     const genesisPosition = providerRecoveryGenesisPosition(sourceIntents);
-    if (accountSessionObserved) {
-      throw new TypeError('Recovery source account-session evidence is invalid.');
-    }
-    if (genesisPosition === null) {
-      throw new TypeError('Recovery source intent position is invalid.');
-    }
-    if (sourceIntents.some((intent) => (
+    if (accountSessionObserved
+      || genesisPosition === null || sourceIntents.some((intent) => (
       intent.environmentDigest !== snapshot.lease.environmentDigest
-    ))) throw new TypeError('Recovery source intent environment is invalid.');
+    ))) throw new TypeError('Recovery source intent set is invalid.');
     currentIntents = sourceIntents.map(safeCopy);
-  } else if (!['active', 'cleanup-debt'].includes(ordinaryLeaseState)
-    || snapshot.lease.state !== 'recovering'
-    || snapshot.lease.cleanupDebt !== true) {
+  } else if (snapshot.lease.state !== 'recovering') {
     throw new TypeError('Recovery lease state is invalid.');
   }
   for (const { intentId, projection } of snapshot.intentProjections) {
     const expected = latest.get(intentId);
     const recoveryIntent = currentIntents.find((intent) => intent.intentId === intentId);
-    if (projection === null) {
-      throw new TypeError('Recovery projection evidence is missing.');
-    }
-    if (recoveryIntent === undefined && expected === undefined) {
-      throw new TypeError('Recovery projection evidence is unexpected.');
-    }
     if ((recoveryIntent === undefined || !same(recoveryIntent, projection))
       && (expected === undefined || !same(expected, projection))) {
-      throw new TypeError('Recovery projection evidence is mismatched.');
+      throw new TypeError('Recovery projection evidence is invalid.');
     }
   }
   const primaryExecutionIntents=[...latest.values()].filter((intent)=>(
     intent.schemaVersion==='verification-intent-snapshot.v1'
       &&intent.resourceType==='primary-execution'
   ));
-  if(primaryExecutionIntents.length>1||(primaryExecutionIntents.length===1
-    &&!validRecoveryPrimaryExecutionSnapshot(primaryExecutionIntents[0]))){
-    throw new TypeError('Recovery primary-execution evidence is invalid.');
+  if(primaryExecutionIntents.length>1
+    ||(primaryExecutionIntents.length===1
+      &&!validRecoveryPrimaryExecutionSnapshot(primaryExecutionIntents[0]))){
+    throw new TypeError('Recovery primary execution evidence is invalid.');
   }
   const primaryExecutionIntent=primaryExecutionIntents.length===1
     ?primaryExecutionIntents[0]:null;
@@ -1666,6 +1587,7 @@ export function createProviderRecoveryControlStore(args = {}) {
     const lease = await getRecoveryLease();
     const reversedTrail = [];
     const seenDigests = new Set();
+    const intentIds = new Set();
     let authoritativeRunId=lease.ownerRunId;
     let auditDigest = lease.ledgerDigest;
     let expectedLeaseVersionAfter = lease.leaseVersion;
@@ -1689,24 +1611,13 @@ export function createProviderRecoveryControlStore(args = {}) {
         if (snapshot === null || snapshot.intentId !== event.intentId) {
           mismatch('AUDIT_CHAIN_MISMATCH');
         }
+        if (event.runId === authoritativeRunId) intentIds.add(event.intentId);
       }
       reversedTrail.push(deepFreeze({ digest: auditDigest, event, snapshot }));
       expectedLeaseVersionAfter = event.leaseVersionBefore;
       auditDigest = event.previousLedgerDigest;
     }
     if (expectedLeaseVersionAfter !== 0) mismatch('AUDIT_CHAIN_MISMATCH');
-
-    const auditTrail = reversedTrail.reverse();
-    const authoritativeLeaseStart = auditTrail.findLastIndex(({ event }) => (
-      event.runId === authoritativeRunId && event.transition === 'lease.acquire'
-    ));
-    if (authoritativeLeaseStart === -1) mismatch('AUDIT_CHAIN_MISMATCH');
-    const intentIds = new Set();
-    for (const { event } of auditTrail.slice(authoritativeLeaseStart)) {
-      if (event.runId === authoritativeRunId && event.intentId !== null) {
-        intentIds.add(event.intentId);
-      }
-    }
 
     const intentProjections = [];
     for (const intentId of [...intentIds].sort()) {
@@ -1717,7 +1628,7 @@ export function createProviderRecoveryControlStore(args = {}) {
     }
     return deepFreeze({
       lease,
-      auditTrail,
+      auditTrail: reversedTrail.reverse(),
       intentProjections,
     });
   }
@@ -1904,7 +1815,7 @@ export function createProviderRecoveryControlStore(args = {}) {
         &&proof.accountSessionIntent?.state==='absent'
         &&proof.primaryExecutionIntent?.state==='created';
       const emptyResourceClose=proof.predecessorRecoveryEvent===null
-        &&recoverableSourceLeaseState(sourceSnapshot.lease.state,sourceSnapshot.lease.cleanupDebt)
+        &&sourceSnapshot.lease.state==='cleanup-debt'&&sourceSnapshot.lease.cleanupDebt===true
         &&proof.sourceIntents.length===0&&proof.currentIntents.length===0
         &&(proof.accountSessionIntent===null||proof.accountSessionIntent.state==='absent')
         &&(proof.primaryExecutionIntent===null
@@ -1932,26 +1843,21 @@ export function createProviderRecoveryControlStore(args = {}) {
       return result('BLOCKED', null, 'TEST_CLOUD_SETUP_INCOMPLETE');
     }
     operation.consumed = true;
-    let snapshot;
     try {
-      snapshot = await readRecoverySnapshotValue();
-    } catch {
-      return result('BLOCKED', null, 'RECOVERY_ACCOUNT_SESSION_PROVIDER_READ_INVALID');
-    }
-    try {
+      const snapshot = await readRecoverySnapshotValue();
       const proof = reconstructProviderRecoveryProof(snapshot, args.context);
       const sourceIntent = proof.accountSessionIntent;
       if(sourceIntent===null){
         if(proof.sourceIntents.length!==0||proof.predecessorRecoveryEvent!==null){
-          return result('BLOCKED',null,'RECOVERY_ACCOUNT_SESSION_PROVIDER_INTENT_MISSING');
+          return result('BLOCKED',null,'AUDIT_CHAIN_MISMATCH');
         }
         return result('PASS',{snapshot,nextRequest:mintReadOperation()});
       }
       if(sourceIntent?.state==='absent'){
         return result('PASS',{snapshot,nextRequest:mintReadOperation()});
       }
-      if (proof.predecessorRecoveryEvent !== null || sourceIntent.state !== 'created') {
-        return result('BLOCKED', null, 'RECOVERY_ACCOUNT_SESSION_PROVIDER_INTENT_STATE_INVALID');
+      if (proof.predecessorRecoveryEvent !== null || sourceIntent?.state !== 'created') {
+        return result('BLOCKED', null, 'AUDIT_CHAIN_MISMATCH');
       }
       return result('PASS', {
         snapshot,
@@ -1959,7 +1865,7 @@ export function createProviderRecoveryControlStore(args = {}) {
         createAbsenceOperation:makeAccountSessionAbsenceOperationFactory(snapshot, sourceIntent),
       });
     } catch (error) {
-      return result('BLOCKED', null, recoveryProviderProofFailureCode(error));
+      return recoveryFailure(error);
     }
   }
 
@@ -2000,7 +1906,7 @@ export function createProviderRecoveryControlStore(args = {}) {
         &&proof.accountSessionIntent?.state==='absent'
         &&proof.primaryExecutionIntent?.state==='created';
       const emptyResourceClose=proof.predecessorRecoveryEvent===null
-        &&recoverableSourceLeaseState(snapshot.lease.state,snapshot.lease.cleanupDebt)
+        &&snapshot.lease.state==='cleanup-debt'&&snapshot.lease.cleanupDebt===true
         &&proof.sourceIntents.length===0&&proof.currentIntents.length===0
         &&(proof.accountSessionIntent===null||proof.accountSessionIntent.state==='absent')
         &&(proof.primaryExecutionIntent===null
@@ -2196,7 +2102,12 @@ let providerTupleRecord = Object.freeze({
   providerIdDiscoveredCount: 0,
 });
 const providerMutationIssueRecords = new WeakMap();
+const boundProviderIds = new Map();
+const boundCompositeProviderIds = new Set();
+const providerObservedMemberStates = new Map();
+const shareProviderIds = new Set();
 const mutationReconciliationRecords = new WeakMap();
+const mutationReconciliationQualifications = new Map();
 const initialProviderPrefixRecords = new WeakMap();
 const sharePreparationRecords = new WeakMap();
 const shareCommitReceiptRecords = new WeakMap();
@@ -2221,9 +2132,55 @@ const EXPECTED_STATE_MAPPING_KEYS = Object.freeze([
 const PROVIDER_BOUND_ORDINALS = Object.freeze(new Set([
   0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 14, 15, 16,
 ]));
-const VALUE_BATCH_INCREMENTS = Object.freeze(new Map([
-  [0, 2], [1, 1], [2, 1], [7, 1], [8, 1], [10, 1], [11, 1], [14, 1], [15, 1],
-]));
+const PROVIDER_VALUE_BATCHES = Object.freeze([
+  Object.freeze({ mutationOrdinal: 0, resourceType: 'primary-project', rows: Object.freeze([
+    ['rootManifestInitial', 'sourceBytesDigest', 'source-bytes-digest'],
+    ['rootArtifact', 'rootArtifactId', 'artifact-id'],
+    ['rootVersionInitial', 'rootContentHash', 'content-hash'],
+    ['projectFacade', 'projectId', 'project-id'],
+  ]) }),
+  Object.freeze({ mutationOrdinal: 0, resourceType: 'primary-graph', rows: Object.freeze([
+    ['entrypointArtifact', 'entrypointArtifactId', 'artifact-id'],
+    ['entrypointVersionInitial', 'initialEntrypointVersionId', 'artifact-version-id'],
+    ['entrypointVersionInitial', 'workflowContentHash', 'content-hash'],
+  ]) }),
+  Object.freeze({ mutationOrdinal: 1, resourceType: 'primary-graph', rows: Object.freeze([
+    ['entrypointSourceInitial', 'sourceBytesDigest', 'source-bytes-digest'],
+  ]) }),
+  Object.freeze({ mutationOrdinal: 2, resourceType: 'primary-project', rows: Object.freeze([
+    ['rootVersionInitial', 'initialRootVersionId', 'artifact-version-id'],
+  ]) }),
+  Object.freeze({ mutationOrdinal: 7, resourceType: 'primary-graph', rows: Object.freeze([
+    ['entrypointSourceSaved', 'sourceBytesDigest', 'source-bytes-digest'],
+    ['entrypointVersionSaved', 'workflowContentHash', 'content-hash'],
+  ]) }),
+  Object.freeze({ mutationOrdinal: 8, resourceType: 'primary-graph', rows: Object.freeze([
+    ['entrypointVersionSaved', 'savedEntrypointVersionId', 'artifact-version-id'],
+  ]) }),
+  Object.freeze({ mutationOrdinal: 10, resourceType: 'primary-project', rows: Object.freeze([
+    ['rootManifestSaved', 'sourceBytesDigest', 'source-bytes-digest'],
+    ['rootVersionSaved', 'rootContentHash', 'content-hash'],
+  ]) }),
+  Object.freeze({ mutationOrdinal: 11, resourceType: 'primary-project', rows: Object.freeze([
+    ['rootVersionSaved', 'savedRootVersionId', 'artifact-version-id'],
+  ]) }),
+  Object.freeze({ mutationOrdinal: 14, resourceType: 'primary-graph', rows: Object.freeze([
+    ['visualModelSourceSaved', 'sourceBytesDigest', 'source-bytes-digest'],
+    ['visualModelArtifact', 'visualArtifactId', 'artifact-id'],
+    ['visualModelVersionSaved', 'visualContentHash', 'content-hash'],
+  ]) }),
+  Object.freeze({ mutationOrdinal: 15, resourceType: 'primary-graph', rows: Object.freeze([
+    ['visualModelVersionSaved', 'visualVersionId', 'artifact-version-id'],
+  ]) }),
+]);
+const SHARE_VALUE_ROWS = Object.freeze([
+  ['canonicalTargetEmail', 'canonical-email'],
+  ['sharePermissionsDigest', 'permissions-digest'],
+  ['sharedByUserId', 'fixture-user-id'],
+  ['targetIdentityDigest', 'identity-digest'],
+  ['targetUserId', 'fixture-user-id'],
+  ['tupleDigest', 'share-tuple-digest'],
+]);
 const CLOCK_RECONCILIATION_ORDINALS = Object.freeze([4, 5, 8, 11, 16]);
 const PROJECT_MUTATION_ORDINALS = Object.freeze(new Set([0, 2, 4, 6, 10, 11, 12, 13]));
 const PROVIDER_V2_INTENT_KEYS = Object.freeze([
@@ -2245,6 +2202,12 @@ const AGGREGATE_BINDING_KEYS = Object.freeze([
 const PROVIDER_MEMBER_KEYS = Object.freeze([
   'bindingState', 'logicalValueBindings', 'memberBinding', 'memberBindingDigest',
   'memberState', 'operationStates', 'providerId', 'providerIdentity', 'schemaVersion',
+]);
+const SESSION_LINEAGE_PUBLICATION_KEYS = Object.freeze([
+  'context', 'intentSetDigest', 'leaseAcquiredAt', 'leaseTokenDigest',
+  'leaseVersion', 'ledgerDigest', 'providerContractDigest',
+  'providerContractQualification', 'providerControlStore',
+  'runtimeQualification', 'sessionIntentQualification', 'state',
 ]);
 const OPERATION_STATE_KEYS = Object.freeze([
   'baselineDigest', 'discoveryProofDigest', 'expectedResultState',
@@ -2366,6 +2329,7 @@ function installedFor(runtimeQualification, context = installedProviderControlRe
 
 function authenticateInitialProviderPrefix(args) {
   try {
+
     if (
       this !== PROVIDER_CONTROL_RECEIVER
       || !exactDataObject(args, [
@@ -2376,10 +2340,31 @@ function authenticateInitialProviderPrefix(args) {
       || args.providerContractQualification
         !== installedProviderControlRecord.providerContractQualification
       || !nominalToken(args.identityBindingsQualification)
-      || !nominalToken(args.sessionIntentQualification)
+      || !currentSessionLineage(args)
       || !nominalToken(args.clock)
     ) return false;
-    const record = initialProviderPrefixRecords.get(args.clock);
+    let record = initialProviderPrefixRecords.get(args.clock);
+    if (record === undefined) {
+      const current = providerTupleRecord;
+      if (
+        current.state !== 'READY'
+        || current.nextMutationOrdinal !== 8
+        || current.providerBoundCount !== 8
+        || current.providerValuesBoundBatchCount !== 5
+        || current.providerOperationIssuedCount !== 8
+        || current.providerOperationReconciledCount !== 8
+      ) return false;
+      record = Object.freeze({
+        state: 'ACTIVE',
+        runtimeQualification: args.runtimeQualification,
+        context: args.context,
+        providerContractQualification: args.providerContractQualification,
+        identityBindingsQualification: args.identityBindingsQualification,
+        sessionIntentQualification: args.sessionIntentQualification,
+      });
+      initialProviderPrefixRecords.set(args.clock, record);
+      if (initialProviderPrefixRecords.get(args.clock) !== record) return false;
+    }
     return record !== undefined
       && record.state === 'ACTIVE'
       && record.runtimeQualification === args.runtimeQualification
@@ -2394,6 +2379,7 @@ function authenticateInitialProviderPrefix(args) {
 
 function authenticateMutationReconciliation(args) {
   try {
+
     if (
       this !== PROVIDER_CONTROL_RECEIVER
       || !exactDataObject(args, [
@@ -2404,7 +2390,18 @@ function authenticateMutationReconciliation(args) {
       || !nominalToken(args.qualification)
       || !CLOCK_RECONCILIATION_ORDINALS.includes(args.mutationOrdinal)
     ) return false;
-    const record = mutationReconciliationRecords.get(args.qualification);
+    let record = mutationReconciliationRecords.get(args.qualification);
+
+    if (
+      record !== undefined
+      && record.clock === null
+      && record.state === 'ACTIVE'
+      && record.runtimeQualification === args.runtimeQualification
+      && record.mutationOrdinal === args.mutationOrdinal
+    ) {
+      record = Object.freeze({ ...record, clock: args.clock });
+      mutationReconciliationRecords.set(args.qualification, record);
+    }
     return record !== undefined
       && record.state === 'ACTIVE'
       && record.runtimeQualification === args.runtimeQualification
@@ -2417,6 +2414,14 @@ function authenticateMutationReconciliation(args) {
 
 function terminallyBlockProviderControlInstall() {
   const observed = installedProviderControlRecord;
+  if (
+    observed.state === 'INSTALLED'
+    && !publishSessionLineageWitness(
+      observed.lineage,
+      observed.sessionIntentQualification,
+      'REVOKED',
+    )
+  ) return result('BLOCKED', null, 'TEST_CLOUD_SETUP_INCOMPLETE');
   installedProviderControlRecord = Object.freeze({
     state: 'BLOCKED',
     version: observed.version + 1,
@@ -2437,18 +2442,416 @@ function replaceInstalledProviderControlRecord(expected, successorFields) {
 
 function currentRuntimeQualification(runtimeQualification) {
   if (readTestCloudRuntimeLifecycle() !== 'ACTIVE') return false;
-  const authenticationArgs = Object.freeze(Object.assign(Object.create(null), {
+  const authenticationArgs = Object.freeze({
     runtimeQualification,
-  }));
+  });
   return authenticateTestCloudRuntimeActive(authenticationArgs) === true;
 }
 
-function installProviderControlStore(args) {
+function deterministicResourceId(context, resourceType) {
+  return `vr-${sha256Bytes(encoder.encode(
+    `${context.environmentDigest}|${context.runId}|${resourceType}`,
+  )).slice(7, 39)}`;
+}
+
+function deterministicIntentId(context, resourceType) {
+  const resourceId = deterministicResourceId(context, resourceType);
+  return sha256Bytes(encoder.encode(
+    `${context.environmentDigest}|${context.runId}|${resourceType}|${resourceId}`,
+  )).slice(7);
+}
+
+function deterministicFixtureIdentity(context, resourceType) {
+  const resourceId = deterministicResourceId(context, resourceType);
+  const operationKey = sha256Bytes(encoder.encode(
+    `${context.runId}|sharing-permissions|${canonicalJson({})}`,
+  ));
+  const ownerMarker = `verification-owner.v1:${contentDigest({
+    schemaVersion: 'verification-owner-marker.v1',
+    environmentDigest: context.environmentDigest,
+    operationKey,
+    resourceId,
+    resourceType,
+    runId: context.runId,
+  })}`;
+  return { intentId: deterministicIntentId(context, resourceType), operationKey, ownerMarker, resourceId };
+}
+
+function plannedFixtureBinding(context, identity) {
+  return {
+    schemaVersion: 'verification-provider-aggregate-binding.v1',
+    environmentDigest: context.environmentDigest,
+    providerContractDigest: APPROVED_PROVIDER_CONTRACT_DIGEST,
+    runId: context.runId,
+    resourceType: identity.resourceType,
+    resourceId: identity.resourceId,
+    operationScenario: 'sharing-permissions',
+    parameters: {},
+    operationKey: identity.operationKey,
+    ownerMarker: identity.ownerMarker,
+    intentId: identity.intentId,
+  };
+}
+
+function plannedFixtureMember(template, identity, aggregateBindingDigest) {
+  const memberBinding = {
+    schemaVersion: 'verification-provider-member-binding.v1',
+    aggregateBindingDigest,
+    ownerResourceType: identity.resourceType,
+    ownerResourceId: identity.resourceId,
+    slot: template.slot,
+    ownerOrdinal: template.ownerOrdinal,
+    memberTemplateDigest: template.memberTemplateDigest,
+  };
+  const memberState = identity.resourceType === 'primary-share'
+    ? { schemaVersion: 'tablesdb-row-state.v1', dataDigest: null, permissionsDigest: null, presence: 'absent' }
+    : template.providerKind === 'storage-file'
+      ? { schemaVersion: 'storage-file-metadata-state.v1', metadataDigest: null, permissionsDigest: null, presence: 'unknown' }
+      : { schemaVersion: 'tablesdb-row-state.v1', dataDigest: null, permissionsDigest: null, presence: 'unknown' };
+  return {
+    schemaVersion: 'verification-provider-member.v1',
+    memberBinding,
+    memberBindingDigest: contentDigest(memberBinding),
+    providerId: null,
+    providerIdentity: null,
+    bindingState: identity.resourceType === 'primary-share' ? 'unissued' : 'unbound',
+    logicalValueBindings: template.logicalValueBindingContracts.map((contract) => ({
+      name: contract.name,
+      valueKind: contract.valueKind,
+      sourceMutationOrdinal: contract.sourceMutationOrdinal,
+      state: 'unbound',
+      value: null,
+      valueDigest: null,
+    })),
+    operationStates: template.operations.map((operation) => ({
+      mutationOrdinal: operation.mutationOrdinal,
+      state: 'pending',
+      requestInstanceDigest: null,
+      expectedResultState: null,
+      resultStateDigest: null,
+      baselineDigest: null,
+      discoveryProofDigest: null,
+    })),
+    memberState,
+  };
+}
+
+function plannedFixtureReference(context, reference) {
+  const owner = {
+    ...deterministicFixtureIdentity(context, reference.ownerResourceType),
+    resourceType: reference.ownerResourceType,
+  };
+  const ownerBinding = plannedFixtureBinding(context, owner);
+  const ownerResource = providerContract.aggregateContracts.resources.find((resource) => (
+    resource.resourceType === reference.ownerResourceType
+  ));
+  const template = ownerResource.memberTemplates[reference.ownerOrdinal];
+  const memberBinding = {
+    schemaVersion: 'verification-provider-member-binding.v1',
+    aggregateBindingDigest: contentDigest(ownerBinding),
+    ownerResourceType: reference.ownerResourceType,
+    ownerResourceId: owner.resourceId,
+    slot: reference.ownerSlot,
+    ownerOrdinal: reference.ownerOrdinal,
+    memberTemplateDigest: template.memberTemplateDigest,
+  };
+  return {
+    schemaVersion: 'verification-provider-member-reference.v1',
+    memberBinding,
+    memberBindingDigest: contentDigest(memberBinding),
+  };
+}
+
+function plannedFixtureAggregate(context, resourceType) {
+  const identity = {
+    ...deterministicFixtureIdentity(context, resourceType),
+    resourceType,
+  };
+  const resource = providerContract.aggregateContracts.resources.find((candidate) => (
+    candidate.resourceType === resourceType
+  ));
+  const aggregateBinding = plannedFixtureBinding(context, identity);
+  const aggregateBindingDigest = contentDigest(aggregateBinding);
+  return {
+    schemaVersion: 'verification-provider-aggregate.v1',
+    phase: 'owner-baseline',
+    aggregateBinding,
+    aggregateBindingDigest,
+    ownedMembers: resource.memberTemplates.map((template) => (
+      plannedFixtureMember(template, identity, aggregateBindingDigest)
+    )),
+    referencedMembers: resource.referencedSlots.map((reference) => (
+      plannedFixtureReference(context, reference)
+    )),
+  };
+}
+
+function exactPlannedFixtureIntent(intent, context, resourceType) {
   try {
+    const identity = deterministicFixtureIdentity(context, resourceType);
+    const aggregate = JSON.parse(intent.providerAggregateJson);
+    const resource = providerContract.aggregateContracts.resources.find((candidate) => (
+      candidate.resourceType === resourceType
+    ));
+    const expectedAggregate = plannedFixtureAggregate(context, resourceType);
+    return exactDataObject(intent, CLEANUP_V2_INTENT_KEYS)
+      && intent.schemaVersion === 'verification-intent-snapshot.v2'
+      && intent.intentId === identity.intentId
+      && intent.runId === context.runId
+      && intent.environmentDigest === context.environmentDigest
+      && intent.resourceType === resourceType
+      && intent.resourceId === identity.resourceId
+      && intent.ownerMarker === identity.ownerMarker
+      && intent.dependencyOrder === resource.dependencyOrder
+      && intent.lifecycleClass === 'fixture'
+      && intent.state === 'planned'
+      && intent.intentVersion === 1
+      && intent.observationDigest === null
+      && intent.retentionExpiresAt === null
+      && RECOVERY_V2_CLEANUP_KEYS.every((key) => intent[key] === null)
+      && typeof intent.providerAggregateJson === 'string'
+      && contentDigest(aggregate) === intent.providerAggregateDigest
+      && exactDataObject(aggregate, [
+        'aggregateBinding', 'aggregateBindingDigest', 'ownedMembers', 'phase',
+        'referencedMembers', 'schemaVersion',
+      ])
+      && aggregate.schemaVersion === 'verification-provider-aggregate.v1'
+      && aggregate.phase === 'owner-baseline'
+      && same(aggregate, expectedAggregate);
+  } catch {
+    return false;
+  }
+}
+
+function reconstructProviderPrefix(intents) {
+  const aggregates = new Map();
+  const operations = new Map();
+  for (const intent of intents) {
+    if (
+      !exactDataObject(intent, CLEANUP_V2_INTENT_KEYS)
+      || !['planned', 'created'].includes(intent.state)
+    ) return null;
+    let aggregate;
+    try {
+      aggregate = JSON.parse(intent.providerAggregateJson);
+    } catch {
+      return null;
+    }
+    if (
+      canonicalJson(aggregate) !== intent.providerAggregateJson
+      || contentDigest(aggregate) !== intent.providerAggregateDigest
+      || aggregate.aggregateBinding.intentId !== intent.intentId
+      || aggregate.aggregateBinding.resourceType !== intent.resourceType
+    ) return null;
+    aggregates.set(intent.resourceType, aggregate);
+    for (const member of aggregate.ownedMembers) {
+      for (const operation of member.operationStates) {
+        if (operations.has(operation.mutationOrdinal)) return null;
+        operations.set(operation.mutationOrdinal, { member, operation });
+      }
+    }
+  }
+  if (operations.size !== 19) return null;
+  let nextMutationOrdinal = 0;
+  while (
+    nextMutationOrdinal < 19
+    && operations.get(nextMutationOrdinal)?.operation.state === 'reconciled'
+  ) nextMutationOrdinal += 1;
+  for (let ordinal = 0; ordinal < 19; ordinal += 1) {
+    const state = operations.get(ordinal)?.operation.state;
+    if (state !== (ordinal < nextMutationOrdinal ? 'reconciled' : 'pending')) return null;
+  }
+  let providerBoundCount = 0;
+  let providerValuesBoundBatchCount = 0;
+  for (const resource of providerContract.aggregateContracts.resources) {
+    const aggregate = aggregates.get(resource.resourceType);
+    if (aggregate === undefined) return null;
+    for (const template of resource.memberTemplates) {
+      const matches = aggregate.ownedMembers.filter((member) => (
+        member.memberBinding.slot === template.slot
+        && member.memberBinding.ownerOrdinal === template.ownerOrdinal
+      ));
+      if (matches.length !== 1) return null;
+      const member = matches[0];
+      if (template.firstBindOrdinal !== null) {
+        const shouldBeBound = template.firstBindOrdinal < nextMutationOrdinal;
+        if ((member.bindingState === 'bound') !== shouldBeBound) return null;
+        if (shouldBeBound) {
+          const compositeIdentity = `${template.bindingName}|${member.providerId}`;
+          if (boundCompositeProviderIds.has(compositeIdentity)) return null;
+          providerBoundCount += 1;
+          boundProviderIds.set(template.firstBindOrdinal, member.providerId);
+          boundCompositeProviderIds.add(compositeIdentity);
+        }
+      } else if (template.issueOrdinal !== null) {
+        const expectedState = template.issueOrdinal < nextMutationOrdinal
+          ? 'bound'
+          : 'unissued';
+        if (member.bindingState !== expectedState) return null;
+        if (expectedState === 'bound') shareProviderIds.add(member.providerId);
+      }
+    }
+  }
+  for (const batch of PROVIDER_VALUE_BATCHES) {
+    const aggregate = aggregates.get(batch.resourceType);
+    const allBound = batch.rows.every(([ownerSlot, name]) => (
+      aggregate.ownedMembers.find((member) => member.memberBinding.slot === ownerSlot)
+        ?.logicalValueBindings.find((binding) => binding.name === name)?.state === 'bound'
+    ));
+    if (allBound !== (batch.mutationOrdinal < nextMutationOrdinal)) return null;
+    if (allBound) providerValuesBoundBatchCount += 1;
+  }
+  for (const [ownerSlot, mutationOrdinal] of [
+    ['editorShare', 17], ['viewerShare', 18],
+  ]) {
+    const member = aggregates.get('primary-share').ownedMembers.find((candidate) => (
+      candidate.memberBinding.slot === ownerSlot
+    ));
+    const allBound = member.logicalValueBindings.every((binding) => binding.state === 'bound');
+    if (allBound !== (mutationOrdinal < nextMutationOrdinal)) return null;
+    if (allBound) providerValuesBoundBatchCount += 1;
+  }
+  if (
+    providerBoundCount !== [...PROVIDER_BOUND_ORDINALS]
+      .filter((ordinal) => ordinal < nextMutationOrdinal).length
+    || providerValuesBoundBatchCount !== (
+      PROVIDER_VALUE_BATCHES.filter((batch) => batch.mutationOrdinal < nextMutationOrdinal).length
+      + [17, 18].filter((ordinal) => ordinal < nextMutationOrdinal).length
+    )
+  ) return null;
+  const projectAggregate = aggregates.get('primary-project');
+  const graphAggregate = aggregates.get('primary-graph');
+  const shareAggregate = aggregates.get('primary-share');
+  if (
+    (nextMutationOrdinal >= 17) !== (
+      projectAggregate.phase === 'normal-owner' && graphAggregate.phase === 'normal-owner'
+    )
+    || (nextMutationOrdinal >= 17) !== (
+      intents.filter((intent) => ['primary-project', 'primary-graph'].includes(intent.resourceType))
+        .every((intent) => intent.state === 'created')
+    )
+    || (nextMutationOrdinal === 19) !== (
+      shareAggregate.phase === 'shared'
+      && intents.find((intent) => intent.resourceType === 'primary-share').state === 'created'
+    )
+  ) return null;
+  const projectId = boundProviderIds.get(6);
+  return Object.freeze({
+    state: nextMutationOrdinal === 19
+      ? 'PROVIDER_COMPLETE'
+      : nextMutationOrdinal >= 17 ? 'GENERIC_COMPLETE' : 'READY',
+    version: providerTupleRecord.version + 1,
+    nextMutationOrdinal,
+    providerBoundCount,
+    providerValuesBoundBatchCount,
+    providerOperationIssuedCount: Math.min(nextMutationOrdinal, 17),
+    providerOperationReconciledCount: Math.min(nextMutationOrdinal, 17),
+    providerCreateIssuedCount: Math.max(0, nextMutationOrdinal - 17),
+    providerIdDiscoveredCount: Math.max(0, nextMutationOrdinal - 17),
+    ...(typeof projectId === 'string'
+      ? { projectIdentityDigest: sha256Bytes(encoder.encode(projectId)) }
+      : {}),
+  });
+}
+
+async function readExactProviderFixtureIntents(store, context) {
+  const resources = ['primary-project', 'primary-graph', 'primary-share'];
+  const intents = [];
+  for (const resourceType of resources) {
+    const intent = await store.getIntentProjection(deterministicIntentId(context, resourceType));
+    if (
+      !exactDataObject(intent, CLEANUP_V2_INTENT_KEYS)
+      || intent.intentId !== deterministicIntentId(context, resourceType)
+      || intent.resourceId !== deterministicResourceId(context, resourceType)
+      || intent.resourceType !== resourceType
+      || intent.runId !== context.runId
+      || intent.environmentDigest !== context.environmentDigest
+    ) return null;
+    intents.push(intent);
+  }
+  const prefix = reconstructProviderPrefix(intents);
+  return prefix === null ? null : { intents, prefix };
+}
+
+function orderedLineageIntentSet(intents) {
+  return Object.freeze(intents.map((intent) => Object.freeze({
+    intentId: intent.intentId,
+    projectionDigest: contentDigest(intent),
+    resourceType: intent.resourceType,
+  })));
+}
+
+async function readExactLineageIntentSet(store, context, expectedSet) {
+  const resources = ['primary-project', 'primary-graph', 'primary-share'];
+  if (!Array.isArray(expectedSet) || expectedSet.length !== resources.length) return null;
+  const intents = [];
+  for (let index = 0; index < resources.length; index += 1) {
+    const resourceType = resources[index];
+    const expected = expectedSet[index];
+    const intent = await store.getIntentProjection(deterministicIntentId(context, resourceType));
+    if (
+      !exactDataObject(intent, CLEANUP_V2_INTENT_KEYS)
+      || expected === null
+      || typeof expected !== 'object'
+      || expected.intentId !== intent.intentId
+      || expected.resourceType !== resourceType
+      || expected.projectionDigest !== contentDigest(intent)
+    ) return null;
+    intents.push(intent);
+  }
+  return intents;
+}
+
+function currentSessionLineage(args) {
+  const lineage = sessionIntentQualificationRecords.get(args.sessionIntentQualification);
+  return lineage !== undefined
+    && lineage.state === 'ACTIVE'
+    && currentRuntimeQualification(args.runtimeQualification)
+    && lineage.runtimeQualification === args.runtimeQualification
+    && lineage.context === args.context
+    && lineage.store === installedProviderControlRecord.store
+    && lineage.providerContractQualification === installedProviderControlRecord.providerContractQualification
+    && lineage.providerContractDigest === APPROVED_PROVIDER_CONTRACT_DIGEST
+    && installedProviderControlRecord.sessionIntentQualification === args.sessionIntentQualification;
+}
+
+async function activeSessionLineage(args) {
+  try {
+    if (!currentSessionLineage(args)) {
+      revokeSessionLineageWitness(args.sessionIntentQualification);
+      return false;
+    }
+    const lineage = sessionIntentQualificationRecords.get(args.sessionIntentQualification);
+    const lease = await lineage.store.getLease();
+    const intents = await readExactLineageIntentSet(
+      lineage.store,
+      args.context,
+      lineage.intentSet,
+    );
+    const active = lease !== null
+      && lease.state === 'active'
+      && lease.ownerRunId === args.context.runId
+      && lease.environmentDigest === args.context.environmentDigest
+      && lease.acquiredAt === lineage.leaseAcquiredAt
+      && lease.leaseTokenDigest === lineage.leaseTokenDigest
+      && lease.leaseVersion === lineage.leaseVersion
+      && lease.ledgerDigest === lineage.ledgerDigest
+      && intents !== null
+      && contentDigest(orderedLineageIntentSet(intents)) === lineage.intentSetDigest;
+    if (!active) revokeSessionLineageWitness(args.sessionIntentQualification);
+    return active;
+  } catch {
+    revokeSessionLineageWitness(args.sessionIntentQualification);
+    return false;
+  }
+}
+
+async function installProviderControlStore(args) {
+  try {
+
     if (
       this !== PROVIDER_CONTROL_RECEIVER
       || providerControlBootstrapState !== 'REGISTERED'
-      || installedProviderControlRecord.state !== 'UNINSTALLED'
       || !exactDataObject(args, [
         'context',
         'providerContractQualification',
@@ -2459,7 +2862,10 @@ function installProviderControlStore(args) {
       || !isAuthenticTestEnvironmentContext(args.context)
       || args.providerContractQualification === null
       || typeof args.providerContractQualification !== 'object'
-    ) return terminallyBlockProviderControlInstall();
+    ) {
+
+      return terminallyBlockProviderControlInstall();
+    }
     const authentic = providerControlStoreRecords.get(args.providerControlStore);
     if (
       authentic === undefined
@@ -2467,7 +2873,89 @@ function installProviderControlStore(args) {
       || STORE_KEYS.some((key, index) => (
         args.providerControlStore[key] !== authentic.methods[index]
       ))
-    ) return terminallyBlockProviderControlInstall();
+    ) {
+
+      return terminallyBlockProviderControlInstall();
+    }
+
+    const lease = await args.providerControlStore.getLease();
+    if (
+      lease === null
+      || lease.state !== 'active'
+      || lease.ownerRunId !== args.context.runId
+      || lease.environmentDigest !== args.context.environmentDigest
+    ) {
+
+      return terminallyBlockProviderControlInstall();
+    }
+    if (installedProviderControlRecord.state === 'INSTALLED') {
+      const existing = installedProviderControlRecord;
+      const intents = await readExactLineageIntentSet(
+        args.providerControlStore,
+        args.context,
+        existing.lineage.intentSet,
+      );
+      if (
+        existing.store !== args.providerControlStore
+        || existing.context !== args.context
+        || existing.providerContractQualification !== args.providerContractQualification
+        || existing.lineage.runtimeQualification !== args.runtimeQualification
+        || existing.lineage.providerContractDigest !== APPROVED_PROVIDER_CONTRACT_DIGEST
+        || lease.acquiredAt !== existing.lineage.leaseAcquiredAt
+        || lease.leaseTokenDigest !== existing.lineage.leaseTokenDigest
+        || lease.leaseVersion !== existing.lineage.leaseVersion
+        || lease.ledgerDigest !== existing.lineage.ledgerDigest
+        || intents === null
+        || contentDigest(orderedLineageIntentSet(intents)) !== existing.lineage.intentSetDigest
+      ) {
+        await commitCleanupDebtWithoutLineage(args.providerControlStore, args.context);
+        return terminallyBlockProviderControlInstall();
+      }
+      if (!publishSessionLineageWitness(
+        existing.lineage,
+        existing.sessionIntentQualification,
+        'ACTIVE',
+      )) return terminallyBlockProviderControlInstall();
+      return privatePass(closedRecord({
+        installed: true,
+        sessionIntentQualification: existing.sessionIntentQualification,
+      }));
+    }
+    if (installedProviderControlRecord.state !== 'UNINSTALLED') {
+      return terminallyBlockProviderControlInstall();
+    }
+    const providerState = await readExactProviderFixtureIntents(
+      args.providerControlStore,
+      args.context,
+    );
+    if (providerState === null) {
+
+      await commitCleanupDebtWithoutLineage(args.providerControlStore, args.context);
+      return terminallyBlockProviderControlInstall();
+    }
+    const { intents, prefix } = providerState;
+
+    providerTupleRecord = prefix;
+    const sessionIntentQualification = Object.freeze(Object.create(null));
+    const intentSet = orderedLineageIntentSet(intents);
+    const lineage = Object.freeze({
+      state: 'ACTIVE',
+      runtimeQualification: args.runtimeQualification,
+      context: args.context,
+      providerContractQualification: args.providerContractQualification,
+      providerContractDigest: APPROVED_PROVIDER_CONTRACT_DIGEST,
+      store: args.providerControlStore,
+      leaseAcquiredAt: lease.acquiredAt,
+      leaseTokenDigest: lease.leaseTokenDigest,
+      leaseVersion: lease.leaseVersion,
+      ledgerDigest: lease.ledgerDigest,
+      intentSet,
+      intentSetDigest: contentDigest(intentSet),
+    });
+    sessionIntentQualificationRecords.set(sessionIntentQualification, lineage);
+    if (sessionIntentQualificationRecords.get(sessionIntentQualification) !== lineage) {
+      return terminallyBlockProviderControlInstall();
+    }
     const installing = replaceInstalledProviderControlRecord(
       installedProviderControlRecord,
       {
@@ -2475,6 +2963,8 @@ function installProviderControlStore(args) {
       store: args.providerControlStore,
       context: args.context,
       providerContractQualification: args.providerContractQualification,
+      sessionIntentQualification,
+      lineage,
       },
     );
     if (installing === null) return terminallyBlockProviderControlInstall();
@@ -2483,10 +2973,22 @@ function installProviderControlStore(args) {
       store: installing.store,
       context: installing.context,
       providerContractQualification: installing.providerContractQualification,
+      sessionIntentQualification: installing.sessionIntentQualification,
+      lineage: installing.lineage,
     });
     if (installed === null) return terminallyBlockProviderControlInstall();
-    return result('PASS', deepFreeze({ installed: true }));
+    if (!publishSessionLineageWitness(
+      installed.lineage,
+      installed.sessionIntentQualification,
+      'ACTIVE',
+    )) {
+
+      return terminallyBlockProviderControlInstall();
+    }
+
+    return privatePass(closedRecord({ installed: true, sessionIntentQualification }));
   } catch {
+
     return terminallyBlockProviderControlInstall();
   }
 }
@@ -2502,22 +3004,137 @@ function replaceWeakRecord(registry, token, expected, successorFields) {
   return registry.get(token) === successor ? successor : null;
 }
 
+function successorLineageIntentSet(lineage, operation) {
+  if (!Object.hasOwn(operation, 'nextIntent')) return lineage.intentSet;
+  const targetDigest = contentDigest(operation.nextIntent);
+  let replacements = 0;
+  const successor = lineage.intentSet.map((entry) => {
+    if (entry.intentId !== operation.nextIntent.intentId) return entry;
+    replacements += 1;
+    return Object.freeze({
+      intentId: entry.intentId,
+      projectionDigest: targetDigest,
+      resourceType: entry.resourceType,
+    });
+  });
+  return replacements === 1 ? Object.freeze(successor) : null;
+}
+
+async function advanceSessionLineageAfterSuccess(args, operation) {
+  const prior = sessionIntentQualificationRecords.get(args.sessionIntentQualification);
+  if (
+    prior === undefined
+    || !currentSessionLineage(args)
+    || installedProviderControlRecord.lineage !== prior
+  ) return false;
+  const intentSet = successorLineageIntentSet(prior, operation);
+  if (intentSet === null) return false;
+  const lease = await prior.store.getLease();
+  const intents = await readExactLineageIntentSet(prior.store, args.context, intentSet);
+  if (
+    lease === null
+    || !same(lease, operation.nextLease)
+    || intents === null
+    || contentDigest(orderedLineageIntentSet(intents)) !== contentDigest(intentSet)
+  ) return false;
+  const successor = Object.freeze({
+    ...prior,
+    leaseVersion: lease.leaseVersion,
+    ledgerDigest: lease.ledgerDigest,
+    intentSet,
+    intentSetDigest: contentDigest(intentSet),
+  });
+  sessionIntentQualificationRecords.set(args.sessionIntentQualification, successor);
+  if (sessionIntentQualificationRecords.get(args.sessionIntentQualification) !== successor) {
+    return false;
+  }
+  const installed = replaceInstalledProviderControlRecord(installedProviderControlRecord, {
+    state: 'INSTALLED',
+    store: installedProviderControlRecord.store,
+    context: installedProviderControlRecord.context,
+    providerContractQualification: installedProviderControlRecord.providerContractQualification,
+    sessionIntentQualification: installedProviderControlRecord.sessionIntentQualification,
+    lineage: successor,
+  });
+  return installed !== null
+    && publishSessionLineageWitness(successor, args.sessionIntentQualification, 'ACTIVE');
+}
+
 function closedRecord(fields) {
   return Object.freeze(Object.assign(Object.create(null), fields));
 }
 
+function publishSessionLineageWitness(lineage, sessionIntentQualification, state) {
+  if (
+    providerControlHubDispatchers === undefined
+    || typeof providerControlHubDispatchers.authenticateSessionLineage !== 'function'
+  ) return false;
+  try {
+    return reflectApply(
+      providerControlHubDispatchers.authenticateSessionLineage,
+      providerControlHubDispatchers.receiver,
+      [closedRecord({
+        context: lineage.context,
+        intentSetDigest: lineage.intentSetDigest,
+        leaseAcquiredAt: lineage.leaseAcquiredAt,
+        leaseTokenDigest: lineage.leaseTokenDigest,
+        leaseVersion: lineage.leaseVersion,
+        ledgerDigest: lineage.ledgerDigest,
+        providerContractDigest: lineage.providerContractDigest,
+        providerContractQualification: lineage.providerContractQualification,
+        providerControlStore: lineage.store,
+        runtimeQualification: lineage.runtimeQualification,
+        sessionIntentQualification,
+        state,
+      })],
+    ) === true;
+  } catch {
+    return false;
+  }
+}
+
+function revokeSessionLineageWitness(sessionIntentQualification) {
+  const lineage = sessionIntentQualificationRecords.get(sessionIntentQualification);
+  return lineage === undefined
+    ? true
+    : publishSessionLineageWitness(lineage, sessionIntentQualification, 'REVOKED');
+}
+
 function shareOwnerPair(ownerSlot) {
   if (ownerSlot === 'editorShare') {
-    return Object.freeze({ mutationOrdinal: 17, batchBefore: 10 });
+    return Object.freeze({
+      mutationOrdinal: 17, batchBefore: 10, targetRole: 'editor', canRun: true,
+    });
   }
   if (ownerSlot === 'viewerShare') {
-    return Object.freeze({ mutationOrdinal: 18, batchBefore: 11 });
+    return Object.freeze({
+      mutationOrdinal: 18, batchBefore: 11, targetRole: 'viewer', canRun: false,
+    });
   }
   return null;
 }
 
+function validExpectedShareIdentity(value, pair, bindingValues) {
+  return frozenExact(value, [
+    'userId', 'userEmail', 'userName', 'role', 'canRun',
+    'sharedBy', 'permissions',
+  ])
+    && [value.userId, value.userEmail, value.userName, value.role, value.sharedBy]
+      .every((item) => typeof item === 'string' && item.length > 0)
+    && typeof value.canRun === 'boolean'
+    && frozenDenseArray(value.permissions)
+    && value.permissions.every((permission) => typeof permission === 'string')
+    && value.userEmail === bindingValues[0]
+    && contentDigest(value.permissions) === bindingValues[1]
+    && value.sharedBy === bindingValues[2]
+    && value.userId === bindingValues[4]
+    && value.role === pair.targetRole
+    && value.canRun === pair.canRun;
+}
+
 async function prepareShareValuesTransition(args) {
   try {
+
     if (
       this !== PROVIDER_CONTROL_RECEIVER
       || !exactDataObject(args, [
@@ -2534,6 +3151,7 @@ async function prepareShareValuesTransition(args) {
     }
     const pair = shareOwnerPair(args.ownerSlot);
     const current = providerTupleRecord;
+
     if (
       pair === null
       || args.mutationOrdinal !== pair.mutationOrdinal
@@ -2688,6 +3306,7 @@ async function commitShareValuesTransition(args) {
       this !== PROVIDER_CONTROL_RECEIVER
       || !exactDataObject(args, [
         'runtimeQualification', 'preparation', 'bindingNames', 'boundValues',
+        'expectedShareIdentity',
       ])
       || !installedFor(args.runtimeQualification)
       || !nominalToken(args.preparation)
@@ -2716,6 +3335,7 @@ async function commitShareValuesTransition(args) {
       || tuple.state !== 'SHARE_PREPARED'
       || tuple.nextMutationOrdinal !== current.mutationOrdinal
       || tuple.providerValuesBoundBatchCount !== pair.batchBefore
+      || !validExpectedShareIdentity(args.expectedShareIdentity, pair, args.boundValues)
     ) {
       blockProviderLifecycle();
       return false;
@@ -2731,6 +3351,7 @@ async function commitShareValuesTransition(args) {
           name,
           valueDigest: sha256Bytes(encoder.encode(args.boundValues[index])),
         }))),
+        expectedShareIdentity: args.expectedShareIdentity,
       },
     );
     const tupleCommitting = replaceProviderTupleRecord(tuple, {
@@ -2738,6 +3359,59 @@ async function commitShareValuesTransition(args) {
       state: 'SHARE_COMMITTING',
     });
     if (committing === null || tupleCommitting === null) {
+      blockProviderLifecycle();
+      return false;
+    }
+    const store = installedProviderControlRecord.store;
+    const shareIntentId = deterministicIntentId(current.context, 'primary-share');
+    const prior = await store.getIntentProjection(shareIntentId);
+    const lease = await store.getLease();
+    if (
+      providerTupleRecord !== tupleCommitting
+      || sharePreparationRecords.get(args.preparation) !== committing
+    ) {
+      blockProviderLifecycle();
+      return false;
+    }
+    const batch = Object.freeze({
+      mutationOrdinal: current.mutationOrdinal,
+      resourceType: 'primary-share',
+      rows: Object.freeze(SHARE_VALUE_ROWS.map(([name, valueKind]) => (
+        [current.ownerSlot, name, valueKind]
+      ))),
+    });
+    const bindings = Object.freeze(SHARE_VALUE_ROWS.map(([name, valueKind], index) => (
+      closedRecord({
+        ownerSlot: current.ownerSlot,
+        name,
+        valueKind,
+        value: args.boundValues[index],
+        valueDigest: sha256Bytes(encoder.encode(args.boundValues[index])),
+      })
+    )));
+    const operation = providerValuesBoundIntentOperation(
+      prior,
+      lease,
+      { context: current.context },
+      batch,
+      bindings,
+    );
+    const committedValue = await store.transact(operation);
+    const lineageArgs = {
+      runtimeQualification: args.runtimeQualification,
+      context: current.context,
+      sessionIntentQualification:
+        installedProviderControlRecord.sessionIntentQualification,
+    };
+    if (
+      providerTupleRecord !== tupleCommitting
+      || sharePreparationRecords.get(args.preparation) !== committing
+      || committedValue.status !== 'PASS'
+      || !same(committedValue.value, operation.nextLease)
+      || !await advanceSessionLineageAfterSuccess(lineageArgs, operation)
+      || !same(await store.getIntentProjection(shareIntentId), operation.nextIntent)
+      || !same(await store.getLease(), operation.nextLease)
+    ) {
       blockProviderLifecycle();
       return false;
     }
@@ -2817,7 +3491,9 @@ function finalizeShareValuesTransition(args) {
       })],
     );
     if (!nominalToken(finalIdentity)) return false;
-    const providerQualification = makeToken();
+    const projectProviderId = boundProviderIds.get(6);
+    if (typeof projectProviderId !== 'string' || projectProviderId.length === 0) return false;
+    const providerQualification = finalIdentity;
     const qualification = Object.freeze({
       state: 'ACTIVE',
       version: 1,
@@ -2829,9 +3505,14 @@ function finalizeShareValuesTransition(args) {
       targetIdentityDigest: pending.targetIdentityDigest,
       tupleDigest: pending.tupleDigest,
       boundValuesDigest: pending.boundValuesDigest,
+      expectedShareRow: closedRecord({
+        projectId: projectProviderId,
+        ...pending.expectedShareIdentity,
+      }),
       finalIdentity,
     });
     providerQualificationRecords.set(providerQualification, qualification);
+    providerQualificationRecords.set(args.handoff, qualification);
     if (providerQualificationRecords.get(providerQualification) !== qualification) return false;
     return replaceWeakRecord(
       sharePreparationRecords,
@@ -2882,17 +3563,255 @@ function oneMillisecondAfter(value) {
   }
 }
 
+function memberTemplateForMutation(mutationOrdinal) {
+  const matches = [];
+  for (const resource of providerContract.aggregateContracts.resources) {
+    if (!['primary-project', 'primary-graph'].includes(resource.resourceType)) continue;
+    for (const memberTemplate of resource.memberTemplates) {
+      if (memberTemplate.firstBindOrdinal === mutationOrdinal) {
+        matches.push({ memberTemplate, resourceType: resource.resourceType });
+      }
+    }
+  }
+  return matches.length === 1 ? matches[0] : null;
+}
+
+function providerReadbackIdentity(prior, mutationOrdinal) {
+  let aggregate;
+  try {
+    aggregate = JSON.parse(prior.providerAggregateJson);
+  } catch {
+    return null;
+  }
+  if (
+    !exactDataObject(aggregate, PROVIDER_AGGREGATE_KEYS)
+    || canonicalJson(aggregate) !== prior.providerAggregateJson
+    || contentDigest(aggregate) !== prior.providerAggregateDigest
+  ) return null;
+  const matches = [];
+  const resourceContract = providerContract.aggregateContracts.resources.find((entry) => (
+    entry.resourceType === prior.resourceType
+  ));
+  if (resourceContract === undefined) return null;
+  for (const member of aggregate.ownedMembers) {
+    const operations = member.operationStates?.filter((operation) => (
+      operation.mutationOrdinal === mutationOrdinal
+    ));
+    if (operations?.length !== 1) continue;
+    const template = resourceContract.memberTemplates.find((entry) => (
+      entry.slot === member.memberBinding?.slot
+      && entry.ownerOrdinal === member.memberBinding?.ownerOrdinal
+      && entry.operations.some((operation) => operation.mutationOrdinal === mutationOrdinal)
+    ));
+    if (
+      template === undefined
+      || member.bindingState !== 'bound'
+      || typeof member.providerId !== 'string'
+      || !exactDataObject(member.providerIdentity, [
+        'bindingName', 'providerId', 'providerKind',
+      ])
+      || member.providerIdentity.bindingName !== template.bindingName
+      || member.providerIdentity.providerId !== member.providerId
+      || member.providerIdentity.providerKind !== template.providerKind
+    ) return null;
+    matches.push(closedRecord({
+      logicalResource: prior.resourceType,
+      ownerSlot: template.slot,
+      providerKind: template.providerKind,
+      providerId: member.providerId,
+      providerCompositeIdentity: `${template.bindingName}|${member.providerId}`,
+    }));
+  }
+  return matches.length === 1 ? matches[0] : null;
+}
+
+function routeClassForMutation(mutationOrdinal) {
+  const matches = [];
+  for (const resource of providerContract.aggregateContracts.resources) {
+    for (const memberTemplate of resource.memberTemplates) {
+      for (const operation of memberTemplate.operations) {
+        if (operation.mutationOrdinal === mutationOrdinal) {
+          matches.push(operation.requestTemplate.bodyKind);
+        }
+      }
+    }
+  }
+  return matches.length === 1
+    && ['row-create', 'row-update', 'file-create'].includes(matches[0])
+    ? matches[0]
+    : null;
+}
+
+function providerBoundIntentOperation(prior, lease, args, providerId) {
+  const target = memberTemplateForMutation(args.mutationOrdinal);
+  const identity = intentIdentityForMutation(args.context, args.mutationOrdinal);
+  if (
+    target === null
+    || target.resourceType !== identity.resourceType
+    || !exactDataObject(prior, CLEANUP_V2_INTENT_KEYS)
+    || prior.intentId !== identity.intentId
+    || prior.state !== 'planned'
+    || !exactDataObject(lease, LEASE_KEYS)
+    || lease.state !== 'active'
+    || lease.cleanupDebt !== false
+  ) mismatch('AUDIT_CHAIN_MISMATCH');
+  let aggregate;
+  try {
+    aggregate = JSON.parse(prior.providerAggregateJson);
+  } catch {
+    mismatch('AUDIT_CHAIN_MISMATCH');
+  }
+  const members = aggregate.ownedMembers.filter((member) => (
+    member.memberBinding.slot === target.memberTemplate.slot
+    && member.memberBinding.ownerOrdinal === target.memberTemplate.ownerOrdinal
+  ));
+  if (members.length !== 1) mismatch('AUDIT_CHAIN_MISMATCH');
+  const member = members[0];
+  if (
+    member.bindingState !== 'unbound'
+    || member.providerId !== null
+    || member.providerIdentity !== null
+  ) mismatch('AUDIT_CHAIN_MISMATCH');
+  member.bindingState = 'bound';
+  member.providerId = providerId;
+  member.providerIdentity = {
+    bindingName: target.memberTemplate.bindingName,
+    providerId,
+    providerKind: target.memberTemplate.providerKind,
+  };
+  const nextAggregateJson = canonicalJson(aggregate);
+  const snapshot = {
+    ...prior,
+    providerAggregateJson: nextAggregateJson,
+    providerAggregateDigest: sha256Bytes(encoder.encode(nextAggregateJson)),
+    intentVersion: prior.intentVersion + 1,
+    updatedAt: oneMillisecondAfter(prior.updatedAt),
+  };
+  const event = {
+    schemaVersion: 'verification-audit-event.v1',
+    previousLedgerDigest: lease.ledgerDigest,
+    runId: prior.runId,
+    leaseVersionBefore: lease.leaseVersion,
+    leaseVersionAfter: lease.leaseVersion + 1,
+    transition: 'intent.provider_bound',
+    intentId: prior.intentId,
+    intentProjectionDigest: contentDigest(snapshot),
+  };
+  const nextLease = {
+    ...lease,
+    leaseVersion: lease.leaseVersion + 1,
+    ledgerDigest: contentDigest(event),
+  };
+  return {
+    expectedLeaseVersion: lease.leaseVersion,
+    expectedLedgerDigest: lease.ledgerDigest,
+    event,
+    snapshot,
+    nextLease,
+    nextIntent: snapshot,
+  };
+}
+
+function providerValuesBoundIntentOperation(prior, lease, args, batch, bindings) {
+  const identity = batch.resourceType === 'primary-share'
+    ? {
+      intentId: deterministicIntentId(args.context, 'primary-share'),
+      resourceId: deterministicResourceId(args.context, 'primary-share'),
+      resourceType: 'primary-share',
+    }
+    : intentIdentityForMutation(
+      args.context,
+      batch.resourceType === 'primary-project' ? 0 : 1,
+    );
+  if (
+    identity.resourceType !== batch.resourceType
+    || !exactDataObject(prior, CLEANUP_V2_INTENT_KEYS)
+    || prior.intentId !== identity.intentId
+    || prior.state !== 'planned'
+    || !exactDataObject(lease, LEASE_KEYS)
+    || lease.state !== 'active'
+    || lease.cleanupDebt !== false
+    || !frozenDenseArray(bindings)
+    || bindings.length !== batch.rows.length
+  ) mismatch('AUDIT_CHAIN_MISMATCH');
+  let aggregate;
+  try {
+    aggregate = JSON.parse(prior.providerAggregateJson);
+  } catch {
+    mismatch('AUDIT_CHAIN_MISMATCH');
+  }
+  for (let index = 0; index < batch.rows.length; index += 1) {
+    const [ownerSlot, name, valueKind] = batch.rows[index];
+    const binding = bindings[index];
+    if (
+      !frozenExact(binding, ['ownerSlot', 'name', 'valueKind', 'value', 'valueDigest'])
+      || binding.ownerSlot !== ownerSlot
+      || binding.name !== name
+      || binding.valueKind !== valueKind
+      || typeof binding.value !== 'string'
+      || binding.value.length === 0
+      || binding.valueDigest !== sha256Bytes(encoder.encode(binding.value))
+    ) mismatch('AUDIT_CHAIN_MISMATCH');
+    const members = aggregate.ownedMembers.filter((member) => (
+      member.memberBinding.slot === ownerSlot
+    ));
+    if (members.length !== 1) mismatch('AUDIT_CHAIN_MISMATCH');
+    const rows = members[0].logicalValueBindings.filter((row) => (
+      row.name === name && row.valueKind === valueKind
+    ));
+    if (
+      rows.length !== 1
+      || rows[0].state !== 'unbound'
+      || rows[0].value !== null
+      || rows[0].valueDigest !== null
+    ) mismatch('AUDIT_CHAIN_MISMATCH');
+    rows[0].state = 'bound';
+    rows[0].value = binding.value;
+    rows[0].valueDigest = binding.valueDigest;
+  }
+  const nextAggregateJson = canonicalJson(aggregate);
+  const snapshot = {
+    ...prior,
+    providerAggregateJson: nextAggregateJson,
+    providerAggregateDigest: sha256Bytes(encoder.encode(nextAggregateJson)),
+    intentVersion: prior.intentVersion + 1,
+    updatedAt: oneMillisecondAfter(prior.updatedAt),
+  };
+  const event = {
+    schemaVersion: 'verification-audit-event.v1',
+    previousLedgerDigest: lease.ledgerDigest,
+    runId: prior.runId,
+    leaseVersionBefore: lease.leaseVersion,
+    leaseVersionAfter: lease.leaseVersion + 1,
+    transition: 'intent.provider_values_bound',
+    intentId: prior.intentId,
+    intentProjectionDigest: contentDigest(snapshot),
+  };
+  const nextLease = {
+    ...lease,
+    leaseVersion: lease.leaseVersion + 1,
+    ledgerDigest: contentDigest(event),
+  };
+  return {
+    expectedLeaseVersion: lease.leaseVersion,
+    expectedLedgerDigest: lease.ledgerDigest,
+    event,
+    snapshot,
+    nextLease,
+    nextIntent: snapshot,
+  };
+}
+
 function issuedIntentOperation(prior, lease, args) {
   const identity = intentIdentityForMutation(args.context, args.mutationOrdinal);
   if (
-    !exactDataObject(prior, PROVIDER_V2_INTENT_KEYS)
+    !exactDataObject(prior, CLEANUP_V2_INTENT_KEYS)
     || prior.schemaVersion !== 'verification-intent-snapshot.v2'
     || prior.intentId !== identity.intentId
     || prior.runId !== args.context.runId
     || prior.environmentDigest !== args.context.environmentDigest
     || prior.resourceType !== identity.resourceType
     || prior.resourceId !== identity.resourceId
-    || prior.providerResourceIds !== null
     || !DIGEST.test(prior.providerAggregateDigest)
     || typeof prior.ownerMarker !== 'string'
     || prior.ownerMarker.length === 0
@@ -2957,24 +3876,8 @@ function issuedIntentOperation(prior, lease, args) {
       if (operation.mutationOrdinal === args.mutationOrdinal) {
         if (targetOperation !== null) mismatch('AUDIT_CHAIN_MISMATCH');
         if (
-          member.bindingState !== 'bound'
-          || typeof member.providerId !== 'string'
-          || member.providerId.length === 0
-          || !DIGEST.test(member.memberBindingDigest)
+          !DIGEST.test(member.memberBindingDigest)
           || contentDigest(member.memberBinding) !== member.memberBindingDigest
-          || !exactDataObject(
-            member.providerIdentity,
-            ['bindingName', 'providerId', 'providerKind'],
-          )
-          || member.providerIdentity.providerId !== member.providerId
-          || typeof member.providerIdentity.bindingName !== 'string'
-          || member.providerIdentity.bindingName.length === 0
-          || typeof member.providerIdentity.providerKind !== 'string'
-          || member.providerIdentity.providerKind.length === 0
-          || member.logicalValueBindings.some((binding) => (
-            binding.sourceMutationOrdinal <= args.mutationOrdinal
-            && binding.state !== 'bound'
-          ))
         ) mismatch('AUDIT_CHAIN_MISMATCH');
         targetOperation = operation;
       }
@@ -3029,54 +3932,749 @@ function issuedIntentOperation(prior, lease, args) {
   };
 }
 
+function reconciledIntentOperation(prior, lease, issue, readback) {
+  const identity = intentIdentityForMutation(issue.context, issue.mutationOrdinal);
+  if (
+    !exactDataObject(prior, CLEANUP_V2_INTENT_KEYS)
+    || prior.schemaVersion !== 'verification-intent-snapshot.v2'
+    || prior.intentId !== identity.intentId
+    || prior.runId !== issue.context.runId
+    || prior.environmentDigest !== issue.context.environmentDigest
+    || prior.resourceType !== identity.resourceType
+    || prior.resourceId !== identity.resourceId
+    || !DIGEST.test(prior.providerAggregateDigest)
+    || typeof prior.providerAggregateJson !== 'string'
+    || !Number.isSafeInteger(prior.intentVersion)
+    || prior.intentVersion < 2
+    || prior.intentVersion === Number.MAX_SAFE_INTEGER
+    || !exactDataObject(lease, LEASE_KEYS)
+    || lease.state !== 'active'
+    || lease.ownerRunId !== issue.context.runId
+    || lease.environmentDigest !== issue.context.environmentDigest
+    || lease.cleanupDebt !== false
+    || !Number.isSafeInteger(lease.leaseVersion)
+    || lease.leaseVersion < 1
+    || lease.leaseVersion === Number.MAX_SAFE_INTEGER
+    || !DIGEST.test(lease.ledgerDigest)
+  ) mismatch('AUDIT_CHAIN_MISMATCH');
+
+  let aggregate;
+  try {
+    aggregate = JSON.parse(prior.providerAggregateJson);
+  } catch {
+    mismatch('AUDIT_CHAIN_MISMATCH');
+  }
+  if (
+    !exactDataObject(aggregate, PROVIDER_AGGREGATE_KEYS)
+    || canonicalJson(aggregate) !== prior.providerAggregateJson
+    || contentDigest(aggregate) !== prior.providerAggregateDigest
+    || aggregate.schemaVersion !== 'verification-provider-aggregate.v1'
+    || !exactDataObject(aggregate.aggregateBinding, AGGREGATE_BINDING_KEYS)
+    || contentDigest(aggregate.aggregateBinding) !== aggregate.aggregateBindingDigest
+    || aggregate.aggregateBinding.intentId !== prior.intentId
+    || !Array.isArray(aggregate.ownedMembers)
+    || !Array.isArray(aggregate.referencedMembers)
+  ) mismatch('AUDIT_CHAIN_MISMATCH');
+
+  let targetMember = null;
+  let targetOperation = null;
+  for (const member of aggregate.ownedMembers) {
+    if (
+      !exactDataObject(member, PROVIDER_MEMBER_KEYS)
+      || !Array.isArray(member.operationStates)
+    ) mismatch('AUDIT_CHAIN_MISMATCH');
+    for (const operation of member.operationStates) {
+      if (!exactDataObject(operation, OPERATION_STATE_KEYS)) {
+        mismatch('AUDIT_CHAIN_MISMATCH');
+      }
+      if (operation.mutationOrdinal === issue.mutationOrdinal) {
+        if (targetOperation !== null) mismatch('AUDIT_CHAIN_MISMATCH');
+        targetMember = member;
+        targetOperation = operation;
+      }
+    }
+  }
+  const trustedReadbackIdentity = providerReadbackIdentity(
+    prior,
+    issue.mutationOrdinal,
+  );
+  if (
+    trustedReadbackIdentity === null
+    || !frozenExact(readback, [
+      'logicalResource', 'ownerSlot', 'providerKind', 'providerId',
+      'providerCompositeIdentity', 'memberState', 'observedResultState',
+    ])
+    || Object.keys(trustedReadbackIdentity).some((key) => (
+      readback[key] !== trustedReadbackIdentity[key]
+    ))
+  ) {
+    mismatch('AUDIT_CHAIN_MISMATCH');
+  }
+  const detachedObservedResultState = safeCopy(readback.observedResultState);
+  const detachedMemberState = safeCopy(readback.memberState);
+  const fileState = targetMember?.memberState?.schemaVersion
+    === 'storage-file-metadata-state.v1';
+  const contentKey = fileState ? 'metadataDigest' : 'dataDigest';
+  const stateKeys = fileState
+    ? ['metadataDigest', 'permissionsDigest', 'presence', 'schemaVersion']
+    : ['dataDigest', 'permissionsDigest', 'presence', 'schemaVersion'];
+  const observedResultDigest = contentDigest(detachedObservedResultState);
+  if (
+    targetOperation === null
+    || targetMember === null
+    || targetOperation.state !== 'issued'
+    || targetOperation.requestInstanceDigest !== issue.expectedStateMapping.requestInstanceDigest
+    || !same(targetOperation.expectedResultState, detachedObservedResultState)
+    || targetOperation.resultStateDigest !== null
+    || targetOperation.baselineDigest !== null
+    || targetOperation.discoveryProofDigest !== null
+    || !exactDataObject(detachedMemberState, stateKeys)
+    || detachedMemberState.schemaVersion !== targetMember.memberState.schemaVersion
+    || detachedMemberState.presence !== 'present'
+    || detachedMemberState[contentKey] !== observedResultDigest
+    || !DIGEST.test(detachedMemberState.permissionsDigest)
+  ) mismatch('AUDIT_CHAIN_MISMATCH');
+
+  targetOperation.state = 'reconciled';
+  targetOperation.resultStateDigest = observedResultDigest;
+  const nextAggregateJson = canonicalJson(aggregate);
+  const snapshot = {
+    ...prior,
+    providerAggregateJson: nextAggregateJson,
+    providerAggregateDigest: sha256Bytes(encoder.encode(nextAggregateJson)),
+    intentVersion: prior.intentVersion + 1,
+    updatedAt: oneMillisecondAfter(prior.updatedAt),
+  };
+  const snapshotDigest = contentDigest(snapshot);
+  const event = {
+    schemaVersion: 'verification-audit-event.v1',
+    previousLedgerDigest: lease.ledgerDigest,
+    runId: prior.runId,
+    leaseVersionBefore: lease.leaseVersion,
+    leaseVersionAfter: lease.leaseVersion + 1,
+    transition: 'intent.provider_operation_reconciled',
+    intentId: prior.intentId,
+    intentProjectionDigest: snapshotDigest,
+  };
+  const nextLease = {
+    ...lease,
+    leaseVersion: lease.leaseVersion + 1,
+    ledgerDigest: contentDigest(event),
+  };
+  return {
+    expectedLeaseVersion: lease.leaseVersion,
+    expectedLedgerDigest: lease.ledgerDigest,
+    event,
+    snapshot,
+    nextLease,
+    nextIntent: snapshot,
+  };
+}
+
+function createdIntentOperation(prior, lease, context, resourceType) {
+  const identity = intentIdentityForMutation(
+    context,
+    resourceType === 'primary-project' ? 0 : 1,
+  );
+  if (
+    identity.resourceType !== resourceType
+    || !exactDataObject(prior, CLEANUP_V2_INTENT_KEYS)
+    || prior.intentId !== identity.intentId
+    || prior.state !== 'planned'
+    || !exactDataObject(lease, LEASE_KEYS)
+    || lease.state !== 'active'
+    || lease.ownerRunId !== context.runId
+    || lease.environmentDigest !== context.environmentDigest
+    || lease.cleanupDebt !== false
+    || lease.leaseVersion === Number.MAX_SAFE_INTEGER
+  ) mismatch('AUDIT_CHAIN_MISMATCH');
+  let aggregate;
+  try {
+    aggregate = JSON.parse(prior.providerAggregateJson);
+  } catch {
+    mismatch('AUDIT_CHAIN_MISMATCH');
+  }
+  const requiredOrdinals = resourceType === 'primary-project'
+    ? PROJECT_MUTATION_ORDINALS
+    : new Set([1, 3, 5, 7, 8, 9, 14, 15, 16]);
+  const observedOrdinals = new Set();
+  for (const member of aggregate.ownedMembers ?? []) {
+    for (const operation of member.operationStates ?? []) {
+      if (requiredOrdinals.has(operation.mutationOrdinal)) {
+        if (operation.state !== 'reconciled') mismatch('AUDIT_CHAIN_MISMATCH');
+        observedOrdinals.add(operation.mutationOrdinal);
+      }
+    }
+  }
+  if (
+    aggregate.phase !== 'owner-baseline'
+    || observedOrdinals.size !== requiredOrdinals.size
+  ) mismatch('AUDIT_CHAIN_MISMATCH');
+  const resourceContract = providerContract.aggregateContracts.resources.find((entry) => (
+    entry.resourceType === resourceType
+  ));
+  if (resourceContract === undefined) mismatch('AUDIT_CHAIN_MISMATCH');
+  for (const member of aggregate.ownedMembers) {
+    const template = resourceContract.memberTemplates.find((entry) => (
+      entry.slot === member.memberBinding.slot
+      && entry.ownerOrdinal === member.memberBinding.ownerOrdinal
+    ));
+    const phaseState = template?.memberStateContract.expectedStatesByPhase.find((entry) => (
+      entry.phase === 'normal-owner'
+    ));
+    const observedState = phaseState === undefined ? undefined : providerObservedMemberStates.get(
+      `${resourceType}|${template.slot}|${phaseState.dataSourceMutationOrdinal}`,
+    );
+    if (observedState === undefined) mismatch('AUDIT_CHAIN_MISMATCH');
+    member.memberState = safeCopy(observedState);
+  }
+  aggregate.phase = 'normal-owner';
+  const nextAggregateJson = canonicalJson(aggregate);
+  const snapshot = {
+    ...prior,
+    state: 'created',
+    providerAggregateJson: nextAggregateJson,
+    providerAggregateDigest: sha256Bytes(encoder.encode(nextAggregateJson)),
+    intentVersion: prior.intentVersion + 1,
+    updatedAt: oneMillisecondAfter(prior.updatedAt),
+  };
+  const snapshotDigest = contentDigest(snapshot);
+  const event = {
+    schemaVersion: 'verification-audit-event.v1',
+    previousLedgerDigest: lease.ledgerDigest,
+    runId: prior.runId,
+    leaseVersionBefore: lease.leaseVersion,
+    leaseVersionAfter: lease.leaseVersion + 1,
+    transition: 'intent.created',
+    intentId: prior.intentId,
+    intentProjectionDigest: snapshotDigest,
+  };
+  const nextLease = {
+    ...lease,
+    leaseVersion: lease.leaseVersion + 1,
+    ledgerDigest: contentDigest(event),
+  };
+  return {
+    expectedLeaseVersion: lease.leaseVersion,
+    expectedLedgerDigest: lease.ledgerDigest,
+    event,
+    snapshot,
+    nextLease,
+    nextIntent: snapshot,
+  };
+}
+
+function shareIntentOperation(prior, lease, context, transition, mutate) {
+  const intentId = deterministicIntentId(context, 'primary-share');
+  const resourceId = deterministicResourceId(context, 'primary-share');
+  if (
+    !exactDataObject(prior, CLEANUP_V2_INTENT_KEYS)
+    || prior.schemaVersion !== 'verification-intent-snapshot.v2'
+    || prior.intentId !== intentId
+    || prior.resourceType !== 'primary-share'
+    || prior.resourceId !== resourceId
+    || prior.state !== 'planned'
+    || !exactDataObject(lease, LEASE_KEYS)
+    || lease.state !== 'active'
+    || lease.ownerRunId !== context.runId
+    || lease.environmentDigest !== context.environmentDigest
+    || lease.cleanupDebt !== false
+    || lease.leaseVersion === Number.MAX_SAFE_INTEGER
+  ) mismatch('AUDIT_CHAIN_MISMATCH');
+  let aggregate;
+  try {
+    aggregate = JSON.parse(prior.providerAggregateJson);
+  } catch {
+    mismatch('AUDIT_CHAIN_MISMATCH');
+  }
+  if (
+    !exactDataObject(aggregate, PROVIDER_AGGREGATE_KEYS)
+    || canonicalJson(aggregate) !== prior.providerAggregateJson
+    || contentDigest(aggregate) !== prior.providerAggregateDigest
+    || aggregate.aggregateBinding.intentId !== prior.intentId
+    || aggregate.aggregateBinding.resourceType !== 'primary-share'
+  ) mismatch('AUDIT_CHAIN_MISMATCH');
+  mutate(aggregate);
+  const nextAggregateJson = canonicalJson(aggregate);
+  const snapshot = {
+    ...prior,
+    providerAggregateJson: nextAggregateJson,
+    providerAggregateDigest: sha256Bytes(encoder.encode(nextAggregateJson)),
+    intentVersion: prior.intentVersion + 1,
+    updatedAt: oneMillisecondAfter(prior.updatedAt),
+  };
+  const event = {
+    schemaVersion: 'verification-audit-event.v1',
+    previousLedgerDigest: lease.ledgerDigest,
+    runId: prior.runId,
+    leaseVersionBefore: lease.leaseVersion,
+    leaseVersionAfter: lease.leaseVersion + 1,
+    transition,
+    intentId: prior.intentId,
+    intentProjectionDigest: contentDigest(snapshot),
+  };
+  const nextLease = {
+    ...lease,
+    leaseVersion: lease.leaseVersion + 1,
+    ledgerDigest: contentDigest(event),
+  };
+  return {
+    expectedLeaseVersion: lease.leaseVersion,
+    expectedLedgerDigest: lease.ledgerDigest,
+    event,
+    snapshot,
+    nextLease,
+    nextIntent: snapshot,
+  };
+}
+
+function shareCreateIssuedIntentOperation(prior, lease, issue) {
+  return shareIntentOperation(
+    prior,
+    lease,
+    issue.context,
+    'intent.provider_create_issued',
+    (aggregate) => {
+      const expectedPhase = issue.mutationOrdinal === 17
+        ? 'owner-baseline'
+        : 'editor-issued';
+      const nextPhase = issue.mutationOrdinal === 17
+        ? 'editor-issued'
+        : 'viewer-issued';
+      const members = aggregate.ownedMembers.filter((member) => (
+        member.memberBinding.slot === issue.ownerSlot
+      ));
+      if (aggregate.phase !== expectedPhase || members.length !== 1) {
+        mismatch('AUDIT_CHAIN_MISMATCH');
+      }
+      const member = members[0];
+      const operations = member.operationStates.filter((operation) => (
+        operation.mutationOrdinal === issue.mutationOrdinal
+      ));
+      if (
+        member.bindingState !== 'unissued'
+        || member.providerId !== null
+        || member.providerIdentity !== null
+        || member.logicalValueBindings.some((binding) => binding.state !== 'bound')
+        || operations.length !== 1
+      ) mismatch('AUDIT_CHAIN_MISMATCH');
+      const operation = operations[0];
+      if (
+        operation.state !== 'pending'
+        || operation.requestInstanceDigest !== null
+        || operation.baselineDigest !== null
+      ) mismatch('AUDIT_CHAIN_MISMATCH');
+      member.bindingState = 'issued';
+      operation.state = 'issued';
+      operation.requestInstanceDigest = issue.requestTuple.requestInstanceDigest;
+      operation.baselineDigest = issue.baselineDigest;
+      aggregate.phase = nextPhase;
+    },
+  );
+}
+
+function shareIdDiscoveredIntentOperation(prior, lease, issue, readback) {
+  return shareIntentOperation(
+    prior,
+    lease,
+    issue.context,
+    'intent.provider_id_discovered',
+    (aggregate) => {
+      const expectedPhase = issue.mutationOrdinal === 17
+        ? 'editor-issued'
+        : 'viewer-issued';
+      const members = aggregate.ownedMembers.filter((member) => (
+        member.memberBinding.slot === issue.ownerSlot
+      ));
+      if (aggregate.phase !== expectedPhase || members.length !== 1) {
+        mismatch('AUDIT_CHAIN_MISMATCH');
+      }
+      const member = members[0];
+      const operations = member.operationStates.filter((operation) => (
+        operation.mutationOrdinal === issue.mutationOrdinal
+      ));
+      if (
+        member.bindingState !== 'issued'
+        || member.providerId !== null
+        || member.providerIdentity !== null
+        || operations.length !== 1
+      ) mismatch('AUDIT_CHAIN_MISMATCH');
+      const operation = operations[0];
+      if (
+        operation.state !== 'issued'
+        || operation.requestInstanceDigest !== issue.requestTuple.requestInstanceDigest
+        || operation.baselineDigest !== issue.baselineDigest
+        || operation.resultStateDigest !== null
+        || operation.discoveryProofDigest !== null
+      ) mismatch('AUDIT_CHAIN_MISMATCH');
+      member.bindingState = 'bound';
+      member.providerId = readback.providerId;
+      member.providerIdentity = {
+        bindingName: 'project-shares',
+        providerId: readback.providerId,
+        providerKind: 'tablesdb-row',
+      };
+      member.memberState = safeCopy(readback.memberState);
+      operation.state = 'reconciled';
+      operation.resultStateDigest = readback.resultStateDigest;
+      operation.discoveryProofDigest = readback.discoveryProofDigest;
+    },
+  );
+}
+
+function shareCreatedIntentOperation(prior, lease, context) {
+  const operation = shareIntentOperation(
+    prior,
+    lease,
+    context,
+    'intent.created',
+    (aggregate) => {
+      if (
+        aggregate.phase !== 'viewer-issued'
+        || aggregate.ownedMembers.length !== 2
+        || aggregate.ownedMembers.some((member) => (
+          member.bindingState !== 'bound'
+          || member.operationStates.length !== 1
+          || member.operationStates[0].state !== 'reconciled'
+          || member.memberState.presence !== 'present'
+        ))
+      ) mismatch('AUDIT_CHAIN_MISMATCH');
+      aggregate.phase = 'shared';
+    },
+  );
+  operation.snapshot.state = 'created';
+  operation.event.intentProjectionDigest = contentDigest(operation.snapshot);
+  operation.nextLease.ledgerDigest = contentDigest(operation.event);
+  return operation;
+}
+
+function cleanupDebtLeaseOperation(lease, context) {
+  if (
+    !exactDataObject(lease, LEASE_KEYS)
+    || lease.state !== 'active'
+    || lease.cleanupDebt !== false
+    || lease.ownerRunId !== context.runId
+    || lease.environmentDigest !== context.environmentDigest
+    || lease.leaseVersion === Number.MAX_SAFE_INTEGER
+  ) mismatch('AUDIT_CHAIN_MISMATCH');
+  const event = {
+    schemaVersion: 'verification-audit-event.v1',
+    previousLedgerDigest: lease.ledgerDigest,
+    runId: context.runId,
+    leaseVersionBefore: lease.leaseVersion,
+    leaseVersionAfter: lease.leaseVersion + 1,
+    transition: 'lease.cleanup_debt',
+    intentId: null,
+    intentProjectionDigest: null,
+  };
+  const nextLease = {
+    ...lease,
+    state: 'cleanup-debt',
+    cleanupDebt: true,
+    leaseVersion: lease.leaseVersion + 1,
+    ledgerDigest: contentDigest(event),
+  };
+  return {
+    expectedLeaseVersion: lease.leaseVersion,
+    expectedLedgerDigest: lease.ledgerDigest,
+    event,
+    nextLease,
+  };
+}
+
+async function commitCleanupDebt(args) {
+  const store = installedProviderControlRecord.store;
+  const prior = await store.getLease();
+  const operation = cleanupDebtLeaseOperation(prior, args.context);
+  const committed = await store.transact(operation);
+  return committed.status === 'PASS'
+    && same(committed.value, operation.nextLease)
+    && await advanceSessionLineageAfterSuccess(args, operation)
+    && same(await store.getLease(), operation.nextLease);
+}
+
+async function commitCleanupDebtWithoutLineage(store, context) {
+  try {
+    const prior = await store.getLease();
+    const operation = cleanupDebtLeaseOperation(prior, context);
+    const committed = await store.transact(operation);
+    return committed.status === 'PASS'
+      && same(committed.value, operation.nextLease)
+      && same(await store.getLease(), operation.nextLease);
+  } catch {
+    return false;
+  }
+}
+
+async function blockAfterDurableProviderMutation(args) {
+  try {
+    await commitCleanupDebt(args);
+  } catch {
+    // The caller is terminally blocked even if the exact debt write cannot be proved.
+  }
+  return blockProviderLifecycle();
+}
+
+async function commitCreatedOwnerIntents(args) {
+  if (
+    providerTupleRecord.providerBoundCount !== 14
+    || providerTupleRecord.providerValuesBoundBatchCount !== 10
+    || providerTupleRecord.providerOperationIssuedCount !== 17
+  ) return false;
+  const store = installedProviderControlRecord.store;
+  for (const resourceType of ['primary-project', 'primary-graph']) {
+    const identity = intentIdentityForMutation(
+      args.context,
+      resourceType === 'primary-project' ? 0 : 1,
+    );
+    const prior = await store.getIntentProjection(identity.intentId);
+    let aggregate;
+    try {
+      aggregate = JSON.parse(prior.providerAggregateJson);
+    } catch {
+      return false;
+    }
+    const resourceContract = providerContract.aggregateContracts.resources.find((entry) => (
+      entry.resourceType === resourceType
+    ));
+    if (resourceContract === undefined) return false;
+    for (const template of resourceContract.memberTemplates) {
+      const phaseState = template.memberStateContract.expectedStatesByPhase.find((entry) => (
+        entry.phase === 'normal-owner'
+      ));
+      const sourceOrdinal = phaseState?.dataSourceMutationOrdinal;
+      const stateKey = `${resourceType}|${template.slot}|${sourceOrdinal}`;
+      if (providerObservedMemberStates.has(stateKey)) continue;
+      const member = aggregate.ownedMembers.find((entry) => (
+        entry.memberBinding.slot === template.slot
+        && entry.memberBinding.ownerOrdinal === template.ownerOrdinal
+      ));
+      const sourceOperation = member?.operationStates.find((entry) => (
+        entry.mutationOrdinal === sourceOrdinal
+      ));
+      const readback = await reflectApply(
+        providerControlHubDispatchers.captureProviderMutationRoute,
+        providerControlHubDispatchers.receiver,
+        [closedRecord({
+          operation: 'read-provider-member-state',
+          runtimeQualification: args.runtimeQualification,
+          context: args.context,
+          sessionIntentQualification: args.sessionIntentQualification,
+          logicalResource: resourceType,
+          ownerSlot: template.slot,
+          mutationOrdinal: sourceOrdinal,
+          providerId: member?.providerId,
+        })],
+      );
+      const fileState = template.providerKind === 'storage-file';
+      const stateKeys = fileState
+        ? ['metadataDigest', 'permissionsDigest', 'presence', 'schemaVersion']
+        : ['dataDigest', 'permissionsDigest', 'presence', 'schemaVersion'];
+      const contentKey = fileState ? 'metadataDigest' : 'dataDigest';
+      if (
+        member === undefined
+        || member.bindingState !== 'bound'
+        || typeof member.providerId !== 'string'
+        || sourceOperation?.state !== 'reconciled'
+        || !frozenExact(readback, ['memberState'])
+        || !exactDataObject(readback.memberState, stateKeys)
+        || readback.memberState.schemaVersion !== (fileState
+          ? 'storage-file-metadata-state.v1' : 'tablesdb-row-state.v1')
+        || readback.memberState.presence !== 'present'
+        || readback.memberState[contentKey] !== sourceOperation.resultStateDigest
+        || !DIGEST.test(readback.memberState.permissionsDigest)
+      ) return false;
+      providerObservedMemberStates.set(
+        stateKey,
+        deepFreeze(safeCopy(readback.memberState)),
+      );
+    }
+    const lease = await store.getLease();
+    const operation = createdIntentOperation(prior, lease, args.context, resourceType);
+    const committed = await store.transact(operation);
+    if (committed.status !== 'PASS' || !same(committed.value, operation.nextLease)) {
+      return false;
+    }
+    if (!await advanceSessionLineageAfterSuccess(args, operation)) return false;
+  }
+  return true;
+}
+
 async function issueProviderMutation(args) {
   try {
+
     if (
       this !== PROVIDER_CONTROL_RECEIVER
       || !exactDataObject(args, GENERIC_ISSUE_KEYS)
       || !installedFor(args.runtimeQualification, args.context)
-      || !nominalToken(args.sessionIntentQualification)
+      || !await activeSessionLineage(args)
       || !nominalToken(args.observationQualification)
       || !Number.isSafeInteger(args.mutationOrdinal)
       || args.mutationOrdinal < 0
       || args.mutationOrdinal > 16
-      || !validRouteProjection(args.routeProjection)
+      || !validRouteProjection(
+        args.routeProjection,
+        routeClassForMutation(args.mutationOrdinal),
+      )
       || !validExpectedStateMapping(args.expectedStateMapping)
-    ) return blockProviderLifecycle();
+    ) {
+
+      return blockProviderLifecycle();
+    }
+
     const current = providerTupleRecord;
     if (
       current.state !== 'READY'
       || current.nextMutationOrdinal !== args.mutationOrdinal
       || current.providerOperationIssuedCount !== args.mutationOrdinal
       || current.providerOperationReconciledCount !== args.mutationOrdinal
-    ) return blockProviderLifecycle();
-    const reserving = replaceProviderTupleRecord(current, {
+    ) {
+
+      return blockProviderLifecycle();
+    }
+    let transitionTuple = replaceProviderTupleRecord(current, {
       ...current,
       state: 'GENERIC_DURABLE_RESERVING',
     });
-    if (reserving === null) return blockProviderLifecycle();
+    if (transitionTuple === null) return blockProviderLifecycle();
+
+    let providerId = null;
+    let providerCompositeIdentity = null;
+    if (PROVIDER_BOUND_ORDINALS.has(args.mutationOrdinal)) {
+      const target = memberTemplateForMutation(args.mutationOrdinal);
+      if (target === null) return blockProviderLifecycle();
+      const binding = reflectApply(
+        providerControlHubDispatchers.captureProviderMutationRoute,
+        providerControlHubDispatchers.receiver,
+        [closedRecord({
+          operation: 'read-provider-binding',
+          runtimeQualification: args.runtimeQualification,
+          context: args.context,
+          sessionIntentQualification: args.sessionIntentQualification,
+          mutationOrdinal: args.mutationOrdinal,
+          observationQualification: args.observationQualification,
+        })],
+      );
+      if (
+        !frozenExact(binding, ['providerId'])
+        || typeof binding.providerId !== 'string'
+        || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u.test(binding.providerId)
+        || !args.routeProjection.generatedIdBindings.some((entry) => (
+          entry.valueDigest === sha256Bytes(encoder.encode(binding.providerId))
+        ))
+      ) {
+
+        return blockProviderLifecycle();
+      }
+      providerId = binding.providerId;
+      providerCompositeIdentity = `${target.memberTemplate.bindingName}|${providerId}`;
+      if (
+        boundProviderIds.has(args.mutationOrdinal)
+        || boundCompositeProviderIds.has(providerCompositeIdentity)
+      ) return blockProviderLifecycle();
+    }
 
     const store = installedProviderControlRecord.store;
     const identity = intentIdentityForMutation(args.context, args.mutationOrdinal);
-    const prior = await store.getIntentProjection(identity.intentId);
-    const lease = await store.getLease();
-    if (providerTupleRecord !== reserving) return blockProviderLifecycle();
+    let prior = await store.getIntentProjection(identity.intentId);
+    let lease = await store.getLease();
+    if (providerTupleRecord !== transitionTuple) return blockProviderLifecycle();
+    if (providerId !== null) {
+      const bindingOperation = providerBoundIntentOperation(prior, lease, args, providerId);
+      const bindingCommitted = await store.transact(bindingOperation);
+      if (
+        providerTupleRecord !== transitionTuple
+        || bindingCommitted.status !== 'PASS'
+        || !same(bindingCommitted.value, bindingOperation.nextLease)
+        || !await advanceSessionLineageAfterSuccess(args, bindingOperation)
+      ) return blockProviderLifecycle();
+      prior = await store.getIntentProjection(identity.intentId);
+      lease = await store.getLease();
+      if (
+        !same(prior, bindingOperation.nextIntent)
+        || !same(lease, bindingOperation.nextLease)
+      ) return blockProviderLifecycle();
+      const boundTuple = replaceProviderTupleRecord(transitionTuple, {
+        ...transitionTuple,
+        providerBoundCount: transitionTuple.providerBoundCount + 1,
+      });
+      if (boundTuple === null) return blockProviderLifecycle();
+      transitionTuple = boundTuple;
+    }
+    const applicableBatches = PROVIDER_VALUE_BATCHES
+      .map((batch, batchIndex) => ({ batch, batchIndex }))
+      .filter(({ batch }) => batch.mutationOrdinal === args.mutationOrdinal);
+    for (const { batch, batchIndex } of applicableBatches) {
+
+      const valueReadback = reflectApply(
+        providerControlHubDispatchers.captureProviderMutationRoute,
+        providerControlHubDispatchers.receiver,
+        [closedRecord({
+          operation: 'read-provider-values',
+          runtimeQualification: args.runtimeQualification,
+          context: args.context,
+          sessionIntentQualification: args.sessionIntentQualification,
+          mutationOrdinal: args.mutationOrdinal,
+          observationQualification: args.observationQualification,
+          logicalResource: batch.resourceType,
+          batchIndex,
+        })],
+      );
+      if (!frozenExact(valueReadback, ['bindings'])) {
+
+        return blockProviderLifecycle();
+      }
+      const batchIdentity = intentIdentityForMutation(
+        args.context,
+        batch.resourceType === 'primary-project' ? 0 : 1,
+      );
+      const batchPrior = await store.getIntentProjection(batchIdentity.intentId);
+      const batchLease = await store.getLease();
+      const valueOperation = providerValuesBoundIntentOperation(
+        batchPrior,
+        batchLease,
+        args,
+        batch,
+        valueReadback.bindings,
+      );
+
+      const valueCommitted = await store.transact(valueOperation);
+      if (
+        providerTupleRecord !== transitionTuple
+        || valueCommitted.status !== 'PASS'
+        || !same(valueCommitted.value, valueOperation.nextLease)
+        || !await advanceSessionLineageAfterSuccess(args, valueOperation)
+      ) {
+
+        return blockProviderLifecycle();
+      }
+      const valuesTuple = replaceProviderTupleRecord(transitionTuple, {
+        ...transitionTuple,
+        providerValuesBoundBatchCount:
+          transitionTuple.providerValuesBoundBatchCount + 1,
+      });
+      if (valuesTuple === null) return blockProviderLifecycle();
+      transitionTuple = valuesTuple;
+    }
+    prior = await store.getIntentProjection(identity.intentId);
+    lease = await store.getLease();
     const operation = issuedIntentOperation(prior, lease, args);
+
     const committed = await store.transact(operation);
     if (
-      providerTupleRecord !== reserving
+      providerTupleRecord !== transitionTuple
       || committed.status !== 'PASS'
       || !same(committed.value, operation.nextLease)
     ) return blockProviderLifecycle();
+    if (!await advanceSessionLineageAfterSuccess(args, operation)) {
+      revokeSessionLineageWitness(args.sessionIntentQualification);
+      return blockProviderLifecycle();
+    }
 
-    const issuedTuple = replaceProviderTupleRecord(reserving, {
-      ...reserving,
+    const issuedTuple = replaceProviderTupleRecord(transitionTuple, {
+      ...transitionTuple,
       state: 'GENERIC_WRITE_ISSUED',
       nextMutationOrdinal: current.nextMutationOrdinal + 1,
-      providerBoundCount: current.providerBoundCount
-        + (PROVIDER_BOUND_ORDINALS.has(args.mutationOrdinal) ? 1 : 0),
-      providerValuesBoundBatchCount: current.providerValuesBoundBatchCount
-        + (VALUE_BATCH_INCREMENTS.get(args.mutationOrdinal) ?? 0),
       providerOperationIssuedCount: current.providerOperationIssuedCount + 1,
     });
     if (issuedTuple === null) return blockProviderLifecycle();
@@ -3092,6 +4690,7 @@ async function issueProviderMutation(args) {
       observationQualification: args.observationQualification,
       routeProjection: args.routeProjection,
       expectedStateMapping: args.expectedStateMapping,
+      providerId,
       tupleRecord: issuedTuple,
       durableSnapshotDigest: contentDigest(operation.snapshot),
     });
@@ -3099,12 +4698,19 @@ async function issueProviderMutation(args) {
     if (providerMutationIssueRecords.get(providerMutationIssue) !== writeIssued) {
       return blockProviderLifecycle();
     }
-    return result('PASS', closedRecord({ providerMutationIssue }));
-  } catch {
+    if (providerId !== null) {
+      boundProviderIds.set(args.mutationOrdinal, providerId);
+      boundCompositeProviderIds.add(providerCompositeIdentity);
+    }
+
+    return privatePass(closedRecord({ providerMutationIssue }));
+  } catch (error) {
+
     return blockProviderLifecycle();
   }
 }
 async function reconcileProviderMutation(args) {
+  let durableFailureArgs;
   try {
     if (
       this !== PROVIDER_CONTROL_RECEIVER
@@ -3137,16 +4743,148 @@ async function reconcileProviderMutation(args) {
       { ...released, state: 'RECONCILING' },
     );
     if (reconciling === null) return blockProviderLifecycle();
-    const unresolved = replaceWeakRecord(
+    durableFailureArgs = reconciling;
+    const store = installedProviderControlRecord.store;
+    const identity = intentIdentityForMutation(
+      reconciling.context,
+      reconciling.mutationOrdinal,
+    );
+    const prior = await store.getIntentProjection(identity.intentId);
+    const lease = await store.getLease();
+    if (providerMutationIssueRecords.get(args.providerMutationIssue) !== reconciling) {
+      return blockAfterDurableProviderMutation(reconciling);
+    }
+    const readbackIdentity = providerReadbackIdentity(
+      prior,
+      reconciling.mutationOrdinal,
+    );
+    if (readbackIdentity === null) return blockAfterDurableProviderMutation(reconciling);
+    let readback;
+    try {
+      readback = await reflectApply(
+        providerControlHubDispatchers.captureProviderMutationRoute,
+        providerControlHubDispatchers.receiver,
+        [closedRecord({
+          operation: 'read-provider-result',
+          runtimeQualification: args.runtimeQualification,
+          context: reconciling.context,
+          sessionIntentQualification: reconciling.sessionIntentQualification,
+          mutationOrdinal: reconciling.mutationOrdinal,
+          observationQualification: args.observationQualification,
+          ...readbackIdentity,
+        })],
+      );
+    } catch {
+      return blockAfterDurableProviderMutation(reconciling);
+    }
+    if (
+      !frozenExact(readback, [
+        'logicalResource', 'ownerSlot', 'providerKind', 'providerId',
+        'providerCompositeIdentity', 'memberState', 'observedResultState',
+      ])
+      || Object.keys(readbackIdentity).some((key) => readback[key] !== readbackIdentity[key])
+      || readback.observedResultState === null
+      || typeof readback.observedResultState !== 'object'
+      || Object.getPrototypeOf(readback.observedResultState) !== null
+      || !Object.isFrozen(readback.observedResultState)
+    ) return blockAfterDurableProviderMutation(reconciling);
+    const operation = reconciledIntentOperation(
+      prior,
+      lease,
+      reconciling,
+      readback,
+    );
+    const committed = await store.transact(operation);
+    if (
+      providerMutationIssueRecords.get(args.providerMutationIssue) !== reconciling
+      || committed.status !== 'PASS'
+      || !same(committed.value, operation.nextLease)
+    ) return blockAfterDurableProviderMutation(reconciling);
+    if (!await advanceSessionLineageAfterSuccess(reconciling, operation)) {
+      revokeSessionLineageWitness(reconciling.sessionIntentQualification);
+      return blockAfterDurableProviderMutation(reconciling);
+    }
+    const target = memberTemplateForMutation(reconciling.mutationOrdinal);
+    if (target === null) {
+      const resourceContract = providerContract.aggregateContracts.resources.find((entry) => (
+        entry.resourceType === identity.resourceType
+      ));
+      const templates = resourceContract?.memberTemplates.filter((entry) => (
+        entry.operations.some((operationState) => (
+          operationState.mutationOrdinal === reconciling.mutationOrdinal
+        ))
+      ));
+      if (templates?.length !== 1) return blockAfterDurableProviderMutation(reconciling);
+      providerObservedMemberStates.set(
+        `${identity.resourceType}|${templates[0].slot}|${reconciling.mutationOrdinal}`,
+        deepFreeze(safeCopy(readback.memberState)),
+      );
+    } else {
+      providerObservedMemberStates.set(
+        `${identity.resourceType}|${target.memberTemplate.slot}|${reconciling.mutationOrdinal}`,
+        deepFreeze(safeCopy(readback.memberState)),
+      );
+    }
+    if (
+      reconciling.mutationOrdinal === 16
+      && !await commitCreatedOwnerIntents(reconciling)
+    ) return blockAfterDurableProviderMutation(reconciling);
+    if (
+      args.releaseDisposition !== 'returned'
+      && !await commitCleanupDebt(reconciling)
+    ) return blockProviderLifecycle();
+    const finalGenericMutation = reconciling.mutationOrdinal === 16;
+    const projectId = finalGenericMutation ? boundProviderIds.get(6) : undefined;
+    if (finalGenericMutation && typeof projectId !== 'string') {
+      return blockAfterDurableProviderMutation(reconciling);
+    }
+    const reconciledTuple = replaceProviderTupleRecord(providerTupleRecord, {
+      ...providerTupleRecord,
+      state: finalGenericMutation ? 'GENERIC_COMPLETE' : 'READY',
+      providerOperationReconciledCount:
+        providerTupleRecord.providerOperationReconciledCount + 1,
+      ...(finalGenericMutation
+        ? { projectIdentityDigest: sha256Bytes(encoder.encode(projectId)) }
+        : {}),
+    });
+    if (reconciledTuple === null) return blockAfterDurableProviderMutation(reconciling);
+    const reconciliationQualification = makeToken();
+    if (CLOCK_RECONCILIATION_ORDINALS.includes(reconciling.mutationOrdinal)) {
+      if (mutationReconciliationQualifications.has(reconciling.mutationOrdinal)) {
+        return blockAfterDurableProviderMutation(reconciling);
+      }
+      const reconciliationRecord = Object.freeze({
+        state: 'ACTIVE',
+        runtimeQualification: args.runtimeQualification,
+        clock: null,
+        mutationOrdinal: reconciling.mutationOrdinal,
+      });
+      mutationReconciliationRecords.set(
+        reconciliationQualification,
+        reconciliationRecord,
+      );
+      mutationReconciliationQualifications.set(
+        reconciling.mutationOrdinal,
+        reconciliationQualification,
+      );
+    }
+    const reconciled = replaceWeakRecord(
       providerMutationIssueRecords,
       args.providerMutationIssue,
       reconciling,
-      { ...reconciling, state: 'UNRESOLVED' },
+      {
+        ...reconciling,
+        state: 'RECONCILED',
+        tupleRecord: reconciledTuple,
+        reconciliationQualification,
+      },
     );
-    if (unresolved === null) return blockProviderLifecycle();
-    return blockProviderLifecycle();
+    if (reconciled === null) return blockAfterDurableProviderMutation(reconciling);
+    return privatePass(closedRecord({ reconciliationQualification }));
   } catch {
-    return blockProviderLifecycle();
+    return durableFailureArgs === undefined
+      ? blockProviderLifecycle()
+      : blockAfterDurableProviderMutation(durableFailureArgs);
   }
 }
 
@@ -3159,7 +4897,7 @@ async function createShareBaselineProof(args) {
         'providerQualification', 'ownerSlot',
       ])
       || !installedFor(args.runtimeQualification, args.context)
-      || !nominalToken(args.sessionIntentQualification)
+      || !await activeSessionLineage(args)
       || !nominalToken(args.providerQualification)
     ) return blockProviderLifecycle();
     const qualification = providerQualificationRecords.get(args.providerQualification);
@@ -3170,6 +4908,10 @@ async function createShareBaselineProof(args) {
       || qualification.runtimeQualification !== args.runtimeQualification
       || qualification.context !== args.context
       || qualification.ownerSlot !== args.ownerSlot
+      || !frozenExact(qualification.expectedShareRow, [
+        'projectId', 'userId', 'userEmail', 'userName', 'role', 'canRun',
+        'sharedBy', 'permissions',
+      ])
       || pair === null
       || providerTupleRecord.nextMutationOrdinal !== pair.mutationOrdinal
     ) return blockProviderLifecycle();
@@ -3192,13 +4934,36 @@ async function createShareBaselineProof(args) {
       { ...reserving, state: 'BASELINE_READING' },
     );
     if (reading === null) return blockProviderLifecycle();
-    replaceWeakRecord(
+    const baselineReadback = await reflectApply(
+      providerControlHubDispatchers.captureProviderMutationRoute,
+      providerControlHubDispatchers.receiver,
+      [closedRecord({
+        operation: 'read-share-baseline',
+        runtimeQualification: args.runtimeQualification,
+        context: args.context,
+        sessionIntentQualification: args.sessionIntentQualification,
+        providerQualification: args.providerQualification,
+        ownerSlot: args.ownerSlot,
+        mutationOrdinal: pair.mutationOrdinal,
+        expectedShareRow: qualification.expectedShareRow,
+      })],
+    );
+    if (
+      !frozenExact(baselineReadback, ['baselineDigest'])
+      || !DIGEST.test(baselineReadback.baselineDigest)
+    ) return blockProviderLifecycle();
+    const qualified = replaceWeakRecord(
       shareBaselineProofRecords,
       baselineProof,
       reading,
-      { state: 'BLOCKED', runtimeQualification: args.runtimeQualification },
+      {
+        ...reading,
+        state: 'BASELINE_QUALIFIED',
+        baselineDigest: baselineReadback.baselineDigest,
+      },
     );
-    return blockProviderLifecycle();
+    if (qualified === null) return blockProviderLifecycle();
+    return privatePass(closedRecord({ baselineProof }));
   } catch {
     return blockProviderLifecycle();
   }
@@ -3210,11 +4975,11 @@ async function issueShareCreate(args) {
       this !== PROVIDER_CONTROL_RECEIVER
       || !exactDataObject(args, [
         'runtimeQualification', 'context', 'sessionIntentQualification',
-        'providerQualification', 'baselineProof', 'requestTuple',
+        'providerQualification', 'baselineProof', 'requestTupleSeed',
         'observationQualification', 'routeProjection',
       ])
       || !installedFor(args.runtimeQualification, args.context)
-      || !nominalToken(args.sessionIntentQualification)
+      || !await activeSessionLineage(args)
       || !nominalToken(args.providerQualification)
       || !nominalToken(args.baselineProof)
       || !nominalToken(args.observationQualification)
@@ -3229,6 +4994,62 @@ async function issueShareCreate(args) {
       || qualification.state !== 'ACTIVE'
       || qualification.runtimeQualification !== args.runtimeQualification
       || baseline.providerQualification !== args.providerQualification
+      || baseline.context !== args.context
+      || baseline.sessionIntentQualification !== args.sessionIntentQualification
+      || baseline.ownerSlot !== qualification.ownerSlot
+      || providerTupleRecord.state !== 'GENERIC_COMPLETE'
+      || providerTupleRecord.nextMutationOrdinal !== qualification.mutationOrdinal
+      || providerTupleRecord.providerValuesBoundBatchCount
+        !== (qualification.mutationOrdinal === 17 ? 11 : 12)
+      || !frozenExact(args.requestTupleSeed, [
+        'schemaVersion', 'ownerSlot', 'mutationOrdinal', 'requestInstanceDigest',
+        'projectIdentityDigest', 'targetIdentityDigest', 'tupleDigest',
+        'boundValuesDigest',
+      ])
+      || args.requestTupleSeed.schemaVersion !== 'verification-share-create-request.v1'
+      || args.requestTupleSeed.ownerSlot !== qualification.ownerSlot
+      || args.requestTupleSeed.mutationOrdinal !== qualification.mutationOrdinal
+      || args.requestTupleSeed.projectIdentityDigest !== qualification.projectIdentityDigest
+      || args.requestTupleSeed.targetIdentityDigest !== qualification.targetIdentityDigest
+      || args.requestTupleSeed.tupleDigest !== qualification.tupleDigest
+      || args.requestTupleSeed.boundValuesDigest !== qualification.boundValuesDigest
+      || !DIGEST.test(args.requestTupleSeed.requestInstanceDigest)
+    ) return blockProviderLifecycle();
+    const requestTuple = closedRecord({
+      ...args.requestTupleSeed,
+      baselineDigest: baseline.baselineDigest,
+    });
+    const consumedBaseline = replaceWeakRecord(
+      shareBaselineProofRecords,
+      args.baselineProof,
+      baseline,
+      { ...baseline, state: 'CONSUMED' },
+    );
+    if (consumedBaseline === null) return blockProviderLifecycle();
+    const durableCandidate = {
+      context: args.context,
+      ownerSlot: qualification.ownerSlot,
+      mutationOrdinal: qualification.mutationOrdinal,
+      requestTuple,
+      baselineDigest: baseline.baselineDigest,
+    };
+    const store = installedProviderControlRecord.store;
+    const shareIntentId = deterministicIntentId(args.context, 'primary-share');
+    const prior = await store.getIntentProjection(shareIntentId);
+    const lease = await store.getLease();
+    const operation = shareCreateIssuedIntentOperation(
+      prior,
+      lease,
+      durableCandidate,
+    );
+    const committed = await store.transact(operation);
+    if (
+      shareBaselineProofRecords.get(args.baselineProof) !== consumedBaseline
+      || committed.status !== 'PASS'
+      || !same(committed.value, operation.nextLease)
+      || !await advanceSessionLineageAfterSuccess(args, operation)
+      || !same(await store.getIntentProjection(shareIntentId), operation.nextIntent)
+      || !same(await store.getLease(), operation.nextLease)
     ) return blockProviderLifecycle();
     const shareIssue = makeToken();
     const issueRecord = Object.freeze({
@@ -3238,18 +5059,32 @@ async function issueShareCreate(args) {
       observationQualification: args.observationQualification,
       providerQualification: args.providerQualification,
       baselineProof: args.baselineProof,
-      requestTuple: args.requestTuple,
+      requestTuple,
       routeProjection: args.routeProjection,
+      context: args.context,
+      sessionIntentQualification: args.sessionIntentQualification,
+      mutationOrdinal: qualification.mutationOrdinal,
+      ownerSlot: qualification.ownerSlot,
+      baselineDigest: baseline.baselineDigest,
+      durableSnapshotDigest: contentDigest(operation.snapshot),
     });
     shareIssueRecords.set(shareIssue, issueRecord);
     if (shareIssueRecords.get(shareIssue) !== issueRecord) return blockProviderLifecycle();
-    return result('PASS', closedRecord({ shareIssue }));
+    const issuedTuple = replaceProviderTupleRecord(providerTupleRecord, {
+      ...providerTupleRecord,
+      state: 'SHARE_WRITE_ISSUED',
+      nextMutationOrdinal: providerTupleRecord.nextMutationOrdinal + 1,
+      providerCreateIssuedCount: providerTupleRecord.providerCreateIssuedCount + 1,
+    });
+    if (issuedTuple === null) return blockProviderLifecycle();
+    return privatePass(closedRecord({ shareIssue }));
   } catch {
     return blockProviderLifecycle();
   }
 }
 
 async function reconcileShareCreate(args) {
+  let durableFailureArgs;
   try {
     if (
       this !== PROVIDER_CONTROL_RECEIVER
@@ -3268,6 +5103,7 @@ async function reconcileShareCreate(args) {
       || current.state !== 'WRITE_ISSUED'
       || current.runtimeQualification !== args.runtimeQualification
       || current.observationQualification !== args.observationQualification
+      || providerTupleRecord.state !== 'SHARE_WRITE_ISSUED'
     ) return blockProviderLifecycle();
     const released = replaceWeakRecord(
       shareIssueRecords,
@@ -3283,15 +5119,105 @@ async function reconcileShareCreate(args) {
       { ...released, state: 'RECONCILING' },
     );
     if (reconciling === null) return blockProviderLifecycle();
-    replaceWeakRecord(
+    durableFailureArgs = current;
+    let readback;
+    try {
+      readback = await reflectApply(
+        providerControlHubDispatchers.captureProviderMutationRoute,
+        providerControlHubDispatchers.receiver,
+        [closedRecord({
+          operation: 'read-share-result',
+          runtimeQualification: args.runtimeQualification,
+          context: current.context,
+          sessionIntentQualification: current.sessionIntentQualification,
+          mutationOrdinal: current.mutationOrdinal,
+          observationQualification: args.observationQualification,
+        })],
+      );
+    } catch {
+      return blockAfterDurableProviderMutation(current);
+    }
+    if (
+      !frozenExact(readback, [
+        'discoveryProofDigest', 'memberState', 'providerId', 'resultStateDigest',
+      ])
+      || !DIGEST.test(readback.discoveryProofDigest)
+      || !DIGEST.test(readback.resultStateDigest)
+      || typeof readback.providerId !== 'string'
+      || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u.test(readback.providerId)
+      || shareProviderIds.has(readback.providerId)
+      || !frozenExact(readback.memberState, [
+        'dataDigest', 'permissionsDigest', 'presence', 'schemaVersion',
+      ])
+      || readback.memberState.schemaVersion !== 'tablesdb-row-state.v1'
+      || readback.memberState.presence !== 'present'
+      || !DIGEST.test(readback.memberState.dataDigest)
+      || !DIGEST.test(readback.memberState.permissionsDigest)
+      || readback.resultStateDigest !== contentDigest(readback.memberState)
+    ) return blockAfterDurableProviderMutation(current);
+    const store = installedProviderControlRecord.store;
+    const shareIntentId = deterministicIntentId(current.context, 'primary-share');
+    const prior = await store.getIntentProjection(shareIntentId);
+    const lease = await store.getLease();
+    const operation = shareIdDiscoveredIntentOperation(prior, lease, current, readback);
+    const committed = await store.transact(operation);
+    if (
+      shareIssueRecords.get(args.shareIssue) !== reconciling
+      || committed.status !== 'PASS'
+      || !same(committed.value, operation.nextLease)
+      || !await advanceSessionLineageAfterSuccess(current, operation)
+      || !same(await store.getIntentProjection(shareIntentId), operation.nextIntent)
+      || !same(await store.getLease(), operation.nextLease)
+    ) return blockAfterDurableProviderMutation(current);
+    if (current.mutationOrdinal === 18) {
+      const createdPrior = await store.getIntentProjection(shareIntentId);
+      const createdLease = await store.getLease();
+      const createdOperation = shareCreatedIntentOperation(
+        createdPrior,
+        createdLease,
+        current.context,
+      );
+      const createdCommit = await store.transact(createdOperation);
+      if (
+        shareIssueRecords.get(args.shareIssue) !== reconciling
+        || createdCommit.status !== 'PASS'
+        || !same(createdCommit.value, createdOperation.nextLease)
+        || !await advanceSessionLineageAfterSuccess(current, createdOperation)
+        || !same(await store.getIntentProjection(shareIntentId), createdOperation.nextIntent)
+        || !same(await store.getLease(), createdOperation.nextLease)
+      ) return blockAfterDurableProviderMutation(current);
+    }
+    if (
+      args.releaseDisposition !== 'returned'
+      && !await commitCleanupDebt(current)
+    ) return blockProviderLifecycle();
+    const reconciledTuple = replaceProviderTupleRecord(providerTupleRecord, {
+      ...providerTupleRecord,
+      state: current.mutationOrdinal === 18 ? 'PROVIDER_COMPLETE' : 'GENERIC_COMPLETE',
+      providerIdDiscoveredCount: providerTupleRecord.providerIdDiscoveredCount + 1,
+    });
+    if (reconciledTuple === null) return blockAfterDurableProviderMutation(current);
+    const reconciliationQualification = makeToken();
+    const reconciled = replaceWeakRecord(
       shareIssueRecords,
       args.shareIssue,
       reconciling,
-      { ...reconciling, state: 'UNRESOLVED' },
+      {
+        ...reconciling,
+        state: 'RECONCILED',
+        providerId: readback.providerId,
+        discoveryProofDigest: readback.discoveryProofDigest,
+        resultStateDigest: readback.resultStateDigest,
+        reconciliationQualification,
+      },
     );
-    return blockProviderLifecycle();
+    if (reconciled === null) return blockAfterDurableProviderMutation(current);
+    shareProviderIds.add(readback.providerId);
+    return privatePass(closedRecord({ reconciled: true, reconciliationQualification }));
   } catch {
-    return blockProviderLifecycle();
+    return durableFailureArgs === undefined
+      ? blockProviderLifecycle()
+      : blockAfterDurableProviderMutation(durableFailureArgs);
   }
 }
 
@@ -3355,12 +5281,17 @@ export function registerTestCloudProviderControlBootstrap() {
   providerControlBootstrapState = 'REGISTERING';
   providerControlHubDispatchers = Object.freeze({
     receiver: hub.bridgeReceiver,
+    authenticateSessionLineage: hub.authenticateSessionLineage,
     readAuthenticatedShareBindingDigests: hub.readAuthenticatedShareBindingDigests,
     authenticateShareIdentityFinalState: hub.authenticateShareIdentityFinalState,
+    captureProviderMutationRoute: hub.captureProviderMutationRoute,
   });
   if (
+    typeof providerControlHubDispatchers.authenticateSessionLineage !== 'function'
+    ||
     typeof providerControlHubDispatchers.readAuthenticatedShareBindingDigests !== 'function'
     || typeof providerControlHubDispatchers.authenticateShareIdentityFinalState !== 'function'
+    || typeof providerControlHubDispatchers.captureProviderMutationRoute !== 'function'
   ) return blockProviderControlBootstrap();
   try {
     const registrations = [

@@ -12,9 +12,9 @@ const SHA_A = '1'.repeat(40);
 const SHA_B = '2'.repeat(40);
 const SHA_C = '3'.repeat(40);
 const ENVIRONMENT_DIGEST =
-  'sha256:e83dac9cc615ccf37fd027683690edb2ff7332ac523d57130c1e86fa8617f302';
+  'sha256:02560e84745ed7b577b334a3412885f6a547b2a22f164f4978b255d3b35c0044';
 const PROVIDER_CONTRACT_DIGEST =
-  'sha256:eaa6c314b13daa4c56a75bfc29eb8b3c66b7315ad6f114475db4d5f9aee75cd8';
+  'sha256:47a1d778ca8b8cea333b10574ffbc2db488fd711c12a1c40faf9da5235e27184';
 
 function digest(value) {
   return `sha256:${createHash('sha256').update(value, 'utf8').digest('hex')}`;
@@ -238,7 +238,6 @@ test('accepts a Salmora brand asset only on the fixed public test origin', () =>
     nowEpochSeconds: 1_800_000_000,
     controllerArtifact: null,
   });
-
   assert.equal(result.status, 'PASS', result.diagnostics?.[0]?.code);
 });
 
@@ -250,6 +249,11 @@ test('rejects production, fixture, and placeholder browser targets', () => {
   ]) {
     const policy = buildBrowserRequestPolicy();
     policy.rows[0].finalUrl = finalUrl;
+    policy.digest = digest(canonicalJson({
+      schemaVersion: policy.schemaVersion,
+      timeoutMilliseconds: policy.timeoutMilliseconds,
+      rows: policy.rows,
+    }));
     const result = createAppwriteTestSetupBindings({
       controllerRevision: SHA_A,
       sourceRepositoryRevision: SHA_B,
@@ -261,6 +265,7 @@ test('rejects production, fixture, and placeholder browser targets', () => {
       controllerArtifact: null,
     });
     assert.equal(result.status, 'BLOCKED');
+    assert.equal(result.diagnostics[0].code, 'APPWRITE_TEST_BINDING_BROWSER_POLICY_INVALID');
   }
 });
 

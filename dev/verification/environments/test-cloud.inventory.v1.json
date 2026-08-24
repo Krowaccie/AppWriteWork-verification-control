@@ -1,7 +1,7 @@
 {
   "schemaVersion": "test-cloud-inventory.v1",
   "environmentClass": "appwrite-cloud-test",
-  "providerContractDigest": "sha256:eaa6c314b13daa4c56a75bfc29eb8b3c66b7315ad6f114475db4d5f9aee75cd8",
+  "providerContractDigest": "sha256:47a1d778ca8b8cea333b10574ffbc2db488fd711c12a1c40faf9da5235e27184",
   "sourceBranch": "main",
   "environment": {
     "endpoint": "https://fra.cloud.appwrite.io/v1",

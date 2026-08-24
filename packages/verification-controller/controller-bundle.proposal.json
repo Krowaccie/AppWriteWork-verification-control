@@ -246,6 +246,10 @@
       "sha256": "UNMATERIALIZED"
     },
     {
+      "path": "packages/verification-controller/src/test-cloud-cleanup-driver.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
       "path": "packages/verification-controller/src/test-cloud-contained-browser-scenario-adapter.mjs",
       "sha256": "UNMATERIALIZED"
     },
@@ -262,6 +266,10 @@
       "sha256": "UNMATERIALIZED"
     },
     {
+      "path": "packages/verification-controller/src/test-cloud-fixture-intent-producer.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
       "path": "packages/verification-controller/src/test-cloud-playwright-facade.mjs",
       "sha256": "UNMATERIALIZED"
     },
@@ -271,6 +279,10 @@
     },
     {
       "path": "packages/verification-controller/src/test-cloud-scenario-driver.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "packages/verification-controller/src/test-cloud-source-artifact-reader.mjs",
       "sha256": "UNMATERIALIZED"
     },
     {
@@ -327,6 +339,10 @@
     },
     {
       "path": "scripts/verification/controller-seed-materializer-v1.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "scripts/verification/controller-source-set-contract.mjs",
       "sha256": "UNMATERIALIZED"
     },
     {
@@ -423,6 +439,10 @@
     },
     {
       "path": "scripts/verification/test-cloud-provider-control-store.mjs",
+      "sha256": "UNMATERIALIZED"
+    },
+    {
+      "path": "scripts/verification/test-cloud-recovery.mjs",
       "sha256": "UNMATERIALIZED"
     },
     {

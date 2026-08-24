@@ -1,0 +1,96 @@
+# Local-only
+.local/
+.serena/
+.tempograph/
+.superpowers/
+
+# Secrets / env (commit only *.example)
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Node / frontend build artifacts
+node_modules/
+.next/
+out/
+dist/
+build/
+.turbo/
+.cache/
+coverage/
+
+# Python artifacts
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# Appwrite deployment packages
+*.tar.gz
+*.tar
+
+# Function-local shared_py copies (canonical: src/shared_py/)
+src/functions/*/shared_py/
+
+# Function-local dependency vendor trees are unsupported; use requirements.txt
+src/functions/*/lib/
+
+# Temporary folders
+.package-temp/
+dev/.tmp/
+dev/.ci-logs/
+tmp-*/
+tmp-test-analysis/
+mcp/chatgpt-ops/.railway-workdir/
+
+# Generated reports
+diagnostic-report.json
+report.json
+test-results.json
+
+.verification/
+!packages/verification-controller/controller-repository-seed/a1-oci/workspace-parent/artifacts/.verification/
+!packages/verification-controller/controller-repository-seed/a1-oci/workspace-parent/artifacts/.verification/artifacts/
+!packages/verification-controller/controller-repository-seed/a1-oci/workspace-parent/artifacts/.verification/artifacts/.controller-owned
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.cursor/
+
+# Claude Code local settings (may contain tokens in allowed commands)
+.claude/settings.json
+.claude/settings.local.json
+
+# Local handoff inventory for domain/Appwrite productization
+docs/plans/codex/artifacts/2026-04-14-domain-appwrite-productization/handoff-inventory.local.md
+docs/environments/appwrite-inventory.local.md
+
+# Raw Codex execution artifacts stay local by default. Commit selected summaries
+# to the plan, docs/audits/, or the relevant product docs instead.
+docs/plans/codex/artifacts/**
+!docs/plans/codex/artifacts/
+!docs/plans/codex/artifacts/README.md
+
+# Flowise flowData dumps (large, use flowise-env/ exports instead)
+dev/tools/ssq-flowdata-*.json
+
+# Misc artifacts
+apps/functions/nul
+apps/web/nul
+nul
+
+# Prevent stray JSON dumps in root (keep project config)
+/*.json
+!package.json
+!package-lock.json
+!appwrite.config.json
+!appwrite.config.json.template
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
