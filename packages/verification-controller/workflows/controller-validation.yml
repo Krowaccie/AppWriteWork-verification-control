@@ -140,9 +140,10 @@ jobs:
 
           const PINNED_ACTION = /^[^\s@]+@[0-9a-f]{40}$/u;
           const PINNED_DOCKER = /^docker:\/\/[a-z0-9][a-z0-9._/:+-]*@sha256:[0-9a-f]{64}$/u;
-          const LOCAL_ACTION = /^\.(?:\/)(?!.*(?:^|\/)\.\.(?:\/|$))(?!.*\$\{\{)[A-Za-z0-9._/-]+$/u;
+          const LOCAL_ACTION = /^\.(?:\/)(?!.*(?:^|\/)\.\.(?:\/|$))[A-Za-z0-9._/-]+$/u;
           const PROTECTED_ENVIRONMENTS = new Set(['appwrite-test', 'controller-promotion']);
           const SENSITIVE_KEYS = new Set(['environment', 'jobs', 'name', 'on', 'steps', 'uses']);
+          const EXPRESSION_OPEN = String.fromCodePoint(36, 123, 123);
 
           function blocked(message) {
             throw new Error(`BLOCKED WORKFLOW_GOVERNANCE_INVALID: ${message}`);
@@ -345,7 +346,7 @@ jobs:
               if (!isRecord(job)) blocked('job must be a mapping');
               if (!Object.hasOwn(job, 'environment')) continue;
               const name = environmentName(job.environment);
-              if (name.includes('${{')) blocked('dynamic environment names are forbidden');
+              if (name.includes(EXPRESSION_OPEN)) blocked('dynamic environment names are forbidden');
               const normalized = name.toLowerCase();
               if (PROTECTED_ENVIRONMENTS.has(normalized)) {
                 if (name !== normalized) blocked('protected environment name must use exact case');
