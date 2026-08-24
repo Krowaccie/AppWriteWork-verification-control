@@ -1,11 +1,23 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 
 const workflowPath = 'packages/verification-controller/workflows/recover-appwrite-test.yml';
+const repositoryRoot = fileURLToPath(new URL('../../../', import.meta.url));
 const REVIEWED_WORKFLOW_BYTES = 8164;
 const REVIEWED_WORKFLOW_SHA256 = '40147edb5d53ba43f815090f07bfb47840695911b13b91aa9ed31a37cfd34178';
+
+test('recovery workflow resolves to exact LF checkout policy', () => {
+  const attribute = execFileSync(
+    'git',
+    ['check-attr', 'eol', '--', workflowPath],
+    { cwd: repositoryRoot, encoding: 'utf8' },
+  ).trim();
+  assert.equal(attribute, `${workflowPath}: eol: lf`);
+});
 
 function indentedBlock(lines, exactHeader, indent) {
   const header = `${' '.repeat(indent)}${exactHeader}:`;

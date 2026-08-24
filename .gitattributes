@@ -12,8 +12,10 @@ src/functions/verification-runner-py/provider-contract/test-cloud.provider-contr
 src/functions/verification-runner-py/requirements.txt text eol=lf
 dev/verification/fixtures/*.corpus.json text eol=lf
 dev/verification/proposals/a1-supervisor-proposal.v1.json text eol=lf
+.github/workflows/*.yml text eol=lf
 dev/verification/**/*.json text eol=lf
 packages/verification-controller/**/*.json text eol=lf
 packages/verification-controller/**/*.mjs text eol=lf
 packages/verification-controller/controller-repository-seed/** text eol=lf
+packages/verification-controller/workflows/*.yml text eol=lf
 scripts/**/*.mjs text eol=lf
