@@ -300,6 +300,80 @@ function safeEmptyFixture() {
   return Object.freeze({ lease, retained, rows: Object.freeze(rows) });
 }
 
+function expiredActivePlannedFixture() {
+  const rows = [];
+  let head = GENESIS_LEDGER_DIGEST;
+  let leaseVersion = 0;
+  const append = (transition, snapshot = null) => {
+    const event = {
+      schemaVersion: 'verification-audit-event.v1',
+      previousLedgerDigest: head,
+      runId: RUN_ID,
+      leaseVersionBefore: leaseVersion,
+      leaseVersionAfter: leaseVersion + 1,
+      transition,
+      intentId: snapshot?.intentId ?? null,
+      intentProjectionDigest: snapshot === null ? null : digest(snapshot),
+    };
+    head = digest(event);
+    leaseVersion += 1;
+    rows.push({
+      tableId: inventory.control.auditTableId,
+      rowId: contentDigestToRowId(head),
+      data: event,
+    });
+    if (snapshot !== null) {
+      rows.push({
+        tableId: inventory.control.intentTableId,
+        rowId: contentDigestToRowId(digest(snapshot)),
+        data: snapshot,
+      });
+    }
+  };
+  append('lease.acquire');
+  const planned = Object.freeze({
+    schemaVersion: 'verification-intent-snapshot.v1',
+    intentId: textDigest(`${ENVIRONMENT_DIGEST}|${RUN_ID}|primary-execution|planned`).slice(7),
+    runId: RUN_ID,
+    environmentDigest: ENVIRONMENT_DIGEST,
+    resourceType: 'primary-execution',
+    resourceId: 'retained-execution',
+    providerResourceIds: Object.freeze([]),
+    ownerMarker: `verification-owner.v1:sha256:${'4'.repeat(64)}`,
+    dependencyOrder: 50,
+    lifecycleClass: 'provider-retained-observation',
+    state: 'planned',
+    intentVersion: 1,
+    observationDigest: null,
+    retentionExpiresAt: null,
+    createdAt: '2026-07-20T09:00:03.000Z',
+    updatedAt: '2026-07-20T09:00:03.000Z',
+  });
+  append('observation.planned', planned);
+  append('lease.close');
+  append('lease.acquire');
+  rows.push({
+    tableId: inventory.control.intentTableId,
+    rowId: intentIdToRowId(planned.intentId),
+    data: planned,
+  });
+  const lease = Object.freeze({
+    leaseRowId: inventory.control.leaseRowId,
+    leaseVersion,
+    state: 'active',
+    ownerRunId: RUN_ID,
+    ownerWorkflowRunId: SOURCE_RUN_ID,
+    environmentDigest: ENVIRONMENT_DIGEST,
+    acquiredAt: '2026-07-20T10:00:00.000Z',
+    renewedAt: '2026-07-20T10:00:00.000Z',
+    expiresAt: '2026-07-20T11:00:00.000Z',
+    ledgerDigest: head,
+    leaseTokenDigest: `sha256:${'e'.repeat(64)}`,
+    cleanupDebt: false,
+  });
+  return Object.freeze({ lease, planned, rows: Object.freeze(rows) });
+}
+
 function recoveryContextAndClients(fetch) {
   const handle = recoveryHandle();
   const context = createTestRecoveryEnvironmentContext({
@@ -800,10 +874,91 @@ test('CLI runs lexical recovery against authentic bindings and provider safe-emp
     stderr: Object.freeze({ write(value) { stderr.push(value); } }),
     stdout: Object.freeze({ write(value) { stdout.push(value); } }),
   }));
-  assert.equal(exitCode, 0);
+  assert.equal(exitCode, 0, stderr.join(''));
   assert.deepEqual(stdout, ['PASS\n']);
   assert.deepEqual(stderr, []);
   const leaseKey = `${inventory.control.leaseTableId}\0${inventory.control.leaseRowId}`;
   assert.equal(fetchImpl.rows.get(leaseKey).state, 'idle');
   assert.equal(fetchImpl.rows.get(leaseKey).cleanupDebt, false);
+});
+
+test('CLI atomically admits one exact expired active lease before existing recovery', async () => {
+  const bindingDirectory = path.resolve('recovery-bindings');
+  const fixture = expiredActivePlannedFixture();
+  const fetchImpl = inMemoryRecoveryProvider(fixture);
+  const intentRowsBefore = [...fetchImpl.rows]
+    .filter(([key]) => key.startsWith(`${inventory.control.intentTableId}\0`))
+    .map(([key, value]) => [key, structuredClone(value)]);
+  const stdout = [];
+  const stderr = [];
+  const exitCode = await main(hostedArgv(bindingDirectory), Object.freeze({
+    bindingDirectoryIo: bindingDirectoryIo(bindingDirectory),
+    clock: Object.freeze({ nowEpochSeconds: () => RECOVERY_NOW }),
+    environment: recoveryEnvironment(),
+    fetchImpl,
+    stderr: Object.freeze({ write(value) { stderr.push(value); } }),
+    stdout: Object.freeze({ write(value) { stdout.push(value); } }),
+  }));
+  assert.equal(exitCode, 0, stderr.join(''));
+  assert.deepEqual(stdout, ['PASS\n']);
+  assert.deepEqual(stderr, []);
+  const leaseKey = `${inventory.control.leaseTableId}\0${inventory.control.leaseRowId}`;
+  const lease = fetchImpl.rows.get(leaseKey);
+  assert.equal(lease.state, 'idle');
+  assert.equal(lease.cleanupDebt, false);
+  assert.equal(lease.leaseVersion, fixture.lease.leaseVersion + 2);
+  const intentRowsAfter = [...fetchImpl.rows]
+    .filter(([key]) => key.startsWith(`${inventory.control.intentTableId}\0`))
+    .map(([key, value]) => [key, structuredClone(value)]);
+  assert.deepEqual(intentRowsAfter, intentRowsBefore);
+  const operationCalls = fetchImpl.calls.filter(({ method, path: requestPath }) => (
+    method === 'POST' && /\/tablesdb\/transactions\/[^/]+\/operations$/u.test(requestPath)
+  ));
+  assert.equal(operationCalls.length, 2);
+  assert.deepEqual(
+    operationCalls.map(({ body }) => JSON.parse(body).operations.map(({ action, tableId }) => (
+      [action, tableId]
+    ))),
+    [
+      [
+        ['create', inventory.control.auditTableId],
+        ['increment', inventory.control.leaseTableId],
+        ['update', inventory.control.leaseTableId],
+      ],
+      [
+        ['create', inventory.control.auditTableId],
+        ['increment', inventory.control.leaseTableId],
+        ['update', inventory.control.leaseTableId],
+      ],
+    ],
+  );
+  assert.equal(fetchImpl.calls.some(({ path: requestPath }) => (
+    /\/users\/|\/storage\/|\/functions\//u.test(requestPath)
+  )), false);
+});
+
+test('CLI rejects a matching active lease that has not expired', async () => {
+  const bindingDirectory = path.resolve('recovery-bindings');
+  const fixture = expiredActivePlannedFixture();
+  const fetchImpl = inMemoryRecoveryProvider({
+    ...fixture,
+    lease: Object.freeze({
+      ...fixture.lease,
+      expiresAt: '2027-07-20T11:00:00.000Z',
+    }),
+  });
+  const stderr = [];
+  const exitCode = await main(hostedArgv(bindingDirectory), Object.freeze({
+    bindingDirectoryIo: bindingDirectoryIo(bindingDirectory),
+    clock: Object.freeze({ nowEpochSeconds: () => RECOVERY_NOW }),
+    environment: recoveryEnvironment(),
+    fetchImpl,
+    stderr: Object.freeze({ write(value) { stderr.push(value); } }),
+    stdout: Object.freeze({ write() {} }),
+  }));
+  assert.equal(exitCode, 2);
+  assert.deepEqual(stderr, ['BLOCKED RECOVERY_SOURCE_BINDING_INVALID\n']);
+  assert.equal(fetchImpl.calls.some(({ method, path: requestPath }) => (
+    method === 'POST' && requestPath === '/tablesdb/transactions'
+  )), false);
 });
