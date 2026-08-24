@@ -19,6 +19,15 @@ release, or rollback execution.
   templates remain separate and inactive.
 - `Verify Main` remains credential-free. Pull requests run only local verification; `push` to `main` and `workflow_dispatch` may publish only `verification-artifacts-<40-character-revision>` through the protected action at `eeaaaf7619bdac124101cfb1d8c628e8447d83be` and still receive no controller, Appwrite, release, or browser credential.
 
+The source workflow is also materialized in the controller seed so the
+controller can validate its reviewed bytes. Its `verify` job is admitted only
+when `github.repository == 'Krowaccie/AppWriteWork'`; the copied workflow must
+therefore skip in the controller repository rather than attempt to install or
+test the application there. GitHub still resolves every referenced action
+before evaluating the job condition, so every source-workflow action retained
+in the controller seed remains full-SHA pinned and present in the controller's
+selected Actions allowlist.
+
 The controller repository must have a default-deny ruleset, CODEOWNERS approval for controller code, schemas, workflows, policies, and the lockfile, required reviewers, prevent self-review, required status checks, signed or otherwise policy-approved commits, and deletion/force-push protection. Record repository ID, workflow IDs, ruleset IDs, CODEOWNERS digest, and effective policy readback.
 
 ## Deterministic source-to-controller promotion boundary
