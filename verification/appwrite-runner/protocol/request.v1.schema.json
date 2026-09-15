@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "verification-runner-request.v1",
+  "x-cleanupProtocolDigest": "sha256:358e456b64b7292e7c311f6451a10cd4038ed53d3a5f39ba9054ca37a72b3967",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["protocolVersion", "scenarioId", "runId", "environmentDigest", "leaseToken", "primaryExecutionRetentionMaxSeconds", "parameters"],
+  "properties": {
+    "protocolVersion": { "const": "verification-runner.v1" },
+    "scenarioId": { "enum": ["health", "environment.readback", "resource.read", "resource.cleanup_preflight_step", "resource.cleanup_step", "resource.cleanup_proof_step", "resource.cleanup", "worker.invoke_no_cost"] },
+    "runId": { "type": "string", "pattern": "^verify-[0-9a-f]{12}-[1-9][0-9]*-[1-9][0-9]*$" },
+    "environmentDigest": { "$ref": "#/$defs/digest" },
+    "leaseToken": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43,128}$" },
+    "primaryExecutionRetentionMaxSeconds": { "type": "integer", "minimum": 1, "maximum": 86400 },
+    "parameters": {},
+    "cleanupFence": { "$ref": "#/$defs/cleanupFence" }
+  },
+  "$defs": {
+    "digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "nullableDigest": { "oneOf": [{ "$ref": "#/$defs/digest" }, { "type": "null" }] },
+    "cleanupFence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "leaseVersion", "ledgerDigest", "intentId", "intentVersion", "intentProjectionDigest", "providerContractDigest", "providerAggregateDigest", "phase", "phaseCursor", "phaseStepCount", "priorPhaseDigest", "cleanupCursor", "cleanupProgressDigest", "cleanupProofDigest", "cleanupRunnerExecutionPlanDigest", "cleanupRunnerExecutionCursor", "cleanupRunnerExecutionRecordDigest"],
+      "properties": {
+        "schemaVersion": { "const": "test-cloud-cleanup-fence.v1" },
+        "leaseVersion": { "type": "integer", "minimum": 1 },
+        "ledgerDigest": { "$ref": "#/$defs/digest" },
+        "intentId": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "intentVersion": { "type": "integer", "minimum": 1 },
+        "intentProjectionDigest": { "$ref": "#/$defs/digest" },
+        "providerContractDigest": { "$ref": "#/$defs/digest" },
+        "providerAggregateDigest": { "$ref": "#/$defs/digest" },
+        "phase": { "enum": ["preflight", "cleanup", "proof", "terminal"] },
+        "phaseCursor": { "type": "integer", "minimum": 0, "maximum": 19 },
+        "phaseStepCount": { "type": "integer", "minimum": 1, "maximum": 19 },
+        "priorPhaseDigest": { "$ref": "#/$defs/nullableDigest" },
+        "cleanupCursor": { "type": "integer", "minimum": 0, "maximum": 16 },
+        "cleanupProgressDigest": { "$ref": "#/$defs/nullableDigest" },
+        "cleanupProofDigest": { "$ref": "#/$defs/nullableDigest" },
+        "cleanupRunnerExecutionPlanDigest": { "$ref": "#/$defs/digest" },
+        "cleanupRunnerExecutionCursor": { "type": "integer", "minimum": 0, "maximum": 109 },
+        "cleanupRunnerExecutionRecordDigest": { "$ref": "#/$defs/nullableDigest" }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "scenarioId": { "const": "health" } } },
+      "then": { "properties": { "parameters": { "$ref": "verification-runner-scenarios.v1#/$defs/health" } } }
+    },
+    {
+      "if": { "properties": { "scenarioId": { "const": "environment.readback" } } },
+      "then": { "properties": { "parameters": { "$ref": "verification-runner-scenarios.v1#/$defs/environment.readback" } } }
+    },
+    {
+      "if": { "properties": { "scenarioId": { "const": "resource.read" } } },
+      "then": { "properties": { "parameters": { "$ref": "verification-runner-scenarios.v1#/$defs/resource.read" } } }
+    },
+    {
+      "if": { "properties": { "scenarioId": { "const": "resource.cleanup_preflight_step" } } },
+      "then": { "properties": { "parameters": { "$ref": "verification-runner-scenarios.v1#/$defs/resource.cleanup_preflight_step" } } }
+    },
+    {
+      "if": { "properties": { "scenarioId": { "const": "resource.cleanup_step" } } },
+      "then": { "properties": { "parameters": { "$ref": "verification-runner-scenarios.v1#/$defs/resource.cleanup_step" } } }
+    },
+    {
+      "if": { "properties": { "scenarioId": { "const": "resource.cleanup_proof_step" } } },
+      "then": { "properties": { "parameters": { "$ref": "verification-runner-scenarios.v1#/$defs/resource.cleanup_proof_step" } } }
+    },
+    {
+      "if": { "properties": { "scenarioId": { "const": "resource.cleanup" } } },
+      "then": { "properties": { "parameters": { "$ref": "verification-runner-scenarios.v1#/$defs/resource.cleanup" } } }
+    },
+    {
+      "if": { "properties": { "scenarioId": { "const": "worker.invoke_no_cost" } } },
+      "then": { "properties": { "parameters": { "$ref": "verification-runner-scenarios.v1#/$defs/worker.invoke_no_cost" } } }
+    },
+    {
+      "if": {
+        "properties": {
+          "scenarioId": {
+            "enum": ["resource.cleanup_preflight_step", "resource.cleanup_step", "resource.cleanup_proof_step", "resource.cleanup"]
+          }
+        }
+      },
+      "then": { "required": ["cleanupFence"] },
+      "else": { "not": { "required": ["cleanupFence"] } }
+    }
+  ]
+}

@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "verification-runner-scenarios.v1",
+  "x-cleanupProtocolDigest": "sha256:358e456b64b7292e7c311f6451a10cd4038ed53d3a5f39ba9054ca37a72b3967",
+  "type": "object",
+  "additionalProperties": false,
+  "$defs": {
+    "health": { "type": "object", "additionalProperties": false, "required": [], "properties": {}, "x-timeoutSeconds": 5 },
+    "environment.readback": { "type": "object", "additionalProperties": false, "required": [], "properties": {}, "x-timeoutSeconds": 5 },
+    "resource.read": {
+      "type": "object", "additionalProperties": false, "required": ["logicalResource"],
+      "properties": { "logicalResource": { "enum": ["primary-project", "primary-graph", "primary-share", "primary-execution"] } },
+      "x-timeoutSeconds": 10
+    },
+    "resource.cleanup_preflight_step": {
+      "type": "object", "additionalProperties": false, "required": ["logicalResource"],
+      "properties": { "logicalResource": { "enum": ["primary-share", "primary-graph", "primary-project"] } },
+      "x-timeoutSeconds": 10
+    },
+    "resource.cleanup_step": {
+      "type": "object", "additionalProperties": false, "required": ["logicalResource"],
+      "properties": { "logicalResource": { "enum": ["primary-share", "primary-graph", "primary-project"] } },
+      "x-timeoutSeconds": 15
+    },
+    "resource.cleanup_proof_step": {
+      "type": "object", "additionalProperties": false, "required": ["logicalResource"],
+      "properties": { "logicalResource": { "enum": ["primary-share", "primary-graph", "primary-project"] } },
+      "x-timeoutSeconds": 10
+    },
+    "resource.cleanup": {
+      "type": "object", "additionalProperties": false, "required": ["logicalResource"],
+      "properties": { "logicalResource": { "enum": ["primary-share", "primary-graph", "primary-project"] } },
+      "x-timeoutSeconds": 15
+    },
+    "worker.invoke_no_cost": {
+      "type": "object", "additionalProperties": false, "required": ["logicalWorkflow", "inputProfile"],
+      "properties": {
+        "logicalWorkflow": { "const": "hello-world-no-cost" },
+        "inputProfile": { "const": "verification-minimal" }
+      },
+      "x-timeoutSeconds": 20
+    }
+  }
+}
