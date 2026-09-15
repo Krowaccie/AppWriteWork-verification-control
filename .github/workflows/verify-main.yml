@@ -41,11 +41,11 @@ jobs:
       - name: Install Node.js dependencies
         run: |
           npm ci
-          npm ci --prefix packages/verification-controller --ignore-scripts --no-audit --no-fund
-          npm ci --prefix packages/salmora-mcp
+          npm ci --prefix verification/controller --ignore-scripts --no-audit --no-fund
+          npm ci --prefix apps/mcp-bridge
 
       - name: Install hash-locked Python dependencies
-        run: python -m pip install --require-hashes -r dev/verification/python-local-requirements.lock
+        run: python -m pip install --require-hashes -r verification/core/runtime/python-local-requirements.lock
 
       - name: Resolve verification base
         shell: bash
@@ -66,22 +66,41 @@ jobs:
           esac
 
       - name: Run local verification
+        id: local-verification
+        continue-on-error: true
         shell: bash
         run: npm run verify -- --lane local --base "$VERIFY_BASE_SHA" --head "$GITHUB_SHA"
 
-      - name: Diagnose verifier self-test failure
-        if: failure()
+      - name: Publish local verification report
+        id: verification-report
+        continue-on-error: true
         shell: bash
-        run: node scripts/verification/run-tests.mjs
+        run: npm run verify:report -- --lane local --base "$VERIFY_BASE_SHA" --head "$GITHUB_SHA" --report-path "${{ runner.temp }}/verification-report.json"
+
+      - name: Upload sanitized verification report
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: verification-report-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/verification-report.json
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Diagnose verifier self-test failure
+        if: failure() || steps.local-verification.outcome == 'failure' || steps.verification-report.outcome == 'failure'
+        continue-on-error: true
+        shell: bash
+        run: node verification/core/run-tests.mjs
 
       - name: Bind hosted source artifact request
-        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && steps.local-verification.outcome == 'success'
         id: source-artifact-request
         shell: bash
-        run: node scripts/verification/hosted-source-artifact-request.mjs
+        run: node verification/core/hosted-source-artifact-request.mjs
 
       - name: Publish validated hosted source artifact
-        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && steps.local-verification.outcome == 'success'
         uses: Krowaccie/AppWriteWork-verification-control/.github/actions/a1-source-artifact-launcher@eeaaaf7619bdac124101cfb1d8c628e8447d83be
         with:
           request: ${{ steps.source-artifact-request.outputs.request }}

@@ -51,14 +51,14 @@ jobs:
             CONTROLLER_ARTIFACT_READ_TOKEN="$CONTROLLER_ARTIFACT_READ_TOKEN" \
             node --input-type=module <<'NODE'
           import { appendFileSync } from 'node:fs';
-          import { verifyGithubControllerArtifact } from './packages/verification-controller/src/github-controller-artifact-verifier.mjs';
+          import { verifyGithubControllerArtifact } from './verification/controller/src/github-controller-artifact-verifier.mjs';
 
           const proof = await verifyGithubControllerArtifact({
             artifactId: process.env.TRUSTED_CONTROLLER_ARTIFACT_ID,
             authorization: process.env.CONTROLLER_ARTIFACT_READ_TOKEN,
             bundleDigest: process.env.TRUSTED_CONTROLLER_BUNDLE_DIGEST,
             repository: process.env.GITHUB_REPOSITORY,
-            requiredEntrypoint: 'packages/verification-controller/workflows/production-readonly.yml',
+            requiredEntrypoint: 'verification/controller/workflows/production-readonly.yml',
             runtimeSha: process.env.GITHUB_SHA,
             trustedSha: process.env.TRUSTED_CONTROLLER_SHA,
           });
@@ -122,7 +122,7 @@ jobs:
             TRUSTED_CONTROLLER_ARTIFACT_ID="$TRUSTED_CONTROLLER_ARTIFACT_ID" \
             TRUSTED_CONTROLLER_BUNDLE_DIGEST="$TRUSTED_CONTROLLER_BUNDLE_DIGEST" \
             node --input-type=module <<'NODE'
-          import { reattestLocalControllerArtifact } from './packages/verification-controller/src/github-controller-artifact-verifier.mjs';
+          import { reattestLocalControllerArtifact } from './verification/controller/src/github-controller-artifact-verifier.mjs';
           const proof = await reattestLocalControllerArtifact({
             artifactId: process.env.PROOF_ARTIFACT_ID,
             bundleDigest: process.env.PROOF_BUNDLE_DIGEST,
@@ -130,7 +130,7 @@ jobs:
             proofSha: process.env.PROOF_SHA,
             proofStatus: process.env.PROOF_STATUS,
             repository: process.env.GITHUB_REPOSITORY,
-            requiredEntrypoint: 'packages/verification-controller/src/create-verified-release-record-handoff.mjs',
+            requiredEntrypoint: 'verification/controller/src/create-verified-release-record-handoff.mjs',
             runtimeSha: process.env.GITHUB_SHA,
             trustedArtifactId: process.env.TRUSTED_CONTROLLER_ARTIFACT_ID,
             trustedBundleDigest: process.env.TRUSTED_CONTROLLER_BUNDLE_DIGEST,
@@ -173,7 +173,7 @@ jobs:
             PROOF_ARTIFACT_ID="$PROOF_ARTIFACT_ID" \
             PROOF_BUNDLE_DIGEST="$PROOF_BUNDLE_DIGEST" \
             GITHUB_TOKEN="$GITHUB_TOKEN" \
-            node packages/verification-controller/src/create-verified-release-record-handoff.mjs --artifact-id "$TRUSTED_PRODUCTION_RELEASE_RECORD_ARTIFACT_ID" --output verified-release-record-handoff.v1.json
+            node verification/controller/src/create-verified-release-record-handoff.mjs --artifact-id "$TRUSTED_PRODUCTION_RELEASE_RECORD_ARTIFACT_ID" --output verified-release-record-handoff.v1.json
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         id: release-record-handoff-artifact
         with:
@@ -228,7 +228,7 @@ jobs:
             TRUSTED_CONTROLLER_ARTIFACT_ID="$TRUSTED_CONTROLLER_ARTIFACT_ID" \
             TRUSTED_CONTROLLER_BUNDLE_DIGEST="$TRUSTED_CONTROLLER_BUNDLE_DIGEST" \
             node --input-type=module <<'NODE'
-          import { reattestLocalControllerArtifact } from './packages/verification-controller/src/github-controller-artifact-verifier.mjs';
+          import { reattestLocalControllerArtifact } from './verification/controller/src/github-controller-artifact-verifier.mjs';
           const proof = await reattestLocalControllerArtifact({
             artifactId: process.env.PROOF_ARTIFACT_ID,
             bundleDigest: process.env.PROOF_BUNDLE_DIGEST,
@@ -236,7 +236,7 @@ jobs:
             proofSha: process.env.PROOF_SHA,
             proofStatus: process.env.PROOF_STATUS,
             repository: process.env.GITHUB_REPOSITORY,
-            requiredEntrypoint: 'packages/verification-controller/src/create-production-browser-policy.mjs',
+            requiredEntrypoint: 'verification/controller/src/create-production-browser-policy.mjs',
             runtimeSha: process.env.GITHUB_SHA,
             trustedArtifactId: process.env.TRUSTED_CONTROLLER_ARTIFACT_ID,
             trustedBundleDigest: process.env.TRUSTED_CONTROLLER_BUNDLE_DIGEST,
@@ -273,7 +273,7 @@ jobs:
             EXPECTED_HANDOFF_DIGEST="$EXPECTED_HANDOFF_DIGEST" \
             node --input-type=module <<'NODE'
           import { readFile } from 'node:fs/promises';
-          import { parseVerifiedReleaseRecordHandoffBytes } from './packages/verification-controller/src/verified-release-record-handoff.mjs';
+          import { parseVerifiedReleaseRecordHandoffBytes } from './verification/controller/src/verified-release-record-handoff.mjs';
           if (process.env.GITHUB_SHA !== process.env.TRUSTED_CONTROLLER_SHA) process.exit(2);
           const handoff = parseVerifiedReleaseRecordHandoffBytes({
             bytes: await readFile('.verified-release-record/verified-release-record-handoff.v1.json'),
@@ -318,7 +318,7 @@ jobs:
             TRUSTED_CONTROLLER_BUNDLE_DIGEST="$TRUSTED_CONTROLLER_BUNDLE_DIGEST" \
             EXPECTED_HANDOFF_DIGEST="$EXPECTED_HANDOFF_DIGEST" \
             APPWRITE_PRODUCTION_READONLY_API_KEY="$APPWRITE_PRODUCTION_READONLY_API_KEY" \
-            node packages/verification-controller/src/create-production-browser-policy.mjs --verified-handoff ".verified-release-record/verified-release-record-handoff.v1.json" --expected-handoff-digest "$EXPECTED_HANDOFF_DIGEST" --output production-browser-policy.v1.json
+            node verification/controller/src/create-production-browser-policy.mjs --verified-handoff ".verified-release-record/verified-release-record-handoff.v1.json" --expected-handoff-digest "$EXPECTED_HANDOFF_DIGEST" --output production-browser-policy.v1.json
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: production-browser-policy
@@ -376,7 +376,7 @@ jobs:
             TRUSTED_CONTROLLER_ARTIFACT_ID="$TRUSTED_CONTROLLER_ARTIFACT_ID" \
             TRUSTED_CONTROLLER_BUNDLE_DIGEST="$TRUSTED_CONTROLLER_BUNDLE_DIGEST" \
             node --input-type=module <<'NODE'
-          import { reattestLocalControllerArtifact } from './packages/verification-controller/src/github-controller-artifact-verifier.mjs';
+          import { reattestLocalControllerArtifact } from './verification/controller/src/github-controller-artifact-verifier.mjs';
           const proof = await reattestLocalControllerArtifact({
             artifactId: process.env.PROOF_ARTIFACT_ID,
             bundleDigest: process.env.PROOF_BUNDLE_DIGEST,
@@ -384,7 +384,7 @@ jobs:
             proofSha: process.env.PROOF_SHA,
             proofStatus: process.env.PROOF_STATUS,
             repository: process.env.GITHUB_REPOSITORY,
-            requiredEntrypoint: 'packages/verification-controller/src/run-production-readonly-playwright.mjs',
+            requiredEntrypoint: 'verification/controller/src/run-production-readonly-playwright.mjs',
             runtimeSha: process.env.GITHUB_SHA,
             trustedArtifactId: process.env.TRUSTED_CONTROLLER_ARTIFACT_ID,
             trustedBundleDigest: process.env.TRUSTED_CONTROLLER_BUNDLE_DIGEST,
@@ -396,7 +396,7 @@ jobs:
         with:
           name: production-browser-policy
           path: .production-browser-policy
-      - run: npm --prefix packages/verification-controller ci --ignore-scripts
+      - run: npm --prefix verification/controller ci --ignore-scripts
       - name: Verify policy digest and prove no secret/token/key variable reaches the browser child
-        run: node packages/verification-controller/src/verify-production-browser-policy.mjs --policy .production-browser-policy/production-browser-policy.v1.json --expected-digest "${{ needs.production-metadata.outputs.policy_digest }}"
-      - run: npm --prefix packages/verification-controller run test:production-readonly:e2e
+        run: node verification/controller/src/verify-production-browser-policy.mjs --policy .production-browser-policy/production-browser-policy.v1.json --expected-digest "${{ needs.production-metadata.outputs.policy_digest }}"
+      - run: npm --prefix verification/controller run test:production-readonly:e2e

@@ -68,7 +68,7 @@ jobs:
           CONTROLLER_ARTIFACT_READ_TOKEN: ${{ github.token }}
           CONTROLLER_ARTIFACT_DIRECTORY: ${{ runner.temp }}\trusted-controller-artifact
           GITHUB_REPOSITORY: ${{ github.repository }}
-          REQUIRED_CONTROLLER_ENTRYPOINT: packages/verification-controller/workflows/verify-test-cloud.yml
+          REQUIRED_CONTROLLER_ENTRYPOINT: verification/controller/workflows/verify-test-cloud.yml
           TRUSTED_CONTROLLER_SHA: ${{ vars.TRUSTED_CONTROLLER_SHA }}
           TRUSTED_CONTROLLER_ARTIFACT_ID: ${{ vars.TRUSTED_CONTROLLER_ARTIFACT_ID }}
           TRUSTED_CONTROLLER_BUNDLE_DIGEST: ${{ vars.TRUSTED_CONTROLLER_BUNDLE_DIGEST }}
@@ -84,7 +84,7 @@ jobs:
             TRUSTED_CONTROLLER_ARTIFACT_ID="$TRUSTED_CONTROLLER_ARTIFACT_ID" \
             TRUSTED_CONTROLLER_BUNDLE_DIGEST="$TRUSTED_CONTROLLER_BUNDLE_DIGEST" \
             TRUSTED_CONTROLLER_SHA="$TRUSTED_CONTROLLER_SHA" \
-            node packages/verification-controller/src/prepare-controller-artifact.mjs \
+            node verification/controller/src/prepare-controller-artifact.mjs \
               --output "$CONTROLLER_ARTIFACT_DIRECTORY"
 
       - name: Install the exact trusted controller dependencies
@@ -107,7 +107,7 @@ jobs:
           $ErrorActionPreference = 'Stop'
           node --input-type=module -e @'
           import { writeFile } from 'node:fs/promises';
-          import { canonicalJson } from './scripts/verification/canonical-json.mjs';
+          import { canonicalJson } from './verification/core/canonical-json.mjs';
           const input = {
             artifactId: process.env.BINDING_ARTIFACT_ID,
             bundleDigest: process.env.BINDING_ARTIFACT_DIGEST,
@@ -118,7 +118,7 @@ jobs:
           };
           await writeFile(process.env.BINDING_VERIFIER_INPUT, `${canonicalJson(input)}\n`, { flag: 'wx' });
           '@
-          node packages/verification-controller/src/test-cloud-binding-artifact-verifier.mjs --input $env:BINDING_VERIFIER_INPUT --output $env:BINDING_DIRECTORY
+          node verification/controller/src/test-cloud-binding-artifact-verifier.mjs --input $env:BINDING_VERIFIER_INPUT --output $env:BINDING_DIRECTORY
 
       - name: Install pinned Playwright Chromium
         shell: bash
@@ -152,7 +152,7 @@ jobs:
           E2E_EDITOR_PASSWORD: ${{ secrets.E2E_EDITOR_PASSWORD }}
           E2E_VIEWER_EMAIL: ${{ secrets.E2E_VIEWER_EMAIL }}
           E2E_VIEWER_PASSWORD: ${{ secrets.E2E_VIEWER_PASSWORD }}
-        run: node packages/verification-controller/src/test-cloud-controller.mjs --hosted --revision "$REQUESTED_REVISION" --source-run-id "$SOURCE_RUN_ID" --source-run-attempt "$SOURCE_RUN_ATTEMPT" --binding-directory "$BINDING_DIRECTORY"
+        run: node verification/controller/src/test-cloud-controller.mjs --hosted --revision "$REQUESTED_REVISION" --source-run-id "$SOURCE_RUN_ID" --source-run-attempt "$SOURCE_RUN_ATTEMPT" --binding-directory "$BINDING_DIRECTORY"
 
 # The staged controller performs tokenless reattestLocalControllerArtifact in
 # the same process that admits source-reader and ordinary-lane credentials.

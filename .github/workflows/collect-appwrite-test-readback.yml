@@ -130,7 +130,7 @@ jobs:
           $ErrorActionPreference = 'Stop'
           node --input-type=module -e @'
           import { writeFile } from 'node:fs/promises';
-          import { canonicalJson } from './scripts/verification/canonical-json.mjs';
+          import { canonicalJson } from './verification/core/canonical-json.mjs';
           const initialSeed = process.env.INITIAL_SEED === 'true';
           const input = {
             controllerArtifact: initialSeed ? null : {
@@ -152,7 +152,7 @@ jobs:
           };
           await writeFile(process.env.COLLECTOR_INPUT, `${canonicalJson(input)}\n`, { flag: 'wx' });
           '@
-          node packages/verification-controller/src/collect-appwrite-test-readback.mjs --input $env:COLLECTOR_INPUT --output $env:COLLECTOR_OUTPUT
+          node verification/controller/src/collect-appwrite-test-readback.mjs --input $env:COLLECTOR_INPUT --output $env:COLLECTOR_OUTPUT
 
       - name: Upload exact binding artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a

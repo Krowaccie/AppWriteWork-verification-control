@@ -69,14 +69,14 @@ jobs:
             TRUSTED_CONTROLLER_SHA="$TRUSTED_CONTROLLER_SHA" \
             node --input-type=module <<'NODE'
           import { appendFile } from 'node:fs/promises';
-          import { verifyGithubControllerArtifact } from './packages/verification-controller/src/github-controller-artifact-verifier.mjs';
+          import { verifyGithubControllerArtifact } from './verification/controller/src/github-controller-artifact-verifier.mjs';
 
           const pointer = Object.freeze({
             artifactId: process.env.TRUSTED_CONTROLLER_ARTIFACT_ID,
             authorization: process.env.CONTROLLER_ARTIFACT_READ_TOKEN,
             bundleDigest: process.env.TRUSTED_CONTROLLER_BUNDLE_DIGEST,
             repository: process.env.GITHUB_REPOSITORY,
-            requiredEntrypoint: 'packages/verification-controller/workflows/release-production.yml',
+            requiredEntrypoint: 'verification/controller/workflows/release-production.yml',
             runtimeSha: process.env.GITHUB_SHA,
             trustedSha: process.env.TRUSTED_CONTROLLER_SHA,
           });
@@ -158,7 +158,7 @@ jobs:
             TRUSTED_CONTROLLER_BUNDLE_DIGEST="$TRUSTED_CONTROLLER_BUNDLE_DIGEST" \
             TRUSTED_CONTROLLER_SHA="$TRUSTED_CONTROLLER_SHA" \
             node --input-type=module <<'NODE'
-          import { reattestLocalControllerArtifact } from './packages/verification-controller/src/github-controller-artifact-verifier.mjs';
+          import { reattestLocalControllerArtifact } from './verification/controller/src/github-controller-artifact-verifier.mjs';
 
           const input = Object.freeze({
             artifactId: process.env.CONTROLLER_PROOF_ARTIFACT_ID,
@@ -167,7 +167,7 @@ jobs:
             proofSha: process.env.CONTROLLER_PROOF_SHA,
             proofStatus: process.env.CONTROLLER_PROOF_STATUS,
             repository: process.env.GITHUB_REPOSITORY,
-            requiredEntrypoint: 'packages/verification-controller/workflows/release-production.yml',
+            requiredEntrypoint: 'verification/controller/workflows/release-production.yml',
             runtimeSha: process.env.GITHUB_SHA,
             trustedArtifactId: process.env.TRUSTED_CONTROLLER_ARTIFACT_ID,
             trustedBundleDigest: process.env.TRUSTED_CONTROLLER_BUNDLE_DIGEST,
@@ -206,11 +206,11 @@ jobs:
             extractSourceArtifactZip,
             readBoundedSourceArtifactArchive,
             readSourceArtifact,
-          } from './packages/verification-controller/src/source-artifact-reader.mjs';
+          } from './verification/controller/src/source-artifact-reader.mjs';
           import {
             buildVerifiedProductionHandoff,
             validateVerifiedProductionHandoff,
-          } from './packages/verification-controller/src/verified-production-handoff.mjs';
+          } from './verification/controller/src/verified-production-handoff.mjs';
 
           function blocked(code) {
             const error = new Error('BLOCKED ' + code);
@@ -275,7 +275,7 @@ jobs:
             readZip: extractSourceArtifactZip,
           });
           const inventory = JSON.parse(await readFile(
-            './dev/verification/environments/production.inventory.v1.json',
+            './verification/fixtures/environments/production.inventory.v1.json',
             'utf8',
           ));
           const built = buildVerifiedProductionHandoff({
@@ -388,7 +388,7 @@ jobs:
             TRUSTED_CONTROLLER_BUNDLE_DIGEST="$TRUSTED_CONTROLLER_BUNDLE_DIGEST" \
             TRUSTED_CONTROLLER_SHA="$TRUSTED_CONTROLLER_SHA" \
             node --input-type=module <<'NODE'
-          import { reattestLocalControllerArtifact } from './packages/verification-controller/src/github-controller-artifact-verifier.mjs';
+          import { reattestLocalControllerArtifact } from './verification/controller/src/github-controller-artifact-verifier.mjs';
 
           const input = Object.freeze({
             artifactId: process.env.CONTROLLER_PROOF_ARTIFACT_ID,
@@ -397,7 +397,7 @@ jobs:
             proofSha: process.env.CONTROLLER_PROOF_SHA,
             proofStatus: process.env.CONTROLLER_PROOF_STATUS,
             repository: process.env.GITHUB_REPOSITORY,
-            requiredEntrypoint: 'packages/verification-controller/workflows/release-production.yml',
+            requiredEntrypoint: 'verification/controller/workflows/release-production.yml',
             runtimeSha: process.env.GITHUB_SHA,
             trustedArtifactId: process.env.TRUSTED_CONTROLLER_ARTIFACT_ID,
             trustedBundleDigest: process.env.TRUSTED_CONTROLLER_BUNDLE_DIGEST,
@@ -457,7 +457,7 @@ jobs:
             VERIFIED_HANDOFF_SHA256="$VERIFIED_HANDOFF_SHA256" \
             EXPECTED_EXCLUDED_TEST_ONLY_CLASSIFICATION_DIGEST="$EXPECTED_EXCLUDED_TEST_ONLY_CLASSIFICATION_DIGEST" \
             APPWRITE_PRODUCTION_RELEASE_API_KEY="$APPWRITE_PRODUCTION_RELEASE_API_KEY" \
-            npm --prefix packages/verification-controller run release:production -- \
+            npm --prefix verification/controller run release:production -- \
               --revision "$APPLICATION_SHA" \
               --approval-ref "$APPROVAL_REF" \
               --qualifying-run-id "$QUALIFYING_RUN_ID" \
@@ -475,7 +475,7 @@ jobs:
           import {
             canonicalPartialReleaseRecordBytes,
             validatePartialReleaseRecord,
-          } from './packages/verification-controller/src/production-release-executor.mjs';
+          } from './verification/controller/src/production-release-executor.mjs';
 
           const path =
             '.release-execution/partial-release-execution-result.v1.json';
@@ -516,7 +516,7 @@ jobs:
           set -euo pipefail
           node --input-type=module <<'NODE'
           import { readFile } from 'node:fs/promises';
-          import { validateRedactedReleaseExecutionResult } from './packages/verification-controller/src/github-deployment-writer.mjs';
+          import { validateRedactedReleaseExecutionResult } from './verification/controller/src/github-deployment-writer.mjs';
 
           const execution = JSON.parse(await readFile(
             '.release-execution/release-execution-result.v1.json',
@@ -595,7 +595,7 @@ jobs:
             TRUSTED_CONTROLLER_BUNDLE_DIGEST="$TRUSTED_CONTROLLER_BUNDLE_DIGEST" \
             TRUSTED_CONTROLLER_SHA="$TRUSTED_CONTROLLER_SHA" \
             node --input-type=module <<'NODE'
-          import { reattestLocalControllerArtifact } from './packages/verification-controller/src/github-controller-artifact-verifier.mjs';
+          import { reattestLocalControllerArtifact } from './verification/controller/src/github-controller-artifact-verifier.mjs';
 
           const input = Object.freeze({
             artifactId: process.env.CONTROLLER_PROOF_ARTIFACT_ID,
@@ -604,7 +604,7 @@ jobs:
             proofSha: process.env.CONTROLLER_PROOF_SHA,
             proofStatus: process.env.CONTROLLER_PROOF_STATUS,
             repository: process.env.GITHUB_REPOSITORY,
-            requiredEntrypoint: 'packages/verification-controller/workflows/release-production.yml',
+            requiredEntrypoint: 'verification/controller/workflows/release-production.yml',
             runtimeSha: process.env.GITHUB_SHA,
             trustedArtifactId: process.env.TRUSTED_CONTROLLER_ARTIFACT_ID,
             trustedBundleDigest: process.env.TRUSTED_CONTROLLER_BUNDLE_DIGEST,
@@ -641,7 +641,7 @@ jobs:
             buildReleaseRecord,
             canonicalReleaseRecordBytes,
             validateRedactedReleaseExecutionResult,
-          } from './packages/verification-controller/src/github-deployment-writer.mjs';
+          } from './verification/controller/src/github-deployment-writer.mjs';
 
           const execution = JSON.parse(await readFile(
             '.release-execution/release-execution-result.v1.json',
@@ -695,7 +695,7 @@ jobs:
           import {
             createGithubDeploymentWriter,
             validateRedactedReleaseRecord,
-          } from './packages/verification-controller/src/github-deployment-writer.mjs';
+          } from './verification/controller/src/github-deployment-writer.mjs';
 
           if (process.env.GITHUB_REPOSITORY !== 'Krowaccie/AppWriteWork-verification-control'
               || process.env.GITHUB_SHA !== process.env.TRUSTED_CONTROLLER_SHA) {

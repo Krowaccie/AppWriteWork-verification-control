@@ -2,7 +2,7 @@ import path from 'node:path';
 import { types as utilTypes } from 'node:util';
 import { fileURLToPath } from 'node:url';
 
-import { buildVerificationArtifactSet } from './verification/artifact-set.mjs';
+import { buildVerificationArtifactSet } from '../verification/core/artifact-set.mjs';
 
 const ARGUMENTS = Object.freeze([
   '--output',

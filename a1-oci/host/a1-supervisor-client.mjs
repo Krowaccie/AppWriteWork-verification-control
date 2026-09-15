@@ -437,7 +437,7 @@ function installEnvironment(paths = PROCESS_PATHS) {
 function fixedProfiles(paths) {
   return Object.freeze({
     'bundle-catalog': Object.freeze({
-      args: ['scripts/bundle-catalog.mjs'], cwd: paths.exportRoot,
+      args: ['tools/build/bundle-catalog.mjs'], cwd: paths.exportRoot,
       env: baseEnvironment(paths), executable: paths.node, network: 'deny',
     }),
     'root-npm-ci': Object.freeze({
@@ -447,21 +447,21 @@ function fixedProfiles(paths) {
     typecheck: Object.freeze({
       args: [
         '/opt/appwritework/verification-a1/host/typecheck-driver.mjs',
-        `${paths.exportRoot}/src/web`,
+        `${paths.exportRoot}/apps/web`,
       ],
-      cwd: `${paths.exportRoot}/src/web`,
+      cwd: `${paths.exportRoot}/apps/web`,
       env: baseEnvironment(paths), executable: paths.node, network: 'deny',
     }),
     'vite-build': Object.freeze({
       args: [
-        `${paths.exportRoot}/src/web/node_modules/vite/bin/vite.js`,
+        `${paths.exportRoot}/apps/web/node_modules/vite/bin/vite.js`,
         'build', '--configLoader', 'runner', '--outDir', paths.siteOutput, '--emptyOutDir',
       ],
-      cwd: `${paths.exportRoot}/src/web`, env: baseEnvironment(paths),
+      cwd: `${paths.exportRoot}/apps/web`, env: baseEnvironment(paths),
       executable: paths.node, network: 'deny',
     }),
     'web-npm-ci': Object.freeze({
-      args: ['ci', '--ignore-scripts', '--no-audit', '--no-fund'], cwd: `${paths.exportRoot}/src/web`,
+      args: ['ci', '--ignore-scripts', '--no-audit', '--no-fund'], cwd: `${paths.exportRoot}/apps/web`,
       env: installEnvironment(paths), executable: paths.npm, network: 'registry-only',
     }),
   });
@@ -498,9 +498,9 @@ function parseGit(process, paths) {
     opcode = 2; body = tail[4];
   } else if (tail.length === 2 && exactArray(tail, ['cat-file', '--batch']) && fields.stdin instanceof Uint8Array && fields.stdin.byteLength > 0) {
     return closed({ limits: fields, payload: Buffer.concat([Buffer.from([3]), Buffer.from(fields.stdin)]), profile: 'source-git' });
-  } else if (tail.length === 2 && tail[0] === 'show' && tail[1].endsWith(':dev/verification/verification-manifest.v1.json')) {
+  } else if (tail.length === 2 && tail[0] === 'show' && tail[1].endsWith(':verification/core/verification-manifest.v1.json')) {
     opcode = 4; body = tail[1].slice(0, 40);
-    if (tail[1] !== `${body}:dev/verification/verification-manifest.v1.json`) return null;
+    if (tail[1] !== `${body}:verification/core/verification-manifest.v1.json`) return null;
   } else if (tail.length === 3 && tail[0] === 'archive' && tail[1] === '--format=tar') {
     opcode = 5; body = tail[2];
   } else return null;

@@ -61,7 +61,7 @@ jobs:
         shell: pwsh
         run: |
           npm ci --ignore-scripts --no-audit --no-fund
-          node --test --test-isolation=none packages/verification-controller/src/test-cloud-cleanup-driver.test.mjs packages/verification-controller/src/test-cloud-controller.test.mjs scripts/verification/test-cloud-control-store.test.mjs scripts/verification/test-cloud-lane.test.mjs packages/verification-controller/src/test-cloud-controller-source-diagnostics.test.mjs
+          node --test --test-isolation=none verification/controller/src/test-cloud-cleanup-driver.test.mjs verification/controller/src/test-cloud-controller.test.mjs verification/adapters/test-cloud/test-cloud-control-store.test.mjs verification/adapters/test-cloud/test-cloud-lane.test.mjs verification/controller/src/test-cloud-controller-source-diagnostics.test.mjs
 
       - name: Verify exact Appwrite Test binding artifact
         shell: pwsh
@@ -80,7 +80,7 @@ jobs:
           $ErrorActionPreference = 'Stop'
           node --input-type=module -e @'
           import { writeFile } from 'node:fs/promises';
-          import { canonicalJson } from './scripts/verification/canonical-json.mjs';
+          import { canonicalJson } from './verification/core/canonical-json.mjs';
           const input = {
             artifactId: process.env.BINDING_ARTIFACT_ID,
             bundleDigest: process.env.BINDING_ARTIFACT_DIGEST,
@@ -91,7 +91,7 @@ jobs:
           };
           await writeFile(process.env.BINDING_VERIFIER_INPUT, `${canonicalJson(input)}\n`, { flag: 'wx' });
           '@
-          node packages/verification-controller/src/test-cloud-binding-artifact-verifier.mjs --input $env:BINDING_VERIFIER_INPUT --output $env:BINDING_DIRECTORY
+          node verification/controller/src/test-cloud-binding-artifact-verifier.mjs --input $env:BINDING_VERIFIER_INPUT --output $env:BINDING_DIRECTORY
 
       - name: Qualify runner and create same-run publisher input
         shell: pwsh
@@ -108,10 +108,10 @@ jobs:
           node --input-type=module -e @'
           import { readFile, writeFile } from 'node:fs/promises';
           import path from 'node:path';
-          import { canonicalJson, sha256Bytes } from './scripts/verification/canonical-json.mjs';
-          import { checkInitialTestCloudSetup, checkTestCloudSetup, qualifyExecutionObservationReadback } from './scripts/verification/test-cloud-setup-check.mjs';
-          import { validateTestCloudHostedSetupAttestationDocument } from './scripts/verification/test-cloud-hosted-setup-attestation.mjs';
-          import inventory from './dev/verification/environments/test-cloud.inventory.v1.json' with { type: 'json' };
+          import { canonicalJson, sha256Bytes } from './verification/core/canonical-json.mjs';
+          import { checkInitialTestCloudSetup, checkTestCloudSetup, qualifyExecutionObservationReadback } from './verification/adapters/test-cloud/test-cloud-setup-check.mjs';
+          import { validateTestCloudHostedSetupAttestationDocument } from './verification/adapters/test-cloud/test-cloud-hosted-setup-attestation.mjs';
+          import inventory from './verification/fixtures/environments/test-cloud.inventory.v1.json' with { type: 'json' };
 
           const encoder = new TextEncoder();
           if (!['true', 'false'].includes(process.env.INITIAL_SEED)) {
@@ -203,7 +203,7 @@ jobs:
           };
           await writeFile(process.env.QUALIFICATION_INPUT, `${canonicalJson(input)}\n`, { flag: 'wx' });
           '@
-          node packages/verification-controller/src/controller-runner-qualification-cli.mjs --input $env:QUALIFICATION_INPUT --output $env:PUBLISHER_INPUT
+          node verification/controller/src/controller-runner-qualification-cli.mjs --input $env:QUALIFICATION_INPUT --output $env:PUBLISHER_INPUT
 
       - name: Stage deterministic direct members
         shell: pwsh
@@ -217,7 +217,7 @@ jobs:
           if ((git rev-parse HEAD).Trim() -cne $env:CONTROLLER_REVISION -or $env:WORKFLOW_HEAD_SHA -cne $env:CONTROLLER_REVISION) {
             throw 'BLOCKED CHECKOUT_REVISION_MISMATCH'
           }
-          node packages/verification-controller/src/controller-bundle-publisher.mjs --input $env:PUBLISHER_INPUT --output $env:PUBLICATION_ROOT --repository-root $env:GITHUB_WORKSPACE
+          node verification/controller/src/controller-bundle-publisher.mjs --input $env:PUBLISHER_INPUT --output $env:PUBLICATION_ROOT --repository-root $env:GITHUB_WORKSPACE
 
       - name: Upload direct controller bundle members
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a

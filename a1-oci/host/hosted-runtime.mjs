@@ -8,20 +8,20 @@ import {
 import { createA1NetworkPolicyProbe } from './network-policy-probe.mjs';
 import { createValidatedArtifactUploadClient } from './validated-artifact-upload.mjs';
 import { createWorkspaceKernelDriver } from './workspace-kernel-driver.mjs';
-import { runTrustedHostedSourceArtifact } from '../launcher/repository/packages/verification-controller/src/source-artifact-hosted-entrypoint.mjs';
+import { runTrustedHostedSourceArtifact } from '../launcher/repository/verification/controller/src/source-artifact-hosted-entrypoint.mjs';
 import {
   createPosixSourceArtifactOutputFilesystem,
   createPosixSourceArtifactSourceFilesystem,
-} from '../launcher/repository/packages/verification-controller/src/source-artifact-posix-filesystem.mjs';
-import { createPosixSourceArtifactKernelHost } from '../launcher/repository/packages/verification-controller/src/source-artifact-posix-kernel-host.mjs';
-import { createBoundedPosixProcessTransport } from '../launcher/repository/packages/verification-controller/src/source-artifact-posix-process-transport.mjs';
-import { createBoundedPosixSandboxTransport } from '../launcher/repository/packages/verification-controller/src/source-artifact-posix-sandbox-transport.mjs';
-import { createPosixSourceArtifactWorkspaceHost } from '../launcher/repository/packages/verification-controller/src/source-artifact-posix-workspace.mjs';
-import { createPublicationLeaseAuthority } from '../launcher/repository/packages/verification-controller/src/source-artifact-publication-lease-authority.mjs';
-import { createSameSessionSourceArtifactPublisher } from '../launcher/repository/packages/verification-controller/src/source-artifact-same-session-publisher.mjs';
-import { createSameSessionSourceArtifactUploadHost } from '../launcher/repository/packages/verification-controller/src/source-artifact-same-session-upload-host.mjs';
-import { createTrustedSourceSnapshotHost } from '../launcher/repository/packages/verification-controller/src/source-artifact-source-control.mjs';
-import { createSourceArtifactSourceLeaseAuthority } from '../launcher/repository/packages/verification-controller/src/source-artifact-source-lease-authority.mjs';
+} from '../launcher/repository/verification/controller/src/source-artifact-posix-filesystem.mjs';
+import { createPosixSourceArtifactKernelHost } from '../launcher/repository/verification/controller/src/source-artifact-posix-kernel-host.mjs';
+import { createBoundedPosixProcessTransport } from '../launcher/repository/verification/controller/src/source-artifact-posix-process-transport.mjs';
+import { createBoundedPosixSandboxTransport } from '../launcher/repository/verification/controller/src/source-artifact-posix-sandbox-transport.mjs';
+import { createPosixSourceArtifactWorkspaceHost } from '../launcher/repository/verification/controller/src/source-artifact-posix-workspace.mjs';
+import { createPublicationLeaseAuthority } from '../launcher/repository/verification/controller/src/source-artifact-publication-lease-authority.mjs';
+import { createSameSessionSourceArtifactPublisher } from '../launcher/repository/verification/controller/src/source-artifact-same-session-publisher.mjs';
+import { createSameSessionSourceArtifactUploadHost } from '../launcher/repository/verification/controller/src/source-artifact-same-session-upload-host.mjs';
+import { createTrustedSourceSnapshotHost } from '../launcher/repository/verification/controller/src/source-artifact-source-control.mjs';
+import { createSourceArtifactSourceLeaseAuthority } from '../launcher/repository/verification/controller/src/source-artifact-source-lease-authority.mjs';
 
 const REQUEST_KEYS = Object.freeze([
   'repository', 'schemaVersion', 'sourceRef', 'sourceRevision', 'sourceTreeDigest',
@@ -323,7 +323,7 @@ export async function runHostedRuntime({ environment, requestText } = {}) {
   }
   try {
     const inventory = await readFile(new URL(
-      '../launcher/repository/dev/verification/environments/test-cloud.inventory.v1.json',
+      '../launcher/repository/verification/fixtures/environments/test-cloud.inventory.v1.json',
       import.meta.url,
     ));
     const configuration = createHostedRuntimeConfiguration(request, inventory);
