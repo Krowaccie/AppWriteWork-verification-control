@@ -1,0 +1,212 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "test-cloud-hosted-setup-readback.v1.schema.json",
+  "title": "Closed hosted test-cloud setup readback v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "resources",
+    "providerSchema",
+    "executionObservation",
+    "productFunctions",
+    "credentialScopes",
+    "runner",
+    "controller",
+    "githubApp",
+    "identities",
+    "bootstrap"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "test-cloud.hosted-setup-readback.v1" },
+    "resources": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "endpoint", "projectId", "siteId", "databaseId", "leaseTableId",
+        "intentTableId", "auditTableId", "leaseRowId"
+      ],
+      "properties": {
+        "endpoint": { "type": "string", "pattern": "^https://" },
+        "projectId": { "$ref": "#/$defs/safeId" },
+        "siteId": { "$ref": "#/$defs/safeId" },
+        "databaseId": { "$ref": "#/$defs/safeId" },
+        "leaseTableId": { "$ref": "#/$defs/safeId" },
+        "intentTableId": { "$ref": "#/$defs/safeId" },
+        "auditTableId": { "$ref": "#/$defs/safeId" },
+        "leaseRowId": { "$ref": "#/$defs/safeId" }
+      }
+    },
+    "providerSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "descriptorDigest", "databaseId", "tableIds"],
+      "properties": {
+        "schemaVersion": { "const": "appwrite-test-provider-schema-readback.v1" },
+        "descriptorDigest": { "$ref": "#/$defs/digest" },
+        "databaseId": { "$ref": "#/$defs/safeId" },
+        "tableIds": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/safeId" }
+        }
+      }
+    },
+    "executionObservation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion", "observationAccess", "providerManagedRetention",
+        "retentionMaxSeconds"
+      ],
+      "properties": {
+        "schemaVersion": { "const": "appwrite-execution-observation-readback.v1" },
+        "observationAccess": { "const": "read-only" },
+        "providerManagedRetention": { "const": true },
+        "retentionMaxSeconds": { "type": "integer", "minimum": 1, "maximum": 86400 }
+      }
+    },
+    "productFunctions": {
+      "type": "array",
+      "minItems": 35,
+      "maxItems": 35,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["logicalId", "functionId"],
+        "properties": {
+          "logicalId": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*-py$" },
+          "functionId": { "$ref": "#/$defs/safeId" }
+        }
+      }
+    },
+    "credentialScopes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["operator", "fixture", "recovery"],
+      "properties": {
+        "operator": { "$ref": "#/$defs/scopeReadback" },
+        "fixture": { "$ref": "#/$defs/scopeReadback" },
+        "recovery": { "$ref": "#/$defs/scopeReadback" }
+      }
+    },
+    "runner": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["functionId", "runtime", "privateExecute", "publicExecute", "scopes"],
+      "properties": {
+        "functionId": { "$ref": "#/$defs/safeId" },
+        "runtime": { "const": "python-3.12" },
+        "privateExecute": { "const": true },
+        "publicExecute": { "const": false },
+        "scopes": {
+          "const": ["execution.write", "rows.read", "rows.write", "files.read", "files.write"]
+        }
+      }
+    },
+    "controller": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "rulesetProtected", "codeownersProtected", "environments", "bundle"],
+      "properties": {
+        "repository": { "const": "Krowaccie/AppWriteWork-verification-control" },
+        "rulesetProtected": { "const": true },
+        "codeownersProtected": { "const": true },
+        "environments": { "const": ["appwrite-test", "controller-promotion"] },
+        "bundle": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["sourceRepositoryRevision", "controllerRevision", "artifactId", "digest"],
+          "properties": {
+            "sourceRepositoryRevision": { "$ref": "#/$defs/fullSha" },
+            "controllerRevision": { "$ref": "#/$defs/fullSha" },
+            "artifactId": { "$ref": "#/$defs/safeId" },
+            "digest": { "$ref": "#/$defs/digest" }
+          }
+        }
+      }
+    },
+    "githubApp": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sourceRepository", "installationScoped", "userAuthorization", "webhooks", "permissions"
+      ],
+      "properties": {
+        "sourceRepository": { "const": "Krowaccie/AppWriteWork" },
+        "installationScoped": { "const": true },
+        "userAuthorization": { "const": false },
+        "webhooks": { "const": false },
+        "permissions": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["actions", "metadata"],
+          "properties": {
+            "actions": { "const": "read" },
+            "metadata": { "const": "read" }
+          }
+        }
+      }
+    },
+    "identities": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "prefixItems": [
+        { "$ref": "#/$defs/editorIdentity" },
+        { "$ref": "#/$defs/ownerIdentity" },
+        { "$ref": "#/$defs/viewerIdentity" }
+      ],
+      "items": false
+    },
+    "bootstrap": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["seeded", "sourceRevision", "bundleDigest"],
+      "properties": {
+        "seeded": { "const": true },
+        "sourceRevision": { "$ref": "#/$defs/fullSha" },
+        "bundleDigest": { "$ref": "#/$defs/digest" }
+      }
+    }
+  },
+  "$defs": {
+    "digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "fullSha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "safeId": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$" },
+    "scopeReadback": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["variableName", "scopes"],
+      "properties": {
+        "variableName": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]+$" },
+        "scopes": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[a-z]+(?:[.-][a-z]+)+$" }
+        }
+      }
+    },
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role", "sessions"],
+      "properties": {
+        "role": { "type": "string" },
+        "sessions": { "const": [] }
+      }
+    },
+    "editorIdentity": {
+      "allOf": [{ "$ref": "#/$defs/identity" }, { "properties": { "role": { "const": "editor" } } }]
+    },
+    "ownerIdentity": {
+      "allOf": [{ "$ref": "#/$defs/identity" }, { "properties": { "role": { "const": "owner" } } }]
+    },
+    "viewerIdentity": {
+      "allOf": [{ "$ref": "#/$defs/identity" }, { "properties": { "role": { "const": "viewer" } } }]
+    }
+  }
+}
