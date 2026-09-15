@@ -91,7 +91,7 @@ jobs:
         run: |
           set -euo pipefail
           action_root='.github/actions/a1-source-artifact-launcher'
-          image='ghcr.io/krowaccie/appwritework-verification-a1@sha256:a752173ccf4649dd5e453990a40ea2e6f4b61dbd1da6ae018e3424cab70645b4'
+          image='ghcr.io/krowaccie/appwritework-verification-a1@sha256:4d4769e8cc9a145de4de3799e31609c57e21f07a7de0d27bf38610a05bd88ed7'
 
           cmp "$action_root/action.yml.template" "$action_root/action.yml"
           sed "s|__A1_IMMUTABLE_OCI_IMAGE_REQUIRED__|$image|" \
