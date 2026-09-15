@@ -20,7 +20,7 @@ function fakeTypeScript(diagnostics = []) {
     parseJsonConfigFileContent(_config, _system, _root, overrides) {
       return {
         errors: [],
-        fileNames: ['/work/launcher/source/src/web/src/main.tsx'],
+        fileNames: ['/work/launcher/source/apps/web/src/main.tsx'],
         options: { ...overrides, tsBuildInfoFile: '/untrusted/source.tsbuildinfo' },
       };
     },
@@ -35,7 +35,7 @@ test('checks both fixed projects without incremental writes', async () => {
   const typescript = fakeTypeScript();
   assert.equal(await runTypecheck({
     typescript,
-    webRoot: '/work/launcher/source/src/web',
+    webRoot: '/work/launcher/source/apps/web',
   }), 0);
   assert.equal(typescript.observedOptions.length, 2);
   for (const options of typescript.observedOptions) {
@@ -51,7 +51,7 @@ test('fails on diagnostics and rejects non-POSIX roots', async () => {
   let output = '';
   assert.equal(await runTypecheck({
     typescript,
-    webRoot: '/work/launcher/source/src/web',
+    webRoot: '/work/launcher/source/apps/web',
     writeError(text) { output += text; },
   }), 1);
   assert.equal(output, 'type failure\ntype failure');

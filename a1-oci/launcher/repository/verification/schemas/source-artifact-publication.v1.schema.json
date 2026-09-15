@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "source-artifact-publication.v1.schema.json",
+  "title": "Source artifact publication descriptor v1",
+  "$comment": "This schema is a structural publication contract only. Direct runtime validation additionally requires canonical JSON bytes, exact artifactName revision binding to the path suffix, an absolute normalized POSIX or Win32 path using one slash family, and a 4096-byte UTF-8 path limit.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "artifactManifestDigest",
+    "artifactName",
+    "artifactPath"
+  ],
+  "properties": {
+    "artifactManifestDigest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "artifactName": {
+      "type": "string",
+      "pattern": "^verification-artifacts-[0-9a-f]{40}$"
+    },
+    "artifactPath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096,
+      "pattern": "^(?![\\s\\S]*[\\u0000-\\u001F\\u007F])[\\s\\S]*[\\\\/]\\.verification[\\\\/]artifacts[\\\\/][0-9a-f]{40}$"
+    }
+  }
+}

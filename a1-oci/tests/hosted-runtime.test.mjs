@@ -24,8 +24,8 @@ import {
   createGithubArtifactClient,
 } from '../host/github-artifact-client.mjs';
 import { SOURCE_ARTIFACT_UPLOAD_MEMBERS } from '../host/validated-artifact-upload.mjs';
-import { createBoundedPosixProcessTransport } from '../launcher/repository/packages/verification-controller/src/source-artifact-posix-process-transport.mjs';
-import { createBoundedPosixSandboxTransport } from '../launcher/repository/packages/verification-controller/src/source-artifact-posix-sandbox-transport.mjs';
+import { createBoundedPosixProcessTransport } from '../launcher/repository/verification/controller/src/source-artifact-posix-process-transport.mjs';
+import { createBoundedPosixSandboxTransport } from '../launcher/repository/verification/controller/src/source-artifact-posix-sandbox-transport.mjs';
 
 const REVISION = '0123456789abcdef0123456789abcdef01234567';
 const TREE_DIGEST = `sha256:${'a'.repeat(64)}`;
@@ -168,7 +168,7 @@ test('filesystem artifact client exports only the exact validated member set to 
 
 test('hosted runtime configuration canonicalizes the packaged trusted inventory for the launcher', () => {
   const inventoryBytes = readFileSync(new URL(
-    '../launcher/repository/dev/verification/environments/test-cloud.inventory.v1.json',
+    '../launcher/repository/verification/fixtures/environments/test-cloud.inventory.v1.json',
     import.meta.url,
   ));
   const configuration = createHostedRuntimeConfiguration(
