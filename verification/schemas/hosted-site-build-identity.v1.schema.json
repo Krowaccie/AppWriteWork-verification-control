@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.salmora.net/verification/hosted-site-build-identity.v1.schema.json",
+  "title": "Hosted Site Build Identity v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "sourceRevision",
+    "sitePayloadDigest",
+    "verifierManifestDigest"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "hosted-site-build-identity.v1"
+    },
+    "sourceRevision": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "sitePayloadDigest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "verifierManifestDigest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    }
+  }
+}

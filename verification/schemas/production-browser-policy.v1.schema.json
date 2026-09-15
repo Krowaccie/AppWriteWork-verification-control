@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "production-browser-policy.v1.schema.json",
+  "title": "Closed secretless production browser policy v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "origin",
+    "paths",
+    "assetPathPattern",
+    "queryKeys"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "production-browser-policy.v1"
+    },
+    "origin": {
+      "const": "https://salmora.net"
+    },
+    "paths": {
+      "const": [
+        "/",
+        "/build-identity.json",
+        "/salmora-mark.svg",
+        "/theme-init.js"
+      ]
+    },
+    "assetPathPattern": {
+      "const": "^/assets/[A-Za-z0-9_-]+-[A-Za-z0-9_-]{6,}\\.(?:css|js|mjs|woff2?|ttf|otf|png|jpe?g|gif|svg|webp|ico)$"
+    },
+    "queryKeys": {
+      "const": []
+    }
+  }
+}

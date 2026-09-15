@@ -1,0 +1,976 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "release-record.v1.schema.json",
+  "title": "Trusted production release record v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "recordDigest",
+    "environmentDigest",
+    "sourceRevision",
+    "artifactManifestDigest",
+    "verifierManifestDigest",
+    "qualifyingEvidence",
+    "approvalRef",
+    "github",
+    "targets"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "release-record.v1"
+    },
+    "recordDigest": {
+      "$ref": "#/$defs/digest"
+    },
+    "environmentDigest": {
+      "$ref": "#/$defs/digest"
+    },
+    "sourceRevision": {
+      "$ref": "#/$defs/gitSha"
+    },
+    "artifactManifestDigest": {
+      "$ref": "#/$defs/digest"
+    },
+    "verifierManifestDigest": {
+      "$ref": "#/$defs/digest"
+    },
+    "qualifyingEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "localDigest",
+        "testCloudDigest"
+      ],
+      "properties": {
+        "localDigest": {
+          "$ref": "#/$defs/digest"
+        },
+        "testCloudDigest": {
+          "$ref": "#/$defs/digest"
+        }
+      }
+    },
+    "approvalRef": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{2,254}$"
+    },
+    "github": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repository",
+        "workflow",
+        "runId",
+        "runAttempt",
+        "environment"
+      ],
+      "properties": {
+        "repository": {
+          "const": "Krowaccie/AppWriteWork-verification-control"
+        },
+        "workflow": {
+          "const": "Release Production"
+        },
+        "runId": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]*$"
+        },
+        "runAttempt": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "environment": {
+          "const": "production-release"
+        }
+      }
+    },
+    "targets": {
+      "type": "array",
+      "minItems": 36,
+      "maxItems": 36,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/target"
+      },
+      "allOf": [
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "artifactLogicalTarget",
+              "deploymentLogicalTarget",
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "const": "site"
+              },
+              "artifactLogicalTarget": {
+                "const": "web"
+              },
+              "deploymentLogicalTarget": {
+                "const": "production-site"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "artifactLogicalTarget",
+              "deploymentLogicalTarget",
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "const": "function"
+              },
+              "artifactLogicalTarget": {
+                "const": "api-keys-py"
+              },
+              "deploymentLogicalTarget": {
+                "const": "api-keys-py"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "artifactLogicalTarget",
+              "deploymentLogicalTarget",
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "const": "function"
+              },
+              "artifactLogicalTarget": {
+                "const": "api-router-py"
+              },
+              "deploymentLogicalTarget": {
+                "const": "api-router-py"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "artifactLogicalTarget",
+              "deploymentLogicalTarget",
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "const": "function"
+              },
+              "artifactLogicalTarget": {
+                "const": "billing-cron-py"
+              },
+              "deploymentLogicalTarget": {
+                "const": "billing-cron-py"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "artifactLogicalTarget",
+              "deploymentLogicalTarget",
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "const": "function"
+              },
+              "artifactLogicalTarget": {
+                "const": "billing-py"
+              },
+              "deploymentLogicalTarget": {
+                "const": "billing-py"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "artifactLogicalTarget",
+              "deploymentLogicalTarget",
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "const": "function"
+              },
+              "artifactLogicalTarget": {
+                "const": "billing-webhook-py"
+              },
+              "deploymentLogicalTarget": {
+                "const": "billing-webhook-py"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "artifactLogicalTarget",
+              "deploymentLogicalTarget",
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "const": "function"
+              },
+              "artifactLogicalTarget": {
+                "const": "branch-py"
+              },
+              "deploymentLogicalTarget": {
+                "const": "branch-py"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "artifactLogicalTarget",
+              "deploymentLogicalTarget",
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "const": "function"
+              },
+              "artifactLogicalTarget": {
+                "const": "cache-cleanup-cron-py"
+              },
+              "deploymentLogicalTarget": {
+                "const": "cache-cleanup-cron-py"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "artifactLogicalTarget",
+              "deploymentLogicalTarget",
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "const": "function"
+              },
+              "artifactLogicalTarget": {
+                "const": "catalog-py"
+              },
+              "deploymentLogicalTarget": {
+                "const": "catalog-py"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "artifactLogicalTarget",
+              "deploymentLogicalTarget",
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "const": "function"
+              },
+              "artifactLogicalTarget": {
+                "const": "chat-py"
+              },
+              "deploymentLogicalTarget": {
+                "const": "chat-py"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "artifactLogicalTarget",
+              "deploymentLogicalTarget",
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "const": "function"
+              },
+              "artifactLogicalTarget": {
+                "const": "cleanup-cron-py"
+              },
+              "deploymentLogicalTarget": {
+                "const": "cleanup-cron-py"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "artifactLogicalTarget",
+              "deploymentLogicalTarget",
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "const": "function"
+              },
+              "artifactLogicalTarget": {
+                "const": "connections-py"
+              },
+              "deploymentLogicalTarget": {
+                "const": "connections-py"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "artifactLogicalTarget",
+              "deploymentLogicalTarget",
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "const": "function"
+              },
+              "artifactLogicalTarget": {
+                "const": "finance-sync-sec-py"
+              },
+              "deploymentLogicalTarget": {
+                "const": "finance-sync-sec-py"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "artifactLogicalTarget",
+              "deploymentLogicalTarget",
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "const": "function"
+              },
+              "artifactLogicalTarget": {
+                "const": "finance-sync-wb-py"
+              },
+              "deploymentLogicalTarget": {
+                "const": "finance-sync-wb-py"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "artifactLogicalTarget",
+              "deploymentLogicalTarget",
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "const": "function"
+              },
+              "artifactLogicalTarget": {
+                "const": "flowise-runner-py"
+              },
+              "deploymentLogicalTarget": {
+                "const": "flowise-runner-py"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "artifactLogicalTarget",
+              "deploymentLogicalTarget",
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "const": "function"
+              },
+              "artifactLogicalTarget": {
+                "const": "mcp-cleanup-cron-py"
+              },
+              "deploymentLogicalTarget": {
+                "const": "mcp-cleanup-cron-py"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "artifactLogicalTarget",
+              "deploymentLogicalTarget",
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "const": "function"
+              },
+              "artifactLogicalTarget": {
+                "const": "mcp-gateway-py"
+              },
+              "deploymentLogicalTarget": {
+                "const": "mcp-gateway-py"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "artifactLogicalTarget",
+              "deploymentLogicalTarget",
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "const": "function"
+              },
+              "artifactLogicalTarget": {
+                "const": "project-public-links-py"
+              },
+              "deploymentLogicalTarget": {
+                "const": "project-public-links-py"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "artifactLogicalTarget",
+              "deploymentLogicalTarget",
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "const": "function"
+              },
+              "artifactLogicalTarget": {
+                "const": "project-public-read-py"
+              },
+              "deploymentLogicalTarget": {
+                "const": "project-public-read-py"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "artifactLogicalTarget",
+              "deploymentLogicalTarget",
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "const": "function"
+              },
+              "artifactLogicalTarget": {
+                "const": "project-snapshots-py"
+              },
+              "deploymentLogicalTarget": {
+                "const": "project-snapshots-py"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "artifactLogicalTarget",
+              "deploymentLogicalTarget",
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "const": "function"
+              },
+              "artifactLogicalTarget": {
+                "const": "runs-cancel-py"
+              },
+              "deploymentLogicalTarget": {
+                "const": "runs-cancel-py"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "artifactLogicalTarget",
+              "deploymentLogicalTarget",
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "const": "function"
+              },
+              "artifactLogicalTarget": {
+                "const": "runs-clear-py"
+              },
+              "deploymentLogicalTarget": {
+                "const": "runs-clear-py"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "artifactLogicalTarget",
+              "deploymentLogicalTarget",
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "const": "function"
+              },
+              "artifactLogicalTarget": {
+                "const": "runs-create-py"
+              },
+              "deploymentLogicalTarget": {
+                "const": "runs-create-py"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "artifactLogicalTarget",
+              "deploymentLogicalTarget",
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "const": "function"
+              },
+              "artifactLogicalTarget": {
+                "const": "runs-detail-py"
+              },
+              "deploymentLogicalTarget": {
+                "const": "runs-detail-py"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "artifactLogicalTarget",
+              "deploymentLogicalTarget",
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "const": "function"
+              },
+              "artifactLogicalTarget": {
+                "const": "runs-list-py"
+              },
+              "deploymentLogicalTarget": {
+                "const": "runs-list-py"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "artifactLogicalTarget",
+              "deploymentLogicalTarget",
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "const": "function"
+              },
+              "artifactLogicalTarget": {
+                "const": "runs-status-py"
+              },
+              "deploymentLogicalTarget": {
+                "const": "runs-status-py"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "artifactLogicalTarget",
+              "deploymentLogicalTarget",
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "const": "function"
+              },
+              "artifactLogicalTarget": {
+                "const": "runs-steps-py"
+              },
+              "deploymentLogicalTarget": {
+                "const": "runs-steps-py"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "artifactLogicalTarget",
+              "deploymentLogicalTarget",
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "const": "function"
+              },
+              "artifactLogicalTarget": {
+                "const": "sec-cache-builder-py"
+              },
+              "deploymentLogicalTarget": {
+                "const": "sec-cache-builder-py"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "artifactLogicalTarget",
+              "deploymentLogicalTarget",
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "const": "function"
+              },
+              "artifactLogicalTarget": {
+                "const": "sharing-py"
+              },
+              "deploymentLogicalTarget": {
+                "const": "sharing-py"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "artifactLogicalTarget",
+              "deploymentLogicalTarget",
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "const": "function"
+              },
+              "artifactLogicalTarget": {
+                "const": "smtp-diagnostic-py"
+              },
+              "deploymentLogicalTarget": {
+                "const": "smtp-diagnostic-py"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "artifactLogicalTarget",
+              "deploymentLogicalTarget",
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "const": "function"
+              },
+              "artifactLogicalTarget": {
+                "const": "telemetry-py"
+              },
+              "deploymentLogicalTarget": {
+                "const": "telemetry-py"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "artifactLogicalTarget",
+              "deploymentLogicalTarget",
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "const": "function"
+              },
+              "artifactLogicalTarget": {
+                "const": "usage-cron-py"
+              },
+              "deploymentLogicalTarget": {
+                "const": "usage-cron-py"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "artifactLogicalTarget",
+              "deploymentLogicalTarget",
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "const": "function"
+              },
+              "artifactLogicalTarget": {
+                "const": "usage-py"
+              },
+              "deploymentLogicalTarget": {
+                "const": "usage-py"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "artifactLogicalTarget",
+              "deploymentLogicalTarget",
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "const": "function"
+              },
+              "artifactLogicalTarget": {
+                "const": "validate-py"
+              },
+              "deploymentLogicalTarget": {
+                "const": "validate-py"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "artifactLogicalTarget",
+              "deploymentLogicalTarget",
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "const": "function"
+              },
+              "artifactLogicalTarget": {
+                "const": "verification-email-py"
+              },
+              "deploymentLogicalTarget": {
+                "const": "verification-email-py"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "artifactLogicalTarget",
+              "deploymentLogicalTarget",
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "const": "function"
+              },
+              "artifactLogicalTarget": {
+                "const": "worker-cron-py"
+              },
+              "deploymentLogicalTarget": {
+                "const": "worker-cron-py"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        }
+      ]
+    }
+  },
+  "$defs": {
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "gitSha": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifactLogicalTarget",
+        "deploymentLogicalTarget",
+        "kind",
+        "deploymentId",
+        "canonicalContentDigest",
+        "transportDigest"
+      ],
+      "properties": {
+        "artifactLogicalTarget": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]*$"
+        },
+        "deploymentLogicalTarget": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]*$"
+        },
+        "kind": {
+          "enum": [
+            "site",
+            "function"
+          ]
+        },
+        "deploymentId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{7,63}$"
+        },
+        "canonicalContentDigest": {
+          "$ref": "#/$defs/digest"
+        },
+        "transportDigest": {
+          "$ref": "#/$defs/digest"
+        }
+      }
+    }
+  }
+}

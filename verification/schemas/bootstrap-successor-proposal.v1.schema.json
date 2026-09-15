@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.salmora.net/verification/bootstrap-successor-proposal.v1.schema.json",
+  "title": "Bootstrap Successor Proposal v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "sourceRevision",
+    "protocolVersion",
+    "sortedFileDigests",
+    "requestSchemaDigest",
+    "responseSchemaDigest",
+    "scenarioSchemaDigest",
+    "providerContractDigest",
+    "cleanupProtocolDigest",
+    "transcriptCorpusDigest",
+    "evidenceValidatorDigest",
+    "proposalDigest"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "bootstrap-successor-proposal.v1" },
+    "sourceRevision": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "protocolVersion": { "const": "verification-runner.v1" },
+    "sortedFileDigests": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/fileDigest" }
+    },
+    "requestSchemaDigest": { "$ref": "#/$defs/digest" },
+    "responseSchemaDigest": { "$ref": "#/$defs/digest" },
+    "scenarioSchemaDigest": { "$ref": "#/$defs/digest" },
+    "providerContractDigest": { "$ref": "#/$defs/digest" },
+    "cleanupProtocolDigest": { "$ref": "#/$defs/digest" },
+    "transcriptCorpusDigest": { "$ref": "#/$defs/digest" },
+    "evidenceValidatorDigest": { "$ref": "#/$defs/digest" },
+    "proposalDigest": { "$ref": "#/$defs/digest" }
+  },
+  "$defs": {
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "fileDigest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "digest"],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^(?!/)(?![A-Za-z]:/)(?!.*(?:^|/)(?:\\.|\\.\\.)(?:/|$))(?!.*//)(?!.*[/]$)(?!.*\\\\)[^\\u0000-\\u001f\\u007f]+$"
+        },
+        "digest": { "$ref": "#/$defs/digest" }
+      }
+    }
+  }
+}

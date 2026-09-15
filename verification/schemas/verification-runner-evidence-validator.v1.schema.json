@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "verification-runner-evidence-validator.v1",
+  "type": "object", "additionalProperties": false, "required": ["schemaVersion", "transportStatus", "evidence"],
+  "properties": {
+    "schemaVersion": { "const": "verification-runner-evidence-validator.v1" }, "transportStatus": { "const": 201 },
+    "evidence": {
+      "type": "object", "additionalProperties": false,
+      "required": ["protocolVersion", "status", "requiredFields"],
+      "properties": {
+        "protocolVersion": { "const": "verification-runner.v1" },
+        "status": { "const": "completed" },
+        "requiredFields": {
+          "type": "array", "minItems": 4, "maxItems": 4,
+          "prefixItems": [{ "const": "protocolVersion" }, { "const": "scenarioId" }, { "const": "status" }, { "const": "data" }],
+          "items": false
+        }
+      }
+    }
+  }
+}
