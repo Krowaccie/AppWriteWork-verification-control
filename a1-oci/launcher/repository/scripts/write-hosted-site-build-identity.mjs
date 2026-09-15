@@ -13,11 +13,11 @@ import path from "node:path";
 import {
   createHostedSiteBuildIdentity,
   serializeHostedSiteBuildIdentity,
-} from "./verification/hosted-site-build-identity.mjs";
+} from "../verification/core/hosted-site-build-identity.mjs";
 import {
   digestFileSet,
   sha256Bytes,
-} from "./verification/canonical-json.mjs";
+} from "../verification/core/canonical-json.mjs";
 
 const WRITER_KEYS = Object.freeze([
   "outputDir",

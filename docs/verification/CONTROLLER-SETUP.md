@@ -30,6 +30,41 @@ selected Actions allowlist.
 
 The controller repository must have a default-deny ruleset, CODEOWNERS approval for controller code, schemas, workflows, policies, and the lockfile, required reviewers, prevent self-review, required status checks, signed or otherwise policy-approved commits, and deletion/force-push protection. Record repository ID, workflow IDs, ruleset IDs, CODEOWNERS digest, and effective policy readback.
 
+## Post-C8 source layout and hosted handoff
+
+The maintained source owners are `verification/core/`,
+`verification/controller/`, `verification/appwrite-runner/`,
+`verification/schemas/`, `verification/fixtures/`, and
+`tests/e2e/verification/`. C8 moved the exact 57-file Test Cloud surface, with
+the same basenames, to its sole maintained owner
+`verification/adapters/test-cloud/`. The path inventory is recorded in
+[REPOSITORY-BOUNDARIES.md](REPOSITORY-BOUNDARIES.md#ownership-and-promotion-boundary)
+and there is no compatibility alias. The former `dev/e2e/`,
+`dev/verification/`, `packages/verification-controller/`, and
+`src/functions/verification-runner-py/` roots are absent and have no
+compatibility aliases.
+
+C7 does not activate this controller. The common `verification-report.v1`
+record is a truthful, non-blocking report, while
+`promotion-eligibility.v1` is a separate fail-closed evaluation that performs
+no promotion. Candidate code supplies neither active policy nor verifier
+qualification: an already qualified active generation must qualify a distinct
+candidate generation. The local Appwrite requirement remains unsatisfied,
+not currently due debt marked `C6_LOCAL_E2E_DEFERRED`; it is not a Test Cloud
+result, waiver, or PASS.
+
+Controller diagnostics are triaged with the closed five-class taxonomy
+`PRODUCT_DEFECT`, `VERIFIER_DEFECT`, `ENVIRONMENT_DEFECT`, `AGENT_MISUSE`, and
+bounded `UNRESOLVED`; classification never changes an observed non-pass into
+eligibility.
+
+C8 is repository consolidation and qualification of the existing system, not
+hosted activation. Repository conformance supplies the adapter's exact-six
+managed-cloud facts-schema context to unchanged C7 normalization. C7 core keeps
+selection, report construction, evidence-validity, and promotion-eligibility
+authority. No source or remote `main`, cloud, deployment, release, or
+production operation is authorized here.
+
 ## Deterministic source-to-controller promotion boundary
 
 AppWriteWork is the controller authoring authority; the protected controller
@@ -91,10 +126,10 @@ The trusted command map is exact and ordered:
 | Order | Command ID | Parent-mapped executable and argv | cwd | Network |
 | ---: | --- | --- | --- | --- |
 | 1 | `root-npm-ci` | `npmExecutable ci --ignore-scripts --no-audit --no-fund` | `exportRoot` | `registry-only` |
-| 2 | `web-npm-ci` | `npmExecutable ci --ignore-scripts --no-audit --no-fund` | `exportRoot/src/web` | `registry-only` |
+| 2 | `web-npm-ci` | `npmExecutable ci --ignore-scripts --no-audit --no-fund` | `exportRoot/apps/web` | `registry-only` |
 | 3 | `bundle-catalog` | `nodeExecutable scripts/bundle-catalog.mjs` | `exportRoot` | `deny` |
-| 4 | `typecheck` | `npmExecutable exec -- tsc -b --pretty false` | `exportRoot/src/web` | `deny` |
-| 5 | `vite-build` | `npmExecutable exec -- vite build --outDir <siteOutput> --emptyOutDir` | `exportRoot/src/web` | `deny` |
+| 4 | `typecheck` | `npmExecutable exec -- tsc -b --pretty false` | `exportRoot/apps/web` | `deny` |
+| 5 | `vite-build` | `npmExecutable exec -- vite build --outDir <siteOutput> --emptyOutDir` | `exportRoot/apps/web` | `deny` |
 
 Both executables are parent-pinned absolute regular non-link files;
 `<siteOutput>` is a parent-created private path. Candidate data cannot change
@@ -172,6 +207,24 @@ artifact ID/digest, source revision, and runner revision together. Never mix a
 new SHA with an artifact or binding from a previous generation. Candidate
 materialization, local sync, or a previously successful readback cannot make a
 mixed tuple trusted.
+
+C8 repository tests additionally bind the candidate, controller, environment,
+source artifact, setup readback, and evidence generation before provider client
+construction. Fixtures are synthetic and run-owned; bounded reverse-order
+cleanup executes from `finally` and proves absence. Provider-retained execution
+observations are never fixture cleanup inputs. These checks do not prove that a
+protected hosted generation has been published or reached Appwrite Test.
+
+The existing private runner lock remains byte-for-byte governed by requirements
+blob `0fe87183870325942920984fbeb3271fa2ac2453`, SHA-256
+`d7f6d47467ddfd428ca6fe458e56168a53de2477f548fbbd1117ff06da1350d6`, and
+the two reviewed wheel hashes
+`sha256:5e226f6218febc71f6c1fc2fafb91c226f75bdc1d8fb12d66823716e891608fd`
+and
+`sha256:03d07803992c6c7bbc976327f34b18b6160327fc81cb82c9d504720ac0be3b62`.
+This is repository evidence only; hosted runner proof remains open. The
+`appwrite-test-readback` and `deployment-verification` external obligations stay
+pending and are not due at `pre-merge`.
 
 The committed `controller-bundle.proposal.json` is non-promotable
 `controller-bundle.proposal.v2` input. It carries only `UNMATERIALIZED`
