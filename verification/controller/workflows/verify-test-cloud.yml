@@ -1,0 +1,160 @@
+name: Verify Test Cloud
+
+on:
+  workflow_dispatch:
+    inputs:
+      revision:
+        description: Exact successful Verify Main source revision.
+        required: true
+        type: string
+      source_run_id:
+        description: Exact successful Verify Main workflow run ID.
+        required: true
+        type: string
+      source_run_attempt:
+        description: Exact successful Verify Main workflow run attempt.
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: appwrite-test-verification
+  cancel-in-progress: false
+
+jobs:
+  verify-test-cloud:
+    runs-on: windows-2025
+    timeout-minutes: 45
+    environment: appwrite-test
+    if: github.repository == 'Krowaccie/AppWriteWork-verification-control'
+    steps:
+      - name: Validate immutable controller revision
+        shell: bash
+        env:
+          GITHUB_SHA: ${{ github.sha }}
+          TRUSTED_CONTROLLER_SHA: ${{ vars.TRUSTED_CONTROLLER_SHA }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_SHA" != ""
+          test "$TRUSTED_CONTROLLER_SHA" != ""
+          [[ "$GITHUB_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$TRUSTED_CONTROLLER_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$GITHUB_SHA" = "$TRUSTED_CONTROLLER_SHA"
+
+      - name: Checkout only the trusted controller
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          ref: ${{ vars.TRUSTED_CONTROLLER_SHA }}
+          persist-credentials: false
+
+      - name: Set up exact Node.js runtime
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '24.11.1'
+          package-manager-cache: false
+
+      - name: Verify exact Node.js and npm versions
+        shell: bash
+        run: |
+          test "$(node --version)" = "v24.11.1"
+          test "$(npm --version)" = "11.6.2"
+
+      - name: Prepare the verified controller artifact
+        shell: bash
+        env:
+          CONTROLLER_ARTIFACT_READ_TOKEN: ${{ github.token }}
+          CONTROLLER_ARTIFACT_DIRECTORY: ${{ runner.temp }}\trusted-controller-artifact
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          REQUIRED_CONTROLLER_ENTRYPOINT: verification/controller/workflows/verify-test-cloud.yml
+          TRUSTED_CONTROLLER_SHA: ${{ vars.TRUSTED_CONTROLLER_SHA }}
+          TRUSTED_CONTROLLER_ARTIFACT_ID: ${{ vars.TRUSTED_CONTROLLER_ARTIFACT_ID }}
+          TRUSTED_CONTROLLER_BUNDLE_DIGEST: ${{ vars.TRUSTED_CONTROLLER_BUNDLE_DIGEST }}
+        run: |
+          set -euo pipefail
+          env -i \
+            PATH="$PATH" \
+            GITHUB_ENV="$GITHUB_ENV" \
+            CONTROLLER_ARTIFACT_READ_TOKEN="$CONTROLLER_ARTIFACT_READ_TOKEN" \
+            CONTROLLER_ARTIFACT_DIRECTORY="$CONTROLLER_ARTIFACT_DIRECTORY" \
+            GITHUB_REPOSITORY="$GITHUB_REPOSITORY" \
+            REQUIRED_CONTROLLER_ENTRYPOINT="$REQUIRED_CONTROLLER_ENTRYPOINT" \
+            TRUSTED_CONTROLLER_ARTIFACT_ID="$TRUSTED_CONTROLLER_ARTIFACT_ID" \
+            TRUSTED_CONTROLLER_BUNDLE_DIGEST="$TRUSTED_CONTROLLER_BUNDLE_DIGEST" \
+            TRUSTED_CONTROLLER_SHA="$TRUSTED_CONTROLLER_SHA" \
+            node verification/controller/src/prepare-controller-artifact.mjs \
+              --output "$CONTROLLER_ARTIFACT_DIRECTORY"
+
+      - name: Install the exact trusted controller dependencies
+        shell: bash
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Verify exact Appwrite Test binding artifact
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          CONTROLLER_REVISION: ${{ vars.TRUSTED_CONTROLLER_SHA }}
+          SOURCE_REPOSITORY_REVISION: ${{ inputs.revision }}
+          RUNNER_REVISION: ${{ vars.VERIFICATION_RUNNER_REVISION }}
+          BINDING_ARTIFACT_ID: ${{ vars.TRUSTED_TEST_CLOUD_BINDING_ARTIFACT_ID }}
+          BINDING_ARTIFACT_DIGEST: ${{ vars.TRUSTED_TEST_CLOUD_BINDING_ARTIFACT_DIGEST }}
+          BINDING_VERIFIER_INPUT: ${{ runner.temp }}\test-cloud-binding-verifier-input.json
+          BINDING_DIRECTORY: ${{ runner.temp }}\test-cloud-bindings
+        run: |
+          $ErrorActionPreference = 'Stop'
+          node --input-type=module -e @'
+          import { writeFile } from 'node:fs/promises';
+          import { canonicalJson } from './verification/core/canonical-json.mjs';
+          const input = {
+            artifactId: process.env.BINDING_ARTIFACT_ID,
+            bundleDigest: process.env.BINDING_ARTIFACT_DIGEST,
+            initialSeed: false,
+            runnerRevision: process.env.RUNNER_REVISION,
+            sourceRepositoryRevision: process.env.SOURCE_REPOSITORY_REVISION,
+            trustedSha: process.env.CONTROLLER_REVISION,
+          };
+          await writeFile(process.env.BINDING_VERIFIER_INPUT, `${canonicalJson(input)}\n`, { flag: 'wx' });
+          '@
+          node verification/controller/src/test-cloud-binding-artifact-verifier.mjs --input $env:BINDING_VERIFIER_INPUT --output $env:BINDING_DIRECTORY
+
+      - name: Install pinned Playwright Chromium
+        shell: bash
+        run: npm exec --package=playwright@1.61.1 -- playwright install chromium
+
+      - name: Run the one-process staged controller
+        shell: bash
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
+          REQUESTED_REVISION: ${{ inputs.revision }}
+          SOURCE_RUN_ID: ${{ inputs.source_run_id }}
+          SOURCE_RUN_ATTEMPT: ${{ inputs.source_run_attempt }}
+          TRUSTED_CONTROLLER_SHA: ${{ vars.TRUSTED_CONTROLLER_SHA }}
+          TRUSTED_CONTROLLER_ARTIFACT_ID: ${{ vars.TRUSTED_CONTROLLER_ARTIFACT_ID }}
+          TRUSTED_CONTROLLER_BUNDLE_DIGEST: ${{ vars.TRUSTED_CONTROLLER_BUNDLE_DIGEST }}
+          CONTROLLER_ARTIFACT_DIRECTORY: ${{ runner.temp }}\trusted-controller-artifact
+          SOURCE_ARTIFACT_READER_APP_ID: ${{ vars.SOURCE_ARTIFACT_READER_APP_ID }}
+          SOURCE_ARTIFACT_READER_INSTALLATION_ID: ${{ vars.SOURCE_ARTIFACT_READER_INSTALLATION_ID }}
+          SOURCE_REPOSITORY_ID: ${{ vars.SOURCE_REPOSITORY_ID }}
+          SOURCE_VERIFY_MAIN_WORKFLOW_ID: ${{ vars.SOURCE_VERIFY_MAIN_WORKFLOW_ID }}
+          BINDING_DIRECTORY: ${{ runner.temp }}\test-cloud-bindings
+          SOURCE_ARTIFACT_READER_PRIVATE_KEY: ${{ secrets.SOURCE_ARTIFACT_READER_PRIVATE_KEY }}
+          APPWRITE_TEST_OPERATOR_API_KEY: ${{ secrets.APPWRITE_TEST_OPERATOR_API_KEY }}
+          APPWRITE_TEST_FIXTURE_API_KEY: ${{ secrets.APPWRITE_TEST_FIXTURE_API_KEY }}
+          E2E_OWNER_EMAIL: ${{ secrets.E2E_OWNER_EMAIL }}
+          E2E_OWNER_PASSWORD: ${{ secrets.E2E_OWNER_PASSWORD }}
+          E2E_EDITOR_EMAIL: ${{ secrets.E2E_EDITOR_EMAIL }}
+          E2E_EDITOR_PASSWORD: ${{ secrets.E2E_EDITOR_PASSWORD }}
+          E2E_VIEWER_EMAIL: ${{ secrets.E2E_VIEWER_EMAIL }}
+          E2E_VIEWER_PASSWORD: ${{ secrets.E2E_VIEWER_PASSWORD }}
+        run: node verification/controller/src/test-cloud-controller.mjs --hosted --revision "$REQUESTED_REVISION" --source-run-id "$SOURCE_RUN_ID" --source-run-attempt "$SOURCE_RUN_ATTEMPT" --binding-directory "$BINDING_DIRECTORY"
+
+# The staged controller performs tokenless reattestLocalControllerArtifact in
+# the same process that admits source-reader and ordinary-lane credentials.
+# Candidate artifact bytes remain inert data and are never checked out or run.
+# Recovery is a separate approved job and the ordinary lane never maps its credential.
