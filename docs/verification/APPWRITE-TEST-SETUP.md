@@ -8,9 +8,28 @@ successful source-`main` `Verify Main` artifact, an ordinary provider readback,
 the immutable controller bundle, and a successful `Verify Test Cloud` run.
 Nothing in this procedure authorizes or targets production.
 
+This is the existing protected Test Cloud system. C8 consolidates and qualifies
+its repository representation; it does not replace the system or activate its
+hosted lane. Any later program-completion work may consume only exact successful
+Test Cloud runtime evidence bound to its integrated candidate and must record
+local C6 as `C6_LOCAL_E2E_DEFERRED` without claiming local self-hosted parity.
+Source or remote `main` movement, provider mutation, controller publication,
+live execution, deployment, release, and production each remain separately
+governed by their exact procedure and authority.
+
+After C7, the environment inventory is maintained under
+`verification/fixtures/environments/`, the controller candidate under
+`verification/controller/`, and shared schemas and deterministic tooling under
+`verification/schemas/` and `verification/core/`. C8 moved the exact 57-file
+Test Cloud surface, preserving every basename, to the sole owner
+`verification/adapters/test-cloud/`. The former root is absent and has no
+compatibility alias. This repository consolidation does not activate or qualify
+the protected hosted controller.
+
 ## Fixed test identity
 
-The only allowed environment is the composite identity recorded in `dev/verification/environments/test-cloud.inventory.v1.json`:
+The only allowed environment is the composite identity recorded in
+`verification/fixtures/environments/test-cloud.inventory.v1.json`:
 
 - endpoint `https://fra.cloud.appwrite.io/v1`;
 - project ID `69137c5d003952a36d4c`;
@@ -19,6 +38,30 @@ The only allowed environment is the composite identity recorded in `dev/verifica
 - environment class `appwrite-cloud-test`.
 
 Preflight must reject every production endpoint, project, Site, origin, host suffix, or production credential name before client construction.
+
+The adapter binds one immutable generation of the candidate, controller,
+environment, source artifact, setup readback, and emitted evidence. A mismatch,
+mutable handoff, or self-authorized generation fails before provider client
+construction. Test fixtures are synthetic and run-owned. Their cleanup is
+bounded, runs from `finally` in fixed reverse dependency order, and proves exact
+absence; provider-retained execution observations are never deleted as fixture
+data.
+
+## Managed-cloud-only observations
+
+Only these six versioned facts may supplement the common C7 evidence:
+
+1. `test-cloud.managed-project-provider-settings.v1`
+2. `test-cloud.managed-function-site-domains.v1`
+3. `test-cloud.public-tls-dns.v1`
+4. `test-cloud.managed-scaling-regions-backups-cdn.v1`
+5. `test-cloud.external-sandbox-behavior.v1`
+6. `test-cloud.appwrite-cloud-self-host-policy-differences.v1`
+
+Repository conformance supplies this exact-six facts-schema context to the
+unchanged C7 normalizer. The adapter does not own selection, evidence validity,
+reporting, or promotion eligibility; those remain in `verification/core/`.
+Repository GREEN proves neither hosted activation nor provider reachability.
 
 This test Site follows source branch `main`. The separate production Appwrite
 project `69eb4818000afa64a7fa` and production Site
@@ -169,6 +212,15 @@ sizes, defaults, indexes, permissions, row-security state, extra columns, and
 schema digests. No local result in this section is cloud setup, deployment,
 hosted execution, or production evidence.
 
+The private runner dependency lock is unchanged: requirements blob
+`0fe87183870325942920984fbeb3271fa2ac2453`, requirements SHA-256
+`d7f6d47467ddfd428ca6fe458e56168a53de2477f548fbbd1117ff06da1350d6`, and
+reviewed wheel hashes
+`sha256:5e226f6218febc71f6c1fc2fafb91c226f75bdc1d8fb12d66823716e891608fd`
+and
+`sha256:03d07803992c6c7bbc976327f34b18b6160327fc81cb82c9d504720ac0be3b62`.
+These values are repository evidence only. Hosted runner proof remains open.
+
 
 ## Execution retention and observation readback
 
@@ -193,7 +245,7 @@ Provision and read back only these named keys and exact scopes:
 
 - `APPWRITE_TEST_OPERATOR_API_KEY`: `execution.write`, `functions.read`, `functions.write`, `sites.read`, `sites.write`;
 - `APPWRITE_TEST_FIXTURE_API_KEY`: `rows.read`, `rows.write`, `users.read`, `users.write`;
-- `APPWRITE_TEST_RECOVERY_API_KEY`: `rows.read`, `rows.write`, `users.read`, `users.write`, stored only in a separate recovery environment/job.
+- `APPWRITE_TEST_RECOVERY_API_KEY`: `rows.read`, `rows.write`, `users.read`, `users.write`, `files.read`, `files.write`, stored only in a separate recovery environment/job.
 
 No generic `APPWRITE_API_KEY`, production key, project-admin key, session key, or broader scope is allowed. The private runner receives only its separately documented least-privilege runtime variables and permissions. Its execute permission must be private to the trusted controller path.
 
@@ -272,9 +324,14 @@ Before setup can become eligible, read back:
 
 ## Offline validator
 
-The only setup command authorized by this repository implementation is the dry, non-mutating validator:
+The only setup command authorized by this repository implementation is the
+dry, non-mutating validator at the consolidated owner path:
 
-`node scripts/verification/test-cloud-setup-check.mjs --offline --inventory dev/verification/environments/test-cloud.inventory.v1.json`
+`node verification/adapters/test-cloud/test-cloud-setup-check.mjs --offline --inventory verification/fixtures/environments/test-cloud.inventory.v1.json`
+
+Historical rejected form (pre-C8 only):
+`node scripts/verification/test-cloud-setup-check.mjs --offline --inventory verification/fixtures/environments/test-cloud.inventory.v1.json`.
+That source path is absent, is not a compatibility alias, and must not be used.
 
 It must return `BLOCKED` until every exact inventory field, provider schema contract, schema readback digest, execution retention/read-only observation proof, cleanup/recovery schema delta, table/Function permission, API-key scope, identity empty-session proof, controller tuple, GitHub App, protected environment, ruleset, and bootstrap seed is supplied by readback. It must never create, update, delete, deploy, invoke, or recover a cloud resource.
 
@@ -304,4 +361,10 @@ operation. The separate production project `69eb4818000afa64a7fa`, production
 Site `69eb4a020024c520642e`, and `production` branch remain explicitly pending
 for a later, separately approved procedure. The current test-only closeout may
 publish the credential-free source artifact and run the protected Appwrite Test
-controller after the required source-`main` gate is satisfied.
+controller only after the required source-`main` gate is satisfied and separate
+authority has been granted for each exact source/remote `main` movement,
+publication, provider mutation, and live execution.
+
+The `appwrite-test-readback` and `deployment-verification` obligations remain
+`pending`. They are not due at lifecycle `pre-merge` and require separately
+authorized external procedures; C8 repository completion cannot satisfy them.
