@@ -3,7 +3,7 @@
 Status: `IN_PROGRESS` for Appwrite Test only. The protected read-only producer,
 binding-artifact verifier, controller publisher, and hosted verification
 workflow are implemented in the public controller repository at
-`eeaaaf7619bdac124101cfb1d8c628e8447d83be`. Final activation still requires a
+`aef6c57bff3eee73d5d8503af969aa2c95c8ac63`. Final activation still requires a
 successful source-`main` `Verify Main` artifact, an ordinary provider readback,
 the immutable controller bundle, and a successful `Verify Test Cloud` run.
 Nothing in this procedure authorizes or targets production.

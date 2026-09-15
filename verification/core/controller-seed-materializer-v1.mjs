@@ -29,10 +29,10 @@ const SOURCE_SET_DESCRIPTOR_SCHEMA_PATH = 'verification/schemas/controller-seed-
 const PROPOSAL_PATH = 'verification/controller/controller-bundle.proposal.json';
 const OVERLAY_ROOT = 'verification/controller/controller-repository-seed';
 const A1 = Object.freeze({
-  descriptorDigest: 'sha256:3f6fd8bc74e3507bb2fe9f9a5dceeca33690f900539830a16cf37949d159e776',
-  sourceTreeDigest: 'sha256:00bda078134e863f46684e1da0deb9a7f123161f965f7a979cd1f0310afa6d54',
-  manifestDigest: 'sha256:8cffbed6f6c19f7cd0d682b074be2b15d4820a485bf73d785decfee593b6b05b',
-  binaryDigest: 'sha256:0b52f5b1f0abdf0acbd4d10c1a4895b53401d5644161ad71460b50317d5e1d89',
+  descriptorDigest: 'sha256:fce848aa1d385b6062867774c4233a41b5b938dcad0fd430d422479fe295f029',
+  sourceTreeDigest: 'sha256:db8e5d3c94b393e5cf7bd5d50d3c859fc0c22d2a39306329b26532c7f5dc4ab7',
+  manifestDigest: 'sha256:bfa37fd86ec7ccae343e486a1b6d6de65ca1e28a10600b712c987bf7e4765f12',
+  binaryDigest: 'sha256:ac39ee61645f83cf5d72eec706cd03c1c8d89be4236dec9035d617330363c0b0',
 });
 const COMMIT = Object.freeze({
   schemaVersion: 'controller-seed-commit.v1',
