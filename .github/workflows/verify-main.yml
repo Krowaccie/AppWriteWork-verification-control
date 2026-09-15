@@ -101,6 +101,6 @@ jobs:
 
       - name: Publish validated hosted source artifact
         if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && steps.local-verification.outcome == 'success'
-        uses: Krowaccie/AppWriteWork-verification-control/.github/actions/a1-source-artifact-launcher@eeaaaf7619bdac124101cfb1d8c628e8447d83be
+        uses: Krowaccie/AppWriteWork-verification-control/.github/actions/a1-source-artifact-launcher@aef6c57bff3eee73d5d8503af969aa2c95c8ac63
         with:
           request: ${{ steps.source-artifact-request.outputs.request }}

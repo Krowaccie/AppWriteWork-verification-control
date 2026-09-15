@@ -2,7 +2,7 @@
 
 Status: Appwrite Test controller bootstrap is implemented and the public
 controller is protected at
-`eeaaaf7619bdac124101cfb1d8c628e8447d83be`. The remaining test-only sequence is
+`aef6c57bff3eee73d5d8503af969aa2c95c8ac63`. The remaining test-only sequence is
 source-`main` artifact publication, protected readback collection, controller
 bundle publication, ordinary readback collection, and `Verify Test Cloud`.
 Recovery and every production operation remain outside this procedure.
@@ -17,7 +17,7 @@ release, or rollback execution.
 - Controller test workflows: `collect-appwrite-test-readback.yml`,
   `publish-controller-bundle.yml`, and `verify-test-cloud.yml`. Production
   templates remain separate and inactive.
-- `Verify Main` remains credential-free. Pull requests run only local verification; `push` to `main` and `workflow_dispatch` may publish only `verification-artifacts-<40-character-revision>` through the protected action at `eeaaaf7619bdac124101cfb1d8c628e8447d83be` and still receive no controller, Appwrite, release, or browser credential.
+- `Verify Main` remains credential-free. Pull requests run only local verification; `push` to `main` and `workflow_dispatch` may publish only `verification-artifacts-<40-character-revision>` through the protected action at `aef6c57bff3eee73d5d8503af969aa2c95c8ac63` and still receive no controller, Appwrite, release, or browser credential.
 
 The source workflow is also materialized in the controller seed so the
 controller can validate its reviewed bytes. Its `verify` job is admitted only
@@ -91,7 +91,7 @@ exactly. See [REPOSITORY-BOUNDARIES.md](REPOSITORY-BOUNDARIES.md).
 
 The A1 foundation is implemented and locally contract-tested. The trusted hosted artifact launcher
 is installed as a protected controller action at full SHA
-`eeaaaf7619bdac124101cfb1d8c628e8447d83be` and pins the public OCI image by
+`aef6c57bff3eee73d5d8503af969aa2c95c8ac63` and pins the public OCI image by
 immutable digest. The source workflow remains credential-free; hosted
 eligibility is limited to the canonical main-bound request, and operational
 proof requires an exact successful workflow/artifact readback.
@@ -495,7 +495,7 @@ it against its schema. Only a separately reviewed `COMPLETE_B1` instance is
 eligible for A2; the checked-in `PENDING_B1` template is intentionally
 ineligible.
 
-The source workflow contract currently pins the protected hosted launcher action at full SHA `eeaaaf7619bdac124101cfb1d8c628e8447d83be`; the repaired successor action pins `ghcr.io/krowaccie/appwritework-verification-a1@sha256:4d4769e8cc9a145de4de3799e31609c57e21f07a7de0d27bf38610a05bd88ed7`, the immutable C8-layout OCI index published from controller tree `1a0d13416aaf6593fce00cde2eb8b8e3e21287aa`. The source action reference must be replaced by the exact protected controller merge SHA before source-main artifact qualification is retried. `Verify Main` pins Node `24.11.1`, asserts npm `11.6.2`, and invokes the launcher only on `push` to `main` or `workflow_dispatch`, after local verification. Do not claim final Appwrite Test readiness until the exact source artifact, binding artifact, controller bundle, and hosted verification readbacks succeed.
+The source workflow contract now pins the protected hosted launcher action at full SHA `aef6c57bff3eee73d5d8503af969aa2c95c8ac63`; that action pins `ghcr.io/krowaccie/appwritework-verification-a1@sha256:a790f5d607b0e2a3224009aaea991ce3226b8cf0bb95f4e9d29047352a67ef01`. `Verify Main` pins Node `24.11.1`, asserts npm `11.6.2`, and invokes the launcher only on `push` to `main` or `workflow_dispatch`, after local verification. Do not claim final Appwrite Test readiness until the exact source artifact, binding artifact, controller bundle, and hosted verification readbacks succeed.
 
 The launcher protocol remains closed to exactly five candidate command IDs: `root-npm-ci`, `web-npm-ci`, `bundle-catalog`, `typecheck`, and `vite-build`. Candidate code cannot choose executable paths, argv, cwd, inherited environment, network mode, timeout, registry, output path, or upload path.
 
