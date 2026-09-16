@@ -1479,9 +1479,11 @@ export function composeProductionTestCloudLane(args) {
 export function createProductionHostedDependencies(args) {
   if (args === null || typeof args !== 'object') throw dependencyError();
   const hasControllerArtifactIo = Object.hasOwn(args, 'controllerArtifactIo');
+  const hasEvidenceRoot = Object.hasOwn(args, 'evidenceRoot');
   const hasContainedProcessTransport = Object.hasOwn(args, 'runContainedProcessImpl');
   const expectedKeys = ['environment', 'fetchImpl'];
   if (hasControllerArtifactIo) expectedKeys.push('controllerArtifactIo');
+  if (hasEvidenceRoot) expectedKeys.push('evidenceRoot');
   if (hasContainedProcessTransport) expectedKeys.push('runContainedProcessImpl');
   expectedKeys.sort();
   if (!exactDataObject(args, expectedKeys)) throw dependencyError();
@@ -1496,11 +1498,17 @@ export function createProductionHostedDependencies(args) {
       || typeof args.controllerArtifactIo.readFile !== 'function'
       || typeof args.controllerArtifactIo.realpath !== 'function'
     ))
+    || (hasEvidenceRoot && (
+      typeof args.evidenceRoot !== 'string'
+      || !path.isAbsolute(args.evidenceRoot)
+      || args.evidenceRoot.includes('\0')
+    ))
     || (hasContainedProcessTransport
       && typeof args.runContainedProcessImpl !== 'function')
   ) throw dependencyError();
 
   const { environment, fetchImpl } = args;
+  const evidenceRoot = hasEvidenceRoot ? args.evidenceRoot : REPOSITORY_ROOT;
   const controllerArtifactIo = hasControllerArtifactIo
     ? Object.freeze({ ...args.controllerArtifactIo })
     : undefined;
@@ -2170,11 +2178,11 @@ export function createProductionHostedDependencies(args) {
             return result('BLOCKED', null, 'EVIDENCE_WRITE_BLOCKED');
           }
           const written = await evidenceWriter.writeVerificationResult({
-            root: REPOSITORY_ROOT,
+            root: evidenceRoot,
             result: verificationResult,
           });
           return result('PASS', {
-            path: path.relative(REPOSITORY_ROOT, written.path).replaceAll('\\', '/'),
+            path: path.relative(evidenceRoot, written.path).replaceAll('\\', '/'),
             evidenceDigest: written.evidenceDigest,
           });
         },
