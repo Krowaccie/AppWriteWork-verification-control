@@ -312,15 +312,17 @@ export async function readSourceArtifact({
     ), 200, 'SOURCE_ARTIFACT_LIST_FAILED');
     const name = `verification-artifacts-${revision}`;
     const artifacts = Array.isArray(listing?.artifacts) ? listing.artifacts : [];
-    if (artifacts.length !== 1 || artifacts[0]?.name !== name ||
-        artifacts[0]?.expired !== false || !Number.isSafeInteger(artifacts[0]?.id) ||
-        !/^sha256:[0-9a-f]{64}$/.test(artifacts[0]?.digest ?? '') ||
-        !Number.isSafeInteger(artifacts[0]?.size_in_bytes) ||
-        artifacts[0].size_in_bytes < 22 ||
-        artifacts[0].size_in_bytes > MAX_SOURCE_ARCHIVE_BYTES) {
+    const sourceArtifacts = artifacts.filter((candidate) => candidate?.name === name);
+    if (sourceArtifacts.length !== 1 ||
+        sourceArtifacts[0]?.expired !== false ||
+        !Number.isSafeInteger(sourceArtifacts[0]?.id) ||
+        !/^sha256:[0-9a-f]{64}$/.test(sourceArtifacts[0]?.digest ?? '') ||
+        !Number.isSafeInteger(sourceArtifacts[0]?.size_in_bytes) ||
+        sourceArtifacts[0].size_in_bytes < 22 ||
+        sourceArtifacts[0].size_in_bytes > MAX_SOURCE_ARCHIVE_BYTES) {
       throw blocked('SOURCE_ARTIFACT_IDENTITY_MISMATCH');
     }
-    const artifact = artifacts[0];
+    const artifact = sourceArtifacts[0];
     const archiveResponse = await request(
       `/repos/${SOURCE_REPOSITORY}/actions/artifacts/${artifact.id}/zip`,
       {

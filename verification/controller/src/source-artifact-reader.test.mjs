@@ -332,8 +332,8 @@ test('invalid minted installation token is still revoked and revocation failure 
 });
 
 
-test('source reader binds workflow ID and rejects extra API or ZIP artifacts', async () => {
-  const invoke = async ({ workflowId = 22, apiExtra = false, zipExtra = false }) => {
+test('source reader binds workflow ID, selects one canonical API artifact, and rejects extra ZIP members', async () => {
+  const invoke = async ({ workflowId = 22, apiExtraName = null, zipExtra = false }) => {
     const request = async (path) => {
       if (path.includes('/access_tokens')) return { status: 201, body: { token: 'x', permissions: { actions: 'read' }, repositories: [{ id: 11, full_name: 'Krowaccie/AppWriteWork' }] } };
       if (path === '/repos/Krowaccie/AppWriteWork') return { status: 200, body: { id: 11, full_name: 'Krowaccie/AppWriteWork' } };
@@ -341,7 +341,7 @@ test('source reader binds workflow ID and rejects extra API or ZIP artifacts', a
       if (path.endsWith('/actions/runs/33')) return { status: 200, body: validRun({ workflow_id: workflowId }) };
       if (path.endsWith('/artifacts')) {
         const artifacts = [validArtifact()];
-        if (apiExtra) artifacts.push(validArtifact({ id: 45, name: 'unexpected' }));
+        if (apiExtraName) artifacts.push(validArtifact({ id: 45, name: apiExtraName }));
         return { status: 200, body: { artifacts } };
       }
       if (path.endsWith('/zip')) return { status: 200, bytes: zipBytes };
@@ -360,7 +360,12 @@ test('source reader binds workflow ID and rejects extra API or ZIP artifacts', a
     });
   };
   await assert.rejects(() => invoke({ workflowId: 99 }), /SOURCE_RUN_IDENTITY_MISMATCH/);
-  await assert.rejects(() => invoke({ apiExtra: true }), /SOURCE_ARTIFACT_IDENTITY_MISMATCH/);
+  await assert.doesNotReject(() => invoke({
+    apiExtraName: 'local-verification-evidence-33-1',
+  }));
+  await assert.rejects(() => invoke({
+    apiExtraName: `verification-artifacts-${SHA}`,
+  }), /SOURCE_ARTIFACT_IDENTITY_MISMATCH/);
   await assert.rejects(() => invoke({ zipExtra: true }), /PRODUCTION_HANDOFF_EXTRA_ARTIFACT/);
 });
 
