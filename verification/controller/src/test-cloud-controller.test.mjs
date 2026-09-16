@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { generateKeyPairSync } from 'node:crypto';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { registerHooks } from 'node:module';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -205,7 +205,7 @@ const pins = Object.freeze({
   node: 'actions/setup-node@820762786026740c76f36085b0efc47a31fe5020',
   python: 'actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1',
   upload: 'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a',
-  trustedA1: 'Krowaccie/AppWriteWork-verification-control/.github/actions/a1-source-artifact-launcher@aef6c57bff3eee73d5d8503af969aa2c95c8ac63',
+  trustedA1: 'Krowaccie/AppWriteWork-verification-control/.github/actions/a1-source-artifact-launcher@5eda2409fbe1a2dee7e1f87882e100beba62a710',
 });
 const PLAYWRIGHT_IMAGE =
   'mcr.microsoft.com/playwright:v1.61.1-noble@sha256:5b8f294aff9041b7191c34a4bab3ac270157a28774d4b0660e9743297b697e48';
@@ -2127,7 +2127,11 @@ async function productionCompositionOutcome(mode) {
       interruptAfterPhysicalCreateOrdinal: mode === 'physical-create-failure' ? 0 : null,
     })
     : null;
-  const { main } = await import('./test-cloud-controller.mjs');
+  const {
+    createProductionHostedDependencies,
+    main,
+  } = await import('./test-cloud-controller.mjs');
+  let evidenceRoot;
   const runMain = async (candidateEnvironment) => {
     let stdout = '';
     let stderr = '';
@@ -2140,6 +2144,12 @@ async function productionCompositionOutcome(mode) {
       environment: candidateEnvironment,
       fetchImpl,
       controllerArtifactIo: controllerArtifact.io,
+      createHostedDependencies(options) {
+        return createProductionHostedDependencies({
+          ...options,
+          evidenceRoot,
+        });
+      },
       async runContainedProcessImpl(options) {
         processCalls.push(options);
         if (options.args[0] === '--eval') {
@@ -2171,6 +2181,8 @@ async function productionCompositionOutcome(mode) {
     return { exitCode, stdout, stderr };
   };
   try {
+    evidenceRoot = await mkdtemp(path.join(tmpdir(), 'appwritework-c8-production-evidence-'));
+    await writeFile(path.join(evidenceRoot, '.gitignore'), '.verification/\n', 'utf8');
     const candidateEnvironment = mode === 'wrong-reattestation'
       ? Object.freeze({ ...environment, PROOF_SHA: 'f'.repeat(40) })
       : environment;
@@ -2237,6 +2249,9 @@ async function productionCompositionOutcome(mode) {
       },
     };
   } finally {
+    if (evidenceRoot !== undefined) {
+      await rm(evidenceRoot, { force: true, recursive: true });
+    }
     browserTransport?.restore();
     globalThis.fetch = previousFetch;
     responseHarness.restore();
@@ -2414,6 +2429,11 @@ function runOrdinaryLaneTerminalWorker() {
 }
 
 test('Task 9 vertical: real hosted composition atomically cleans the exact Task 8 fixture state before PASS', async () => {
+  const evidenceDirectory = path.join(root, '.verification', 'results');
+  const evidenceBefore = await readdir(evidenceDirectory).catch((error) => {
+    if (error?.code === 'ENOENT') return [];
+    throw error;
+  });
   const wrongReattestation = await runProductionCompositionWorker('wrong-reattestation');
   assert.deepEqual({
     exitCode: wrongReattestation.exitCode,
@@ -2576,6 +2596,11 @@ test('Task 9 vertical: real hosted composition atomically cleans the exact Task 
   }, JSON.stringify(vcsIdentityOutcome));
   assert.equal(vcsIdentityOutcome.processCalls.length, 1, JSON.stringify(vcsIdentityOutcome));
   assert.equal(vcsIdentityOutcome.browserTransport, null);
+  const evidenceAfter = await readdir(evidenceDirectory).catch((error) => {
+    if (error?.code === 'ENOENT') return [];
+    throw error;
+  });
+  assert.deepEqual(evidenceAfter.sort(), evidenceBefore.sort());
 });
 
 test('Task 8 authentic physical-create failure retains only the durable cleanup-debt head and settles every port', async () => {
@@ -3064,6 +3089,14 @@ test('production hosted dependency construction is closed and reads no credentia
         realpath: async () => {},
         stageResult: pass(trustedController()),
       },
+    }),
+    { code: 'CONTROLLER_DEPENDENCIES_INVALID' },
+  );
+  assert.throws(
+    () => createProductionHostedDependencies({
+      environment: Object.freeze({}),
+      evidenceRoot: '.verification/results',
+      fetchImpl: async () => {},
     }),
     { code: 'CONTROLLER_DEPENDENCIES_INVALID' },
   );
@@ -4735,7 +4768,11 @@ test('source Verify Main remains credential-free and delegates publication only 
   assert.match(workflow, /node verification\/core\/hosted-source-artifact-request\.mjs/u);
   assert.equal(workflow.split(pins.trustedA1).length - 1, 1);
   assert.match(workflow, /request:\s*\$\{\{\s*steps\.source-artifact-request\.outputs\.request\s*\}\}/u);
-  assert.deepEqual(actionReferences(workflow), [pins.checkout, pins.node, pins.python, pins.upload]);
+  assert.deepEqual(
+    actionReferences(workflow),
+    [pins.checkout, pins.node, pins.python, pins.upload, pins.upload],
+  );
+  assert.match(workflow, /path:\s*\.verification\/results\/\*\.json/u);
 
   for (const forbidden of [
     /\$\{\{\s*secrets\./iu,
