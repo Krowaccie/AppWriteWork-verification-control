@@ -71,6 +71,16 @@ jobs:
         shell: bash
         run: npm run verify -- --lane local --base "$VERIFY_BASE_SHA" --head "$GITHUB_SHA"
 
+      - name: Upload sanitized local verification evidence
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: local-verification-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .verification/results/*.json
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Publish local verification report
         id: verification-report
         continue-on-error: true
@@ -101,6 +111,6 @@ jobs:
 
       - name: Publish validated hosted source artifact
         if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && steps.local-verification.outcome == 'success'
-        uses: Krowaccie/AppWriteWork-verification-control/.github/actions/a1-source-artifact-launcher@aef6c57bff3eee73d5d8503af969aa2c95c8ac63
+        uses: Krowaccie/AppWriteWork-verification-control/.github/actions/a1-source-artifact-launcher@5eda2409fbe1a2dee7e1f87882e100beba62a710
         with:
           request: ${{ steps.source-artifact-request.outputs.request }}
