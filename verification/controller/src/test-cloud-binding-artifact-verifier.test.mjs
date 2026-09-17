@@ -53,6 +53,7 @@ function browserProfile(index) {
   };
   const profiles = [
     'cors-preflight-owner-session-post', 'owner-session-create',
+    'cors-preflight-appwrite-account-get', 'authenticated-appwrite-account-read',
     'cors-preflight-appwrite-prefs-get', 'authenticated-appwrite-read',
     'cors-preflight-appwrite-multipart-post', 'cors-preflight-appwrite-json-post',
     'cors-preflight-appwrite-json-post', 'cors-preflight-appwrite-json-post',
@@ -69,10 +70,10 @@ function browserProfile(index) {
     'authenticated-appwrite-json-mutation', 'authenticated-appwrite-function-json-mutation',
     'authenticated-appwrite-function-json-mutation',
   ];
-  const preflight = [25, 27, 29, 30, 31, 32, 33, 34, 35, 36].includes(index);
+  const preflight = [25, 27, 29, 31, 32, 33, 34, 35, 36, 37, 38].includes(index);
   if (preflight) return {
     profileId: profiles[index - 25], requestClass: 'cors-preflight', credentialCarrier: 'none',
-    method: 'OPTIONS', lifecyclePhase: index <= 27 ? 'OWNER_LOGIN' : 'APPLICATION_MUTATION',
+    method: 'OPTIONS', lifecyclePhase: index <= 29 ? 'OWNER_LOGIN' : 'APPLICATION_MUTATION',
     resourceType: 'other',
   };
   if (index === 26) return {
@@ -80,23 +81,23 @@ function browserProfile(index) {
     credentialCarrier: 'raw-playwright-request-body-only', method: 'POST',
     lifecyclePhase: 'OWNER_LOGIN', resourceType: 'fetch',
   };
-  if (index === 28) return {
+  if ([28, 30].includes(index)) return {
     profileId: profiles[index - 25], requestClass: 'appwrite-read',
     credentialCarrier: 'browser-cookie-jar-only', method: 'GET',
     lifecyclePhase: 'OWNER_LOGIN', resourceType: 'fetch',
   };
   return {
     profileId: profiles[index - 25],
-    requestClass: [37, 38, 44, 47, 51].includes(index)
+    requestClass: [39, 40, 46, 49, 53].includes(index)
       ? 'appwrite-multipart-mutation' : 'appwrite-json-mutation',
     credentialCarrier: 'browser-cookie-jar-only',
-    method: [46, 49, 50].includes(index) ? 'PATCH' : 'POST',
+    method: [48, 51, 52].includes(index) ? 'PATCH' : 'POST',
     lifecyclePhase: 'APPLICATION_MUTATION', resourceType: 'fetch',
   };
 }
 
 function browserPolicy() {
-  const rows = Array.from({ length: 56 }, (_, ordinal) => ({
+  const rows = Array.from({ length: 58 }, (_, ordinal) => ({
     ...browserProfile(ordinal), exactCount: 1, expectedResponseStatus: 200,
     finalUrl: ordinal < 25
       ? `${inventory.environment.publicOrigin}/asset-${ordinal}`

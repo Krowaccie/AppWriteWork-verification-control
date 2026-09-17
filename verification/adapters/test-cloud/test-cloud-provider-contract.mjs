@@ -6337,10 +6337,12 @@ const BROWSER_ROW_KEYS = Object.freeze([
   'responseBodyDigest', 'responseByteLength', 'responseHeaderBindings',
   'responseMimeEssence', 'responseOpaqueHeaderRules',
 ]);
-const LEGACY_PROFILE_BY_ORDINAL = Object.freeze([
+const PROFILE_BY_ORDINAL = Object.freeze([
   ...Array(25).fill('synthetic-immutable-asset'),
   'cors-preflight-owner-session-post',
   'owner-session-create',
+  'cors-preflight-appwrite-account-get',
+  'authenticated-appwrite-account-read',
   'cors-preflight-appwrite-prefs-get',
   'authenticated-appwrite-read',
   'cors-preflight-appwrite-multipart-post',
@@ -6371,15 +6373,9 @@ const LEGACY_PROFILE_BY_ORDINAL = Object.freeze([
   'authenticated-appwrite-function-json-mutation',
   'authenticated-appwrite-function-json-mutation',
 ]);
-const PROFILE_BY_ORDINAL = Object.freeze([
-  ...LEGACY_PROFILE_BY_ORDINAL.slice(0, 27),
-  'cors-preflight-appwrite-account-get',
-  'authenticated-appwrite-account-read',
-  ...LEGACY_PROFILE_BY_ORDINAL.slice(27),
-]);
 
-function validateBrowserProfile(row, index, profileByOrdinal) {
-  const profileId = profileByOrdinal[index];
+function validateBrowserProfile(row, index) {
+  const profileId = PROFILE_BY_ORDINAL[index];
   if (profileId === undefined || row.profileId !== profileId) invalid();
   if (index <= 24) {
     if (
@@ -6395,17 +6391,14 @@ function validateBrowserProfile(row, index, profileByOrdinal) {
     ) invalid();
     return;
   }
-  const shifted = profileByOrdinal.length === PROFILE_BY_ORDINAL.length;
-  const corsOrdinals = shifted
-    ? [25, 27, 29, 31, 32, 33, 34, 35, 36, 37, 38]
-    : [25, 27, 29, 30, 31, 32, 33, 34, 35, 36];
+  const corsOrdinals = [25, 27, 29, 31, 32, 33, 34, 35, 36, 37, 38];
   if (corsOrdinals.includes(index)) {
     if (
       row.requestClass !== 'cors-preflight'
       || row.credentialCarrier !== 'none'
       || row.method !== 'OPTIONS'
       || row.resourceType !== 'other'
-      || row.lifecyclePhase !== (index <= (shifted ? 29 : 27)
+      || row.lifecyclePhase !== (index <= 29
         ? 'OWNER_LOGIN' : 'APPLICATION_MUTATION')
     ) invalid();
     return;
@@ -6420,7 +6413,7 @@ function validateBrowserProfile(row, index, profileByOrdinal) {
     ) invalid();
     return;
   }
-  if (index === 28 || (shifted && index === 30)) {
+  if (index === 28 || index === 30) {
     if (
       row.requestClass !== 'appwrite-read'
       || row.credentialCarrier !== 'browser-cookie-jar-only'
@@ -6430,9 +6423,8 @@ function validateBrowserProfile(row, index, profileByOrdinal) {
     ) invalid();
     return;
   }
-  const multipart = (shifted ? [39, 40, 46, 49, 53] : [37, 38, 44, 47, 51])
-    .includes(index);
-  const patch = (shifted ? [48, 51, 52] : [46, 49, 50]).includes(index);
+  const multipart = [39, 40, 46, 49, 53].includes(index);
+  const patch = [48, 51, 52].includes(index);
   if (
     row.requestClass !== (multipart ? 'appwrite-multipart-mutation' : 'appwrite-json-mutation')
     || row.credentialCarrier !== 'browser-cookie-jar-only'
@@ -6543,12 +6535,7 @@ function validateSetupProjection(setup, expectedEnvironmentDigest, expectedProvi
     || policy.timeoutMilliseconds !== 5000
   ) invalid();
   const policyRows = exactOrdinaryArray(policy.rows);
-  const profileByOrdinal = policyRows.length === PROFILE_BY_ORDINAL.length
-    ? PROFILE_BY_ORDINAL
-    : policyRows.length === LEGACY_PROFILE_BY_ORDINAL.length
-      ? LEGACY_PROFILE_BY_ORDINAL
-      : null;
-  if (profileByOrdinal === null) invalid();
+  if (policyRows.length !== PROFILE_BY_ORDINAL.length) invalid();
   for (let index = 0; index < policyRows.length; index += 1) {
     const row = exactParsedRecord(policyRows[index], BROWSER_ROW_KEYS);
     if (
@@ -6557,7 +6544,7 @@ function validateSetupProjection(setup, expectedEnvironmentDigest, expectedProvi
       || row.exactCount < 1
       || row.exactCount > 256
     ) invalid();
-    validateBrowserProfile(row, index, profileByOrdinal);
+    validateBrowserProfile(row, index);
     validateHeaderRows(row.requestHeaderBindings, ['name', 'valueDigest']);
     validateHeaderRows(row.responseHeaderBindings, ['name', 'valueDigest']);
     validateHeaderRows(row.requestOpaqueHeaderRules, [
