@@ -740,10 +740,31 @@ test('unexpired active safe-empty source remains blocked without a transaction',
   const outcome = await runTestCloudRecoveryStateMachine(recoveryArguments(harness));
 
   assert.equal(outcome.status, 'BLOCKED');
-  assert.equal(outcome.diagnostics[0].code, 'RECOVERY_SOURCE_BINDING_INVALID');
+  assert.equal(outcome.diagnostics[0].code, 'RECOVERY_ACTIVE_ADOPTION_BLOCKED');
   assert.equal(fetch.calls.some(({ method, path: requestPath }) => (
     method === 'POST' && /\/tablesdb\/transactions(?:\/|$)/u.test(requestPath)
   )), false);
+});
+
+test('source transport failure is distinct from a malformed recovery lease', async () => {
+  const fixture = safeEmptyFixture({ cleanupDebt: false, observePrimary: false });
+  const calls = [];
+  const fetch = async (url, options) => {
+    calls.push(Object.freeze({ method: options.method, path: new URL(url).pathname }));
+    return providerJson({ message: 'closed rejection' }, 401);
+  };
+  const harness = Object.freeze({
+    ...fixture,
+    ...recoveryContextAndClients(fetch),
+    fetch: Object.assign(fetch, { calls }),
+  });
+
+  const outcome = await runTestCloudRecoveryStateMachine(recoveryArguments(harness));
+
+  assert.equal(outcome.status, 'BLOCKED');
+  assert.equal(outcome.diagnostics[0].code, 'RECOVERY_SOURCE_READ_FAILED');
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].method, 'GET');
 });
 
 test('authentic malformed nonempty source fails truthfully before terminal PASS', async () => {

@@ -497,6 +497,9 @@ export async function runTestCloudRecoveryStateMachine(args) {
       tableId: inventory.control.leaseTableId,
     });
     const readValue = resultValue(read);
+    if (readValue === null) {
+      return blocked('RECOVERY_SOURCE_READ_FAILED');
+    }
     const lease = exactObject(readValue, ['data', 'rowId'])
       && readValue.rowId === inventory.control.leaseRowId
       ? readValue.data
@@ -514,17 +517,21 @@ export async function runTestCloudRecoveryStateMachine(args) {
       return blocked('RECOVERY_CONTROL_STORE_INVALID');
     }
     if (initialLeaseKind === 'active') {
-      const adoptedValue = resultValue(await createdValue.store.adoptExpiredSafeEmptyLease({
+      const adoptedOutcome = await createdValue.store.adoptExpiredSafeEmptyLease({
         nowEpochSeconds,
         request: createdValue.request,
-      }));
+      });
+      const adoptedValue = resultValue(adoptedOutcome);
+      if (adoptedValue === null) {
+        return blocked('RECOVERY_ACTIVE_ADOPTION_BLOCKED');
+      }
       const adoptedSnapshot = exactObject(adoptedValue, ['nextRequest', 'snapshot'])
         && exactObject(dataValue(adoptedValue, 'snapshot'), ['auditTrail', 'intentProjections', 'lease'])
         ? dataValue(adoptedValue, 'snapshot')
         : null;
       if (adoptedSnapshot === null
         || sourceLeaseKind(dataValue(adoptedSnapshot, 'lease'), recoveryAuthority) === null) {
-        return blocked('RECOVERY_SOURCE_BINDING_INVALID');
+        return blocked('RECOVERY_ADOPTION_READBACK_INVALID');
       }
       createdValue = resultValue(createStore());
       if (!exactObject(createdValue, ['request', 'store'])) {
