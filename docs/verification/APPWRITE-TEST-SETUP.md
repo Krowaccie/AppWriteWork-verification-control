@@ -236,8 +236,11 @@ reconstruction, lease close, and recovery context. A safe provider maximum from
 than `createdAt + retentionMaxSeconds`; accepting 3,600 and later recording 3,601
 seconds is a blocking mismatch. A static repository constant, inferred provider
 default, copied qualification, write-capable cleanup path, missing value, or
-overbound value does not qualify. Provider-retained executions are never deleted by fixture cleanup and
-do not create fixture cleanup debt.
+overbound value does not qualify. Provider-retained executions are never
+deleted by fixture cleanup. The exact pre-fixture state containing no fixture
+or account-session intent and at most one valid planned primary observation is
+closed by ordinary cleanup while its capability remains valid. Any other
+incomplete intent set persists cleanup debt.
 
 ## Disjoint API keys
 
@@ -306,6 +309,13 @@ shape before `Verify Test Cloud` can run.
 ## Identity and session readback
 
 Read back owner/editor/viewer identity IDs and role fixtures without exposing IDs in source artifacts or evidence. Prove that all three preprovisioned identities have empty session sets before every run. Fixture creation is prohibited in the ordinary lane. Any unknown identity, nonempty session set, ambiguous cleanup, or unmatched intent persists debt and blocks the next lease.
+
+Supervised recovery may adopt one expired safe-empty orphan owned by the exact
+failed source workflow. Adoption must atomically append and read back
+`lease.cleanup_debt` before the existing safe-empty recovery close; it may not
+edit the lease row directly. An unexpired active lease, any fixture or
+account-session intent, duplicate primary observation, owner mismatch, or audit
+chain mismatch remains blocked without a transaction.
 
 ## Controller prerequisites
 

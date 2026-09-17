@@ -545,7 +545,11 @@ function successfulCleanupData(request) {
   };
 }
 
-async function createDriverHarness({ mode = 'success', resources = QUALIFIED_CLEANUP_PROTOCOL.resourceOrder } = {}) {
+async function createDriverHarness({
+  mode = 'success',
+  primaryExecutionCount = 0,
+  resources = QUALIFIED_CLEANUP_PROTOCOL.resourceOrder,
+} = {}) {
   const { context, credentialHandles } = createSyntheticTestCloudContext();
   const store = createInMemoryControlStore();
   const preflight = await authenticPreflight(context, store, 1000);
@@ -572,6 +576,39 @@ async function createDriverHarness({ mode = 'success', resources = QUALIFIED_CLE
     'primary-project': { dependencyOrder: 10, id: '7' },
   };
   let setupNow = 1002;
+  for (let ordinal = 0; ordinal < primaryExecutionCount; ordinal += 1) {
+    const marker = String(ordinal + 1);
+    const planned = {
+      schemaVersion: 'verification-intent-snapshot.v1',
+      intentId: marker.repeat(64),
+      runId: context.runId,
+      environmentDigest: context.environmentDigest,
+      resourceType: 'primary-execution',
+      resourceId: `vr-primary-execution-${marker}`,
+      providerResourceIds: [],
+      ownerMarker: `verification-owner.v1:sha256:${marker.repeat(64)}`,
+      dependencyOrder: 50,
+      lifecycleClass: 'provider-retained-observation',
+      state: 'planned',
+      intentVersion: 1,
+      observationDigest: null,
+      retentionExpiresAt: null,
+      createdAt: at(setupNow),
+      updatedAt: at(setupNow),
+    };
+    const committed = await commitIntentSnapshot({
+      context,
+      store,
+      lease,
+      capability,
+      clock: clock(setupNow),
+      snapshot: planned,
+    });
+    assert.equal(committed.status, 'PASS', JSON.stringify(committed));
+    lease = committed.value.lease;
+    capability = committed.value.capability;
+    setupNow += 1;
+  }
   for (const logicalResource of resources) {
     const aggregate = {
       schemaVersion: 'verification-provider-aggregate.v1',
@@ -697,6 +734,29 @@ async function createDriverHarness({ mode = 'success', resources = QUALIFIED_CLE
     store,
   };
 }
+
+test('cleanup driver closes the exact pre-fixture retained-observation state', async () => {
+  const harness = await createDriverHarness({ primaryExecutionCount: 1, resources: [] });
+
+  const outcome = await cleanupDriverModule.runTrustedTestCloudCleanup(harness.args);
+
+  assert.equal(outcome.status, 'PASS', JSON.stringify(outcome));
+  assert.equal(outcome.value.closed, true);
+  assert.equal(outcome.value.lease.state, 'idle');
+  assert.equal(harness.calls.length, 0);
+  assert.equal(harness.store.peekLease().state, 'idle');
+});
+
+test('cleanup driver persists debt for a non-exact pre-fixture intent set', async () => {
+  const harness = await createDriverHarness({ primaryExecutionCount: 2, resources: [] });
+
+  const outcome = await cleanupDriverModule.runTrustedTestCloudCleanup(harness.args);
+
+  assert.deepEqual(outcome, SANITIZED_BLOCKED);
+  assert.equal(harness.calls.length, 0);
+  assert.equal(harness.store.peekLease().state, 'cleanup-debt');
+  assert.equal(harness.store.peekLease().cleanupDebt, true);
+});
 
 test('the first logical position reuses the exact planned request for its one second attempt', async () => {
   const harness = await createDriverHarness({ mode: 'ambiguous-first-everywhere' });

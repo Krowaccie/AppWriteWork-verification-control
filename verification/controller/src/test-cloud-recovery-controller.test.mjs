@@ -205,7 +205,7 @@ function inMemoryRecoveryProvider({ lease, rows: initialRows = [] }) {
   return fetch;
 }
 
-function safeEmptyFixture() {
+function safeEmptyFixture({ cleanupDebt = true, observePrimary = true } = {}) {
   const rows = [];
   const projections = new Map();
   let head = GENESIS_LEDGER_DIGEST;
@@ -265,7 +265,7 @@ function safeEmptyFixture() {
     intentVersion: 2,
     updatedAt: '2026-07-20T10:00:04.000Z',
   });
-  const retained = Object.freeze({
+  const observed = Object.freeze({
     ...planned,
     state: 'created',
     intentVersion: 3,
@@ -274,8 +274,15 @@ function safeEmptyFixture() {
     retentionExpiresAt: '2026-07-20T11:00:00.000Z',
     updatedAt: '2026-07-20T10:00:05.000Z',
   });
-  append('observation.observed', retained);
-  append('lease.cleanup_debt');
+  if (observePrimary) append('observation.observed', observed);
+  if (cleanupDebt) append('lease.cleanup_debt');
+  const retained = observePrimary
+    ? observed
+    : Object.freeze({
+      ...planned,
+      intentVersion: 2,
+      updatedAt: '2026-07-20T10:00:04.000Z',
+    });
   for (const projection of projections.values()) {
     rows.push({
       tableId: inventory.control.intentTableId,
@@ -286,7 +293,7 @@ function safeEmptyFixture() {
   const lease = Object.freeze({
     leaseRowId: inventory.control.leaseRowId,
     leaseVersion,
-    state: 'cleanup-debt',
+    state: cleanupDebt ? 'cleanup-debt' : 'active',
     ownerRunId: RUN_ID,
     ownerWorkflowRunId: SOURCE_RUN_ID,
     environmentDigest: ENVIRONMENT_DIGEST,
@@ -295,7 +302,7 @@ function safeEmptyFixture() {
     expiresAt: '2026-07-20T11:00:00.000Z',
     ledgerDigest: head,
     leaseTokenDigest: `sha256:${'e'.repeat(64)}`,
-    cleanupDebt: true,
+    cleanupDebt,
   });
   return Object.freeze({ lease, retained, rows: Object.freeze(rows) });
 }
@@ -318,6 +325,12 @@ function recoveryContextAndClients(fetch) {
 
 function authenticSafeEmptyHarness() {
   const fixture = safeEmptyFixture();
+  const fetch = inMemoryRecoveryProvider(fixture);
+  return Object.freeze({ ...fixture, ...recoveryContextAndClients(fetch), fetch });
+}
+
+function authenticExpiredSafeEmptyActiveHarness() {
+  const fixture = safeEmptyFixture({ cleanupDebt: false, observePrimary: false });
   const fetch = inMemoryRecoveryProvider(fixture);
   return Object.freeze({ ...fixture, ...recoveryContextAndClients(fetch), fetch });
 }
@@ -674,6 +687,63 @@ test('authentic provider safe-empty closes exact idle once without product or ch
   assert.equal(harness.fetch.calls.filter(({ method, path: requestPath }) => (
     method === 'POST' && /\/tablesdb\/transactions\/[^/]+\/operations$/u.test(requestPath)
   )).length, 1);
+});
+
+test('expired active safe-empty source is audited as debt before recovery closes it', async () => {
+  const harness = authenticExpiredSafeEmptyActiveHarness();
+  const leaseKey = `${inventory.control.leaseTableId}\0${inventory.control.leaseRowId}`;
+
+  const outcome = await runTestCloudRecoveryStateMachine(recoveryArguments(harness));
+
+  assert.equal(outcome.status, 'PASS', JSON.stringify(outcome));
+  assert.equal(outcome.value.completion, 'recovery-closed');
+  assert.deepEqual(harness.fetch.rows.get(leaseKey), {
+    ...harness.lease,
+    state: 'idle',
+    ownerRunId: null,
+    ownerWorkflowRunId: null,
+    environmentDigest: null,
+    acquiredAt: null,
+    renewedAt: null,
+    expiresAt: null,
+    leaseTokenDigest: null,
+    cleanupDebt: false,
+    leaseVersion: harness.lease.leaseVersion + 2,
+    ledgerDigest: outcome.value.recoveryCloseDigest,
+  });
+  const sourceEvents = [...harness.fetch.rows.values()].filter((value) => (
+    value?.schemaVersion === 'verification-audit-event.v1'
+    && value.runId === RUN_ID
+  ));
+  assert.deepEqual(sourceEvents.slice(-2).map(({ transition }) => transition), [
+    'lease.cleanup_debt',
+    'lease.close',
+  ]);
+  const operationCalls = harness.fetch.calls.filter(({ method, path: requestPath }) => (
+    method === 'POST' && /\/tablesdb\/transactions\/[^/]+\/operations$/u.test(requestPath)
+  ));
+  assert.equal(operationCalls.length, 2);
+  assert.equal(harness.fetch.calls.some(({ path: requestPath }) => (
+    /\/users\/|\/storage\/|\/functions\//u.test(requestPath)
+  )), false);
+});
+
+test('unexpired active safe-empty source remains blocked without a transaction', async () => {
+  const base = safeEmptyFixture({ cleanupDebt: false, observePrimary: false });
+  const fixture = Object.freeze({
+    ...base,
+    lease: Object.freeze({ ...base.lease, expiresAt: '2026-07-22T11:00:00.000Z' }),
+  });
+  const fetch = inMemoryRecoveryProvider(fixture);
+  const harness = Object.freeze({ ...fixture, ...recoveryContextAndClients(fetch), fetch });
+
+  const outcome = await runTestCloudRecoveryStateMachine(recoveryArguments(harness));
+
+  assert.equal(outcome.status, 'BLOCKED');
+  assert.equal(outcome.diagnostics[0].code, 'RECOVERY_SOURCE_BINDING_INVALID');
+  assert.equal(fetch.calls.some(({ method, path: requestPath }) => (
+    method === 'POST' && /\/tablesdb\/transactions(?:\/|$)/u.test(requestPath)
+  )), false);
 });
 
 test('authentic malformed nonempty source fails truthfully before terminal PASS', async () => {

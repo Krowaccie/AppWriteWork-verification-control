@@ -1261,7 +1261,11 @@ function recoverySourceIntentSet(latest) {
   return matches.map(([intent]) => intent);
 }
 
-function reconstructProviderRecoveryProof(snapshot, recoveryContext) {
+function reconstructProviderRecoveryProof(
+  snapshot,
+  recoveryContext,
+  { allowExpiredSafeEmptyActive = false } = {},
+) {
   let activeRun = null;
   let ordinaryLeaseState = 'idle';
   let latest = new Map();
@@ -1411,14 +1415,20 @@ function reconstructProviderRecoveryProof(snapshot, recoveryContext) {
     predecessorRecoveryEvent = entry.event;
   }
 
+  const expiredSafeEmptyActive = allowExpiredSafeEmptyActive
+    && !recoveryStarted
+    && ordinaryLeaseState === 'active'
+    && snapshot.lease.state === 'active'
+    && snapshot.lease.cleanupDebt === false;
   if (activeRun !== snapshot.lease.ownerRunId
-    || snapshot.lease.cleanupDebt !== true
+    || (!expiredSafeEmptyActive && snapshot.lease.cleanupDebt !== true)
     || typeof snapshot.lease.ownerWorkflowRunId !== 'string'
     || snapshot.lease.ownerWorkflowRunId !== recoveryContext.originalWorkflowRunId) {
     throw new TypeError('Recovery source owner is invalid.');
   }
   if (!recoveryStarted) {
-    if (ordinaryLeaseState !== 'cleanup-debt' || snapshot.lease.state !== 'cleanup-debt') {
+    if (!expiredSafeEmptyActive
+      && (ordinaryLeaseState !== 'cleanup-debt' || snapshot.lease.state !== 'cleanup-debt')) {
       throw new TypeError('Recovery source lease state is invalid.');
     }
     sourceAuditHeadDigest = snapshot.lease.ledgerDigest;
@@ -1452,9 +1462,17 @@ function reconstructProviderRecoveryProof(snapshot, recoveryContext) {
   }
   const primaryExecutionIntent=primaryExecutionIntents.length===1
     ?primaryExecutionIntents[0]:null;
+  if (expiredSafeEmptyActive && (
+    sourceIntents.length !== 0
+    || currentIntents.length !== 0
+    || accountSessionObserved
+    || accountSessionIntent !== null
+    || (primaryExecutionIntent !== null
+      && !['planned', 'created'].includes(primaryExecutionIntent.state))
+  )) throw new TypeError('Expired safe-empty recovery source is invalid.');
   return { environmentDigest: snapshot.lease.environmentDigest, sourceAuditHeadDigest,
     sourceLeaseVersion, sourceIntents, currentIntents, predecessorRecoveryEvent, activeRun,
-    accountSessionIntent,primaryExecutionIntent,
+    accountSessionIntent,primaryExecutionIntent,expiredSafeEmptyActive,
     genesisPosition: providerRecoveryGenesisPosition(sourceIntents) };
 }
 
@@ -2042,6 +2060,65 @@ export function createProviderRecoveryControlStore(args = {}) {
     }
   }
 
+  async function adoptExpiredSafeEmptyLease(input) {
+    if (!exactDataObject(input, ['nowEpochSeconds', 'request'])) {
+      return result('BLOCKED', null, 'TEST_CLOUD_SETUP_INCOMPLETE');
+    }
+    const fields = {
+      nowEpochSeconds: input.nowEpochSeconds,
+      request: input.request,
+    };
+    const readOperation = providerRecoveryReadOperationRecords.get(fields.request);
+    if (readOperation?.store !== store || readOperation.consumed
+      || !Number.isSafeInteger(fields.nowEpochSeconds) || fields.nowEpochSeconds < 0) {
+      return result('BLOCKED', null, 'TEST_CLOUD_SETUP_INCOMPLETE');
+    }
+    readOperation.consumed = true;
+    try {
+      const snapshot = await readRecoverySnapshotValue();
+      const proof = reconstructProviderRecoveryProof(snapshot, args.context, {
+        allowExpiredSafeEmptyActive: true,
+      });
+      const expiresAt = snapshot.lease.expiresAt;
+      if (!proof.expiredSafeEmptyActive
+        || typeof expiresAt !== 'string'
+        || !Number.isFinite(Date.parse(expiresAt))
+        || new Date(expiresAt).toISOString() !== expiresAt
+        || Date.parse(expiresAt) > fields.nowEpochSeconds * 1000) {
+        return result('BLOCKED', null, 'LEASE_VERSION_MISMATCH');
+      }
+      const event = deepFreeze({
+        schemaVersion: 'verification-audit-event.v1',
+        previousLedgerDigest: snapshot.lease.ledgerDigest,
+        runId: snapshot.lease.ownerRunId,
+        leaseVersionBefore: snapshot.lease.leaseVersion,
+        leaseVersionAfter: snapshot.lease.leaseVersion + 1,
+        transition: 'lease.cleanup_debt',
+        intentId: null,
+        intentProjectionDigest: null,
+      });
+      const eventDigest = contentDigest(event);
+      const nextLease = deepFreeze({
+        ...snapshot.lease,
+        state: 'cleanup-debt',
+        cleanupDebt: true,
+        leaseVersion: snapshot.lease.leaseVersion + 1,
+        ledgerDigest: eventDigest,
+      });
+      return commitBoundedRecoveryOperation({
+        event,
+        eventDigest,
+        intentSuccessor: null,
+        intentSuccessorDigest: null,
+        nextLease,
+        sourceSnapshot: snapshot,
+        store,
+      });
+    } catch (error) {
+      return recoveryFailure(error);
+    }
+  }
+
   async function commitRecoveryTransition(commitOperation) {
     const operation = providerRecoveryCommitOperationRecords.get(commitOperation);
     if (operation?.store !== store || operation.consumed) {
@@ -2070,6 +2147,7 @@ export function createProviderRecoveryControlStore(args = {}) {
   }
 
   store = Object.freeze({
+    adoptExpiredSafeEmptyLease,
     commitRecoveryAccountSessionAbsence,
     commitRecoveryClose,
     commitRecoveryTransition,
