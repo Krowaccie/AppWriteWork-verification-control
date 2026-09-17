@@ -383,7 +383,10 @@ function entriesToBindingSet(entries, input, nowEpochSeconds) {
   return validateTestCloudBindingSet({ bindings, evidence, input, manifest, nowEpochSeconds });
 }
 
-export async function verifyGithubTestCloudBindingArtifact(input, dependencies = {}) {
+export async function verifyCurrentGithubTestCloudBindingArtifactMetadata(
+  input,
+  dependencies = {},
+) {
   try {
     const fetchImpl = dependencies.fetchImpl ?? globalThis.fetch;
     const now = dependencies.now ?? Date.now;
@@ -397,6 +400,26 @@ export async function verifyGithubTestCloudBindingArtifact(input, dependencies =
       { method: 'GET', redirect: 'error', headers: githubHeaders(input.authorization) },
     ));
     if (!validMetadata(metadata, input, nowMilliseconds)) return blocked();
+    return result('PASS', { sizeInBytes: ownData(metadata, 'size_in_bytes') });
+  } catch {
+    return blocked();
+  }
+}
+
+export async function verifyGithubTestCloudBindingArtifact(input, dependencies = {}) {
+  try {
+    const fetchImpl = dependencies.fetchImpl ?? globalThis.fetch;
+    const now = dependencies.now ?? Date.now;
+    if (!validInput(input) || typeof fetchImpl !== 'function' || typeof now !== 'function') {
+      return blocked();
+    }
+    const nowMilliseconds = now();
+    if (!Number.isFinite(nowMilliseconds)) return blocked();
+    const currentMetadata = await verifyCurrentGithubTestCloudBindingArtifactMetadata(
+      input,
+      { fetchImpl, now: () => nowMilliseconds },
+    );
+    if (currentMetadata.status !== 'PASS') return currentMetadata;
     const redirect = await fetchImpl(artifactUrl(input.artifactId), {
       method: 'GET', redirect: 'manual', headers: githubHeaders(input.authorization),
     });
@@ -412,7 +435,7 @@ export async function verifyGithubTestCloudBindingArtifact(input, dependencies =
     if (response?.status !== 200) return blocked();
     const archive = await readBoundedResponseBytes(response, MAX_VERIFICATION_ARCHIVE_BYTES);
     if (
-      archive.length !== ownData(metadata, 'size_in_bytes')
+      archive.length !== currentMetadata.value.sizeInBytes
       || sha256Bytes(archive) !== input.bundleDigest
     ) return blocked();
     return entriesToBindingSet(
@@ -444,7 +467,12 @@ export async function runTestCloudBindingArtifactVerifierCli(
       'artifactId', 'bundleDigest', 'initialSeed', 'runnerRevision',
       'sourceRepositoryRevision', 'trustedSha',
     ])) return blocked('TEST_CLOUD_BINDING_ARTIFACT_CLI_INVALID');
-    const verified = await verifyGithubTestCloudBindingArtifact({
+    const artifactVerifier = dependencies.artifactVerifier
+      ?? verifyGithubTestCloudBindingArtifact;
+    if (typeof artifactVerifier !== 'function') {
+      return blocked('TEST_CLOUD_BINDING_ARTIFACT_CLI_INVALID');
+    }
+    const verified = await artifactVerifier({
       ...cliInput,
       authorization: environment.GITHUB_TOKEN,
       repository: environment.GITHUB_REPOSITORY,

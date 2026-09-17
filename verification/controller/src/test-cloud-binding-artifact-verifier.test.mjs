@@ -15,6 +15,7 @@ import { extractBoundedZipArchive } from './controller-archive-verifier.mjs';
 import {
   runTestCloudBindingArtifactVerifierCli,
   validateTestCloudBindingSet,
+  verifyCurrentGithubTestCloudBindingArtifactMetadata,
   verifyGithubTestCloudBindingArtifact,
 } from './test-cloud-binding-artifact-verifier.mjs';
 
@@ -242,7 +243,7 @@ function fixture(transformEntries = (entries) => entries) {
     if (url === SIGNED_URL) return response(200, archive);
     throw new Error('unexpected request');
   };
-  return { pointer, fetchImpl, archive, semantic: {
+  return { pointer, fetchImpl, archive, metadata, semantic: {
     bindings: created.value.bindings,
     evidence: created.value.evidence,
     input: pointer,
@@ -275,6 +276,41 @@ test('rejects a member changed after the signed manifest was created', async () 
   assert.equal(verified.status, 'BLOCKED');
 });
 
+test('current metadata gate rejects every stale or cross-bound artifact identity', async (t) => {
+  const value = fixture();
+  const mutations = [
+    ['expired flag', (metadata) => ({ ...metadata, expired: true })],
+    ['expired timestamp', (metadata) => ({ ...metadata, expires_at: '2026-01-01T00:00:00Z' })],
+    ['artifact id', (metadata) => ({ ...metadata, id: Number(ARTIFACT_ID) + 1 })],
+    ['artifact name', (metadata) => ({ ...metadata, name: `${metadata.name}-other` })],
+    ['artifact digest', (metadata) => ({ ...metadata, digest: `sha256:${'f'.repeat(64)}` })],
+    ['workflow head', (metadata) => ({
+      ...metadata,
+      workflow_run: { ...metadata.workflow_run, head_sha: 'f'.repeat(40) },
+    })],
+  ];
+  for (const [name, mutate] of mutations) {
+    await t.test(name, async () => {
+      const metadata = mutate(value.metadata);
+      const fetchImpl = async (url, options) => {
+        if (url.endsWith(`/actions/artifacts/${ARTIFACT_ID}`)) {
+          return new Response(JSON.stringify(metadata), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        return value.fetchImpl(url, options);
+      };
+      const outcome = await verifyCurrentGithubTestCloudBindingArtifactMetadata(
+        value.pointer,
+        { fetchImpl, now: () => NOW_SECONDS * 1000 },
+      );
+      assert.equal(outcome.status, 'BLOCKED');
+      assert.equal(outcome.diagnostics[0].code, 'TEST_CLOUD_BINDING_ARTIFACT_INVALID');
+    });
+  }
+});
+
 test('CLI materializes only the eight verified binding files', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'binding-verifier-'));
   try {
@@ -292,6 +328,33 @@ test('CLI materializes only the eight verified binding files', async () => {
     assert.deepEqual((await readdir(outputPath)).sort(),
       BINDING_NAMES.map((name) => `${name}.txt`).sort());
     assert.equal((await readFile(path.join(outputPath, 'TEST_CLOUD_SETUP_READBACK_JSON.txt'), 'utf8')).startsWith('{'), true);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('CLI can delegate semantic validation to the exact historical controller', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'binding-verifier-recovery-time-'));
+  try {
+    const value = fixture();
+    const inputPath = path.join(root, 'input.json');
+    const outputPath = path.join(root, 'bindings');
+    const { authorization, repository, ...cliInput } = value.pointer;
+    const expiredNow = (NOW_SECONDS + 21_601) * 1000;
+    await writeFile(inputPath, `${canonicalJson(cliInput)}\n`, 'utf8');
+    const outcome = await runTestCloudBindingArtifactVerifierCli(
+      ['--input', inputPath, '--output', outputPath],
+      { GITHUB_TOKEN: authorization, GITHUB_REPOSITORY: repository },
+      {
+        artifactVerifier: (input) => verifyGithubTestCloudBindingArtifact(input, {
+          fetchImpl: value.fetchImpl,
+          now: () => NOW_SECONDS * 1000,
+        }),
+        fetchImpl: value.fetchImpl,
+        now: () => expiredNow,
+      },
+    );
+    assert.equal(outcome.status, 'PASS', outcome.diagnostics?.[0]?.code);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

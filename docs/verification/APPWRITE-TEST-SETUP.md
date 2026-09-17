@@ -277,6 +277,16 @@ only the explicitly selected artifact, validates its raw ZIP digest and exact
 ten-member set, rejects links/extras/noncanonical bytes, and materializes only
 the eight binding files into a private runner directory.
 
+For recovery of an already failed hosted run, the binding's bounded semantic
+validity is evaluated by the exact original signed controller at that failed
+run's immutable GitHub `created_at` time. The current signed recovery controller
+still must authenticate the failed run and both controller commits, and it must
+independently require that the selected GitHub artifact currently exists, is
+not expired, and retains the exact expected name, digest, workflow head, and
+source/controller tuple. This historical evaluation is recovery-only; ordinary
+collection, controller publication, and Test Cloud verification continue to
+use the current clock.
+
 Configure only these two small nonsecret environment variables in
 `appwrite-test` and `controller-promotion`:
 
