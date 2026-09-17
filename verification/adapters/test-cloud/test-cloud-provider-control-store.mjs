@@ -107,6 +107,32 @@ const RECOVERY_TRANSACTION_CLIENT_DIAGNOSTICS = Object.freeze(new Map([
   ['TEST_RESPONSE_HTTP_429', 'HTTP_429'],
   ['TEST_RESPONSE_HTTP_5XX', 'HTTP_5XX'],
 ]));
+const RECOVERY_ADOPTION_PROOF_DIAGNOSTICS = Object.freeze(new Map([
+  ['Recovery source owner is invalid.', 'RECOVERY_SOURCE_OWNER_INVALID'],
+  ['Expired safe-empty recovery source is invalid.', 'RECOVERY_SOURCE_NOT_SAFE_EMPTY'],
+  ['Recovery source provider binding is invalid.', 'RECOVERY_SOURCE_INTENT_PROOF_INVALID'],
+  ['Recovery source intent evidence is invalid.', 'RECOVERY_SOURCE_INTENT_PROOF_INVALID'],
+  ['Recovery source global cleanup evidence is invalid.', 'RECOVERY_SOURCE_INTENT_PROOF_INVALID'],
+  ['Recovery source account-session intent is invalid.', 'RECOVERY_SOURCE_INTENT_PROOF_INVALID'],
+  ['Recovery source account-session intent is duplicated.', 'RECOVERY_SOURCE_INTENT_PROOF_INVALID'],
+  ['Recovery source intent set is invalid.', 'RECOVERY_SOURCE_INTENT_PROOF_INVALID'],
+  ['Recovery projection evidence is invalid.', 'RECOVERY_SOURCE_INTENT_PROOF_INVALID'],
+  ['Recovery primary execution evidence is invalid.', 'RECOVERY_SOURCE_INTENT_PROOF_INVALID'],
+  ['Ordinary audit evidence follows recovery.', 'RECOVERY_SOURCE_AUDIT_PROOF_INVALID'],
+  ['Recovery source lease acquisition is invalid.', 'RECOVERY_SOURCE_AUDIT_PROOF_INVALID'],
+  ['Recovery source run chain is invalid.', 'RECOVERY_SOURCE_AUDIT_PROOF_INVALID'],
+  ['Recovery source lease renewal is invalid.', 'RECOVERY_SOURCE_AUDIT_PROOF_INVALID'],
+  ['Recovery source cleanup debt is invalid.', 'RECOVERY_SOURCE_AUDIT_PROOF_INVALID'],
+  ['Recovery source lease recovery is invalid.', 'RECOVERY_SOURCE_AUDIT_PROOF_INVALID'],
+  ['Recovery source lease close is invalid.', 'RECOVERY_SOURCE_AUDIT_PROOF_INVALID'],
+  ['Recovery event run is invalid.', 'RECOVERY_SOURCE_AUDIT_PROOF_INVALID'],
+  ['Recovery source lease state is invalid.', 'RECOVERY_SOURCE_AUDIT_PROOF_INVALID'],
+  ['Recovery genesis proof is invalid.', 'RECOVERY_SOURCE_AUDIT_PROOF_INVALID'],
+  ['Recovery terminal intent proof is invalid.', 'RECOVERY_SOURCE_AUDIT_PROOF_INVALID'],
+  ['Recovery event snapshot is invalid.', 'RECOVERY_SOURCE_AUDIT_PROOF_INVALID'],
+  ['Recovery successor source proof is invalid.', 'RECOVERY_SOURCE_AUDIT_PROOF_INVALID'],
+  ['Recovery lease state is invalid.', 'RECOVERY_SOURCE_AUDIT_PROOF_INVALID'],
+]));
 const AUDIT_TRANSITIONS = Object.freeze(new Set([
   'lease.acquire','lease.renew','lease.cleanup_debt','lease.recover','lease.close',
   'intent.planned','intent.created','intent.absent','intent.provider_bound',
@@ -683,6 +709,21 @@ function recoveryFailure(error) {
     null,
     error instanceof StoreMismatch ? error.code : 'TEST_CLOUD_SETUP_INCOMPLETE',
   );
+}
+
+function recoveryAdoptionProofFailure(error) {
+  try {
+    return result(
+      'BLOCKED',
+      null,
+      error instanceof TypeError
+        ? RECOVERY_ADOPTION_PROOF_DIAGNOSTICS.get(error.message)
+          ?? 'TEST_CLOUD_SETUP_INCOMPLETE'
+        : 'TEST_CLOUD_SETUP_INCOMPLETE',
+    );
+  } catch {
+    return result('BLOCKED', null, 'TEST_CLOUD_SETUP_INCOMPLETE');
+  }
 }
 
 function recoveryPositionEvidence(checkpoint) {
@@ -2120,9 +2161,14 @@ export function createProviderRecoveryControlStore(args = {}) {
     readOperation.consumed = true;
     try {
       const snapshot = await readRecoverySnapshotValue();
-      const proof = reconstructProviderRecoveryProof(snapshot, args.context, {
-        allowExpiredSafeEmptyActive: true,
-      });
+      let proof;
+      try {
+        proof = reconstructProviderRecoveryProof(snapshot, args.context, {
+          allowExpiredSafeEmptyActive: true,
+        });
+      } catch (error) {
+        return recoveryAdoptionProofFailure(error);
+      }
       const expiresAt = snapshot.lease.expiresAt;
       if (!proof.expiredSafeEmptyActive
         || typeof expiresAt !== 'string'
