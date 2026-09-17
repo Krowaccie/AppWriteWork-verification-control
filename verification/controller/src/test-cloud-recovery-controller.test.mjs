@@ -9,6 +9,7 @@ import inventory from '../../fixtures/environments/test-cloud.inventory.v1.json'
 import { canonicalJson } from '../../core/canonical-json.mjs';
 import { createTestCloudRecoveryClients } from '../../../verification/adapters/test-cloud/test-cloud-appwrite.mjs';
 import { createTestRecoveryEnvironmentContext } from '../../../verification/adapters/test-cloud/test-cloud-environment.mjs';
+import { createProviderRecoveryControlStore } from '../../../verification/adapters/test-cloud/test-cloud-provider-control-store.mjs';
 import {
   contentDigestToRowId,
   intentIdToRowId,
@@ -332,6 +333,75 @@ function safeEmptyFixture({ cleanupDebt = true, observePrimary = true } = {}) {
     cleanupDebt,
   });
   return Object.freeze({ lease, retained, rows: Object.freeze(rows) });
+}
+
+function rehashRecoveryFixture(fixture, mutateTrail) {
+  const intentRows = fixture.rows.filter(({ tableId }) => (
+    tableId === inventory.control.intentTableId
+  ));
+  const contentByRowId = new Map(intentRows.map(({ rowId, data }) => [
+    rowId,
+    structuredClone(data),
+  ]));
+  const trail = fixture.rows
+    .filter(({ tableId }) => tableId === inventory.control.auditTableId)
+    .sort((left, right) => left.data.leaseVersionBefore - right.data.leaseVersionBefore)
+    .map(({ data: event }) => {
+      const snapshot = event.intentProjectionDigest === null
+        ? null
+        : contentByRowId.get(contentDigestToRowId(event.intentProjectionDigest));
+      assert.notEqual(snapshot, undefined);
+      return {
+        event: structuredClone(event),
+        snapshot: snapshot === null ? null : structuredClone(snapshot),
+      };
+    });
+  mutateTrail(trail);
+
+  const rows = [];
+  const projections = new Map();
+  let head = GENESIS_LEDGER_DIGEST;
+  let leaseVersion = 0;
+  for (const entry of trail) {
+    const snapshot = entry.snapshot;
+    const event = {
+      schemaVersion: 'verification-audit-event.v1',
+      previousLedgerDigest: head,
+      runId: entry.event.runId,
+      leaseVersionBefore: leaseVersion,
+      leaseVersionAfter: leaseVersion + 1,
+      transition: entry.event.transition,
+      intentId: snapshot?.intentId ?? null,
+      intentProjectionDigest: snapshot === null ? null : digest(snapshot),
+    };
+    head = digest(event);
+    leaseVersion += 1;
+    rows.push({
+      tableId: inventory.control.auditTableId,
+      rowId: contentDigestToRowId(head),
+      data: event,
+    });
+    if (snapshot !== null) {
+      rows.push({
+        tableId: inventory.control.intentTableId,
+        rowId: contentDigestToRowId(digest(snapshot)),
+        data: snapshot,
+      });
+      projections.set(snapshot.intentId, snapshot);
+    }
+  }
+  for (const projection of projections.values()) {
+    rows.push({
+      tableId: inventory.control.intentTableId,
+      rowId: intentIdToRowId(projection.intentId),
+      data: projection,
+    });
+  }
+  return Object.freeze({
+    ...fixture,
+    lease: Object.freeze({ ...fixture.lease, leaseVersion, ledgerDigest: head }),
+    rows: Object.freeze(rows),
+  });
 }
 
 function recoveryContextAndClients(fetch) {
@@ -806,6 +876,121 @@ test('expired active adoption reports a closed post-commit readback diagnostic',
 
   assert.equal(outcome.status, 'BLOCKED');
   assert.equal(outcome.diagnostics[0].code, 'RECOVERY_ADOPTION_AUDIT_CHAIN_MISMATCH');
+});
+
+test('expired active adoption projects every closed proof category without mutation or reflection', async () => {
+  const cases = [
+    ['owner', () => rehashRecoveryFixture(
+      safeEmptyFixture({ cleanupDebt: false, observePrimary: false }),
+      (trail) => {
+        trail.splice(1);
+        trail[0].event.runId = 'verify-foreign-owner';
+      },
+    ), 'RECOVERY_ADOPTION_SOURCE_OWNER_INVALID'],
+    ['audit-proof', () => rehashRecoveryFixture(
+      safeEmptyFixture({ cleanupDebt: false, observePrimary: false }),
+      (trail) => {
+        trail[1] = {
+          event: { runId: RUN_ID, transition: 'lease.acquire' },
+          snapshot: null,
+        };
+      },
+    ), 'RECOVERY_ADOPTION_SOURCE_AUDIT_PROOF_INVALID'],
+    ['intent-proof', () => {
+      const fixture = safeEmptyFixture({ cleanupDebt: false, observePrimary: false });
+      return Object.freeze({
+        ...fixture,
+        rows: Object.freeze(fixture.rows.map((row) => (
+          row.tableId === inventory.control.intentTableId
+            && row.rowId === intentIdToRowId(fixture.retained.intentId)
+            ? Object.freeze({
+              ...row,
+              data: Object.freeze({
+                ...row.data,
+                updatedAt: '2026-07-20T10:00:05.000Z',
+              }),
+            })
+            : row
+        ))),
+      });
+    }, 'RECOVERY_ADOPTION_SOURCE_INTENT_PROOF_INVALID'],
+    ['not-safe-empty', () => rehashRecoveryFixture(
+      safeEmptyFixture({ cleanupDebt: false, observePrimary: false }),
+      (trail) => {
+        trail.push({
+          event: { runId: RUN_ID, transition: 'intent.planned' },
+          snapshot: {
+            schemaVersion: 'verification-intent-snapshot.v1',
+            intentId: textDigest(
+              `${ENVIRONMENT_DIGEST}|${RUN_ID}|account-session-set|owner`,
+            ).slice(7),
+            runId: RUN_ID,
+            environmentDigest: ENVIRONMENT_DIGEST,
+            resourceType: 'account-session-set',
+            resourceId: 'owner',
+            providerResourceIds: [],
+            ownerMarker: `verification-owner.v1:sha256:${'9'.repeat(64)}`,
+            dependencyOrder: 40,
+            lifecycleClass: 'session-aggregate',
+            state: 'planned',
+            intentVersion: 1,
+            observationDigest: null,
+            retentionExpiresAt: null,
+            createdAt: '2026-07-20T10:00:06.000Z',
+            updatedAt: '2026-07-20T10:00:06.000Z',
+          },
+        });
+      },
+    ), 'RECOVERY_ADOPTION_SOURCE_NOT_SAFE_EMPTY'],
+  ];
+  const providerCodeByControllerCode = new Map([
+    ['RECOVERY_ADOPTION_SOURCE_OWNER_INVALID', 'RECOVERY_SOURCE_OWNER_INVALID'],
+    ['RECOVERY_ADOPTION_SOURCE_AUDIT_PROOF_INVALID', 'RECOVERY_SOURCE_AUDIT_PROOF_INVALID'],
+    ['RECOVERY_ADOPTION_SOURCE_INTENT_PROOF_INVALID', 'RECOVERY_SOURCE_INTENT_PROOF_INVALID'],
+    ['RECOVERY_ADOPTION_SOURCE_NOT_SAFE_EMPTY', 'RECOVERY_SOURCE_NOT_SAFE_EMPTY'],
+  ]);
+
+  for (const [label, createFixture, expectedCode] of cases) {
+    const fixture = createFixture();
+    const fetch = inMemoryRecoveryProvider(fixture);
+    const harness = Object.freeze({
+      ...fixture,
+      ...recoveryContextAndClients(fetch),
+      fetch,
+    });
+    const created = createProviderRecoveryControlStore({
+      context: harness.context,
+      recoveryControlClient: harness.clients.control,
+    });
+    assert.equal(created.status, 'PASS', label);
+    const providerOutcome = await created.value.store.adoptExpiredSafeEmptyLease({
+      nowEpochSeconds: RECOVERY_NOW,
+      request: created.value.request,
+    });
+    assert.equal(providerOutcome.status, 'BLOCKED', label);
+    assert.equal(
+      providerOutcome.diagnostics[0].code,
+      providerCodeByControllerCode.get(expectedCode),
+      label,
+    );
+    const outcome = await runTestCloudRecoveryStateMachine(recoveryArguments(harness));
+    const serialized = JSON.stringify(outcome);
+
+    assert.equal(outcome.status, 'BLOCKED', label);
+    assert.equal(outcome.diagnostics[0].code, expectedCode, label);
+    assert.equal(fetch.calls.some(({ method, path: requestPath }) => (
+      method === 'POST' && /\/tablesdb\/transactions(?:\/|$)/u.test(requestPath)
+    )), false, label);
+    for (const privateValue of [
+      RUN_ID,
+      ENVIRONMENT_DIGEST,
+      'retained-execution-1',
+      'recovery-secret',
+      'provider-body-secret-sentinel',
+    ]) {
+      assert.equal(serialized.includes(privateValue), false, `${label}:${privateValue}`);
+    }
+  }
 });
 
 test('source transport failure is distinct from a malformed recovery lease', async () => {
