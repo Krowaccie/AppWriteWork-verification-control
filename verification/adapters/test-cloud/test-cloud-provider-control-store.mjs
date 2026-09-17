@@ -97,6 +97,16 @@ const RECOVERY_GENESIS_PREFIX_BY_ABSENT_COUNT = Object.freeze([0, 21, 32, 42]);
 const RECOVERY_PRIMARY_EXECUTION_RETENTION_MAX_SECONDS =
   inventory.control.primaryExecutionRetentionMaxSeconds;
 const RECOVERY_CLEANUP_RESULT = 'desired-projection-proven';
+const RECOVERY_TRANSACTION_CLIENT_DIAGNOSTICS = Object.freeze(new Map([
+  ['TEST_RESPONSE_HTTP_400', 'HTTP_400'],
+  ['TEST_RESPONSE_HTTP_401', 'HTTP_401'],
+  ['TEST_RESPONSE_HTTP_403', 'HTTP_403'],
+  ['TEST_RESPONSE_HTTP_404', 'HTTP_404'],
+  ['TEST_RESPONSE_HTTP_409', 'HTTP_409'],
+  ['TEST_RESPONSE_HTTP_422', 'HTTP_422'],
+  ['TEST_RESPONSE_HTTP_429', 'HTTP_429'],
+  ['TEST_RESPONSE_HTTP_5XX', 'HTTP_5XX'],
+]));
 const AUDIT_TRANSITIONS = Object.freeze(new Set([
   'lease.acquire','lease.renew','lease.cleanup_debt','lease.recover','lease.close',
   'intent.planned','intent.created','intent.absent','intent.provider_bound',
@@ -241,6 +251,38 @@ function validClientResult(outcome) {
     && outcome.status === 'PASS'
     && Array.isArray(outcome.diagnostics)
     && outcome.diagnostics.length === 0;
+}
+
+function singleBlockedClientDiagnostic(outcome) {
+  try {
+    if (!exactDataObject(outcome, ['diagnostics', 'status', 'value'])
+      || outcome.status !== 'BLOCKED'
+      || outcome.value !== null
+      || !Array.isArray(outcome.diagnostics)
+      || isProxy(outcome.diagnostics)) return null;
+    const arrayDescriptors = Object.getOwnPropertyDescriptors(outcome.diagnostics);
+    if (Reflect.ownKeys(arrayDescriptors).length !== 2
+      || arrayDescriptors.length?.value !== 1
+      || arrayDescriptors['0']?.enumerable !== true
+      || !Object.hasOwn(arrayDescriptors['0'], 'value')) return null;
+    const diagnostic = arrayDescriptors['0'].value;
+    if (!exactDataObject(diagnostic, ['code', 'retryable', 'safeMessage'])
+      || typeof diagnostic.code !== 'string'
+      || typeof diagnostic.safeMessage !== 'string'
+      || typeof diagnostic.retryable !== 'boolean') return null;
+    return diagnostic.code;
+  } catch {
+    return null;
+  }
+}
+
+function recoveryTransactionRejection(stage, outcome) {
+  const suffix = RECOVERY_TRANSACTION_CLIENT_DIAGNOSTICS.get(
+    singleBlockedClientDiagnostic(outcome),
+  );
+  return suffix === undefined
+    ? `RECOVERY_TRANSACTION_${stage}_REJECTED`
+    : `RECOVERY_TRANSACTION_${stage}_${suffix}`;
 }
 
 function unknownCommit(outcome) {
@@ -1992,7 +2034,7 @@ export function createProviderRecoveryControlStore(args = {}) {
       !validClientResult(opened)
       || !exactDataObject(opened.value, ['status', 'transactionId'])
       || opened.value.status !== 'pending'
-    ) return 'rejected';
+    ) return recoveryTransactionRejection('OPEN', opened);
     const transactionId = opened.value.transactionId;
     const staged = await client.createTransactionOperations({ transactionId, operations });
     if (
@@ -2000,7 +2042,7 @@ export function createProviderRecoveryControlStore(args = {}) {
       || !exactDataObject(staged.value, ['status', 'transactionId'])
       || staged.value.transactionId !== transactionId
       || staged.value.status !== 'pending'
-    ) return 'rejected';
+    ) return recoveryTransactionRejection('OPERATIONS', staged);
     const committed = await client.commitOrRollbackTransaction({
       transactionId,
       action: 'commit',
@@ -2017,7 +2059,9 @@ export function createProviderRecoveryControlStore(args = {}) {
       && committed.value.transactionId === transactionId
       && committed.value.status === 'pending'
     ) return 'unknown';
-    return unknownCommit(committed) ? 'unknown' : 'rejected';
+    return unknownCommit(committed)
+      ? 'unknown'
+      : recoveryTransactionRejection('COMMIT', committed);
   }
 
   async function commitBoundedRecoveryOperation(operation) {
@@ -2034,8 +2078,8 @@ export function createProviderRecoveryControlStore(args = {}) {
       const expectedSnapshot = committedSnapshotFor(operation);
       for (let attempt = 0; attempt < 2; attempt += 1) {
         const disposition = await commitRecoveryTransaction(operations);
-        if (disposition === 'rejected') {
-          return result('BLOCKED', null, 'LEASE_VERSION_MISMATCH');
+        if (!['committed', 'unknown'].includes(disposition)) {
+          return result('BLOCKED', null, disposition);
         }
         const observedSnapshot = await readRecoverySnapshotValue();
         if (same(observedSnapshot, expectedSnapshot)) {

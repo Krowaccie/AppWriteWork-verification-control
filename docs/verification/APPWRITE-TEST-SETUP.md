@@ -323,6 +323,15 @@ as distinct safe diagnostic codes. These codes expose no credential, provider
 payload, row value, or resource identifier; they only locate the failed closed
 boundary so an operator does not attempt a manual lease-row repair.
 
+If expired-safe-empty adoption reaches its bounded Appwrite transaction, the
+controller further distinguishes transaction open, operation staging, and
+commit rejection. Only a closed HTTP classification (`400`, `401`, `403`,
+`404`, `409`, `422`, `429`, or `5XX`) or a generic fixed rejection code may be
+reported. Response bodies, provider messages, credentials, row values, and
+resource identifiers remain non-observable. An ambiguous commit still uses the
+existing readback-and-single-retry path instead of being relabelled as a
+definite HTTP rejection.
+
 ## Controller prerequisites
 
 Before setup can become eligible, read back:

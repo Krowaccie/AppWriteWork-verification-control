@@ -31,6 +31,17 @@ const DIGEST = /^sha256:[0-9a-f]{64}$/u;
 const FULL_SHA = /^[0-9a-f]{40}$/u;
 const POSITIVE_ID = /^[1-9][0-9]*$/u;
 const RECOVERY_RESULT_KEYS = Object.freeze(['diagnostics', 'status', 'value']);
+const ADOPTION_STORE_DIAGNOSTIC_MAP = Object.freeze(new Map([
+  ['RECOVERY_TRANSACTION_OPEN_REJECTED', 'RECOVERY_ADOPTION_TRANSACTION_OPEN_REJECTED'],
+  ['RECOVERY_TRANSACTION_OPERATIONS_REJECTED', 'RECOVERY_ADOPTION_TRANSACTION_OPERATIONS_REJECTED'],
+  ['RECOVERY_TRANSACTION_COMMIT_REJECTED', 'RECOVERY_ADOPTION_TRANSACTION_COMMIT_REJECTED'],
+  ...['OPEN', 'OPERATIONS', 'COMMIT'].flatMap((stage) => (
+    ['400', '401', '403', '404', '409', '422', '429', '5XX'].map((status) => [
+      `RECOVERY_TRANSACTION_${stage}_HTTP_${status}`,
+      `RECOVERY_ADOPTION_TRANSACTION_${stage}_HTTP_${status}`,
+    ])
+  )),
+]));
 const RECOVERY_AUTHORITY_KEYS = Object.freeze([
   'failedWorkflowRunId',
   'sourceRunAttempt',
@@ -173,6 +184,23 @@ function resultValue(outcome) {
     && denseArray(diagnostics, 0) !== null
     ? dataValue(outcome, 'value')
     : null;
+}
+
+function adoptionStoreDiagnostic(outcome) {
+  try {
+    if (!exactObject(outcome, RECOVERY_RESULT_KEYS)
+      || dataValue(outcome, 'status') !== 'BLOCKED'
+      || dataValue(outcome, 'value') !== null) return null;
+    const diagnostics = denseArray(dataValue(outcome, 'diagnostics'), 1);
+    const diagnostic = diagnostics?.[0];
+    if (!exactObject(diagnostic, ['code', 'retryable', 'safeMessage'])
+      || typeof dataValue(diagnostic, 'code') !== 'string'
+      || typeof dataValue(diagnostic, 'safeMessage') !== 'string'
+      || typeof dataValue(diagnostic, 'retryable') !== 'boolean') return null;
+    return ADOPTION_STORE_DIAGNOSTIC_MAP.get(dataValue(diagnostic, 'code')) ?? null;
+  } catch {
+    return null;
+  }
 }
 
 function snapshotRecoveryAuthority(value) {
@@ -523,7 +551,9 @@ export async function runTestCloudRecoveryStateMachine(args) {
       });
       const adoptedValue = resultValue(adoptedOutcome);
       if (adoptedValue === null) {
-        return blocked('RECOVERY_ACTIVE_ADOPTION_BLOCKED');
+        return blocked(
+          adoptionStoreDiagnostic(adoptedOutcome) ?? 'RECOVERY_ACTIVE_ADOPTION_BLOCKED',
+        );
       }
       const adoptedSnapshot = exactObject(adoptedValue, ['nextRequest', 'snapshot'])
         && exactObject(dataValue(adoptedValue, 'snapshot'), ['auditTrail', 'intentProjections', 'lease'])
