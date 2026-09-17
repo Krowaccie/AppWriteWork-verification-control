@@ -116,6 +116,7 @@ function providerJson(value, status = 200) {
 function inMemoryRecoveryProvider({
   lease,
   rows: initialRows = [],
+  transactionCommitMode = 'apply',
   transactionRejections = {},
 }) {
   const rowKey = (tableId, rowId) => `${tableId}\0${rowId}`;
@@ -207,7 +208,11 @@ function inMemoryRecoveryProvider({
       const transaction = transactions.get(transactionId);
       assert.ok(transaction);
       assert.deepEqual(JSON.parse(options.body), { commit: true });
-      if (!apply(transaction.operations)) return providerJson({ message: 'conflict' }, 409);
+      if (transactionCommitMode === 'apply') {
+        if (!apply(transaction.operations)) return providerJson({ message: 'conflict' }, 409);
+      } else {
+        assert.equal(transactionCommitMode, 'committed-without-readback');
+      }
       transaction.status = 'committed';
       return providerJson({ $id: transactionId, status: 'committed' });
     }
@@ -351,9 +356,16 @@ function authenticSafeEmptyHarness() {
   return Object.freeze({ ...fixture, ...recoveryContextAndClients(fetch), fetch });
 }
 
-function authenticExpiredSafeEmptyActiveHarness(transactionRejections = {}) {
+function authenticExpiredSafeEmptyActiveHarness({
+  transactionCommitMode = 'apply',
+  ...transactionRejections
+} = {}) {
   const fixture = safeEmptyFixture({ cleanupDebt: false, observePrimary: false });
-  const fetch = inMemoryRecoveryProvider({ ...fixture, transactionRejections });
+  const fetch = inMemoryRecoveryProvider({
+    ...fixture,
+    transactionCommitMode,
+    transactionRejections,
+  });
   return Object.freeze({ ...fixture, ...recoveryContextAndClients(fetch), fetch });
 }
 
@@ -762,7 +774,7 @@ test('unexpired active safe-empty source remains blocked without a transaction',
   const outcome = await runTestCloudRecoveryStateMachine(recoveryArguments(harness));
 
   assert.equal(outcome.status, 'BLOCKED');
-  assert.equal(outcome.diagnostics[0].code, 'RECOVERY_ACTIVE_ADOPTION_BLOCKED');
+  assert.equal(outcome.diagnostics[0].code, 'RECOVERY_ADOPTION_LEASE_VERSION_MISMATCH');
   assert.equal(fetch.calls.some(({ method, path: requestPath }) => (
     method === 'POST' && /\/tablesdb\/transactions(?:\/|$)/u.test(requestPath)
   )), false);
@@ -783,6 +795,17 @@ test('expired active adoption reports only closed transaction-stage diagnostics'
     assert.equal(JSON.stringify(outcome).includes('provider-body-secret-sentinel'), false, stage);
     assert.equal(JSON.stringify(outcome).includes('recovery-secret'), false, stage);
   }
+});
+
+test('expired active adoption reports a closed post-commit readback diagnostic', async () => {
+  const harness = authenticExpiredSafeEmptyActiveHarness({
+    transactionCommitMode: 'committed-without-readback',
+  });
+
+  const outcome = await runTestCloudRecoveryStateMachine(recoveryArguments(harness));
+
+  assert.equal(outcome.status, 'BLOCKED');
+  assert.equal(outcome.diagnostics[0].code, 'RECOVERY_ADOPTION_AUDIT_CHAIN_MISMATCH');
 });
 
 test('source transport failure is distinct from a malformed recovery lease', async () => {
