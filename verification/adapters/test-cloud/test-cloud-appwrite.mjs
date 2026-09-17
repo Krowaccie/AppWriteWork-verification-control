@@ -290,6 +290,24 @@ function deepFreeze(value) {
   return value;
 }
 
+const TRANSACTION_HTTP_DIAGNOSTIC_CODES = Object.freeze(new Set([
+  'TEST_RESPONSE_HTTP_400',
+  'TEST_RESPONSE_HTTP_401',
+  'TEST_RESPONSE_HTTP_403',
+  'TEST_RESPONSE_HTTP_404',
+  'TEST_RESPONSE_HTTP_409',
+  'TEST_RESPONSE_HTTP_422',
+  'TEST_RESPONSE_HTTP_429',
+  'TEST_RESPONSE_HTTP_5XX',
+]));
+
+function transactionHttpDiagnostic(status) {
+  if ([400, 401, 403, 404, 409, 422, 429].includes(status)) {
+    return `TEST_RESPONSE_HTTP_${status}`;
+  }
+  return status >= 500 && status <= 599 ? 'TEST_RESPONSE_HTTP_5XX' : null;
+}
+
 function blocked(code) {
   const messages = {
     TEST_CLIENT_OPERATION_FORBIDDEN: 'Operation is outside the closed Appwrite test client.',
@@ -298,11 +316,14 @@ function blocked(code) {
     TEST_SETUP_READBACK_MISMATCH: 'One or more exact test-cloud setup prerequisites have not been read back.',
     TEST_COMMIT_UNKNOWN: 'The Appwrite transaction commit result is unknown.',
   };
+  const safeMessage = TRANSACTION_HTTP_DIAGNOSTIC_CODES.has(code)
+    ? 'Appwrite rejected a bounded transaction request.'
+    : messages[code];
   return Object.freeze({
     status: 'BLOCKED',
     value: null,
     diagnostics: Object.freeze([
-      Object.freeze({ code, safeMessage: messages[code], retryable: false }),
+      Object.freeze({ code, safeMessage, retryable: false }),
     ]),
   });
 }
@@ -737,6 +758,7 @@ function createRequest(handle, context, fetchDependency) {
     projectException = null,
     projectSafeResponse = null,
     observeStatus = false,
+    classifyTransactionHttpStatus = false,
     responseKind = 'json',
     unknownCommit = false,
   }) {
@@ -792,9 +814,12 @@ function createRequest(handle, context, fetchDependency) {
       }
       if (!observeStatus && response.status !== expectedStatus) {
         const definiteRejection = response.status >= 400 && response.status < 500;
+        const classifiedCode = classifyTransactionHttpStatus
+          ? transactionHttpDiagnostic(response.status)
+          : null;
         return blocked(unknownCommit && !definiteRejection
           ? 'TEST_COMMIT_UNKNOWN'
-          : 'TEST_RESPONSE_INVALID');
+          : classifiedCode ?? 'TEST_RESPONSE_INVALID');
       }
       const bytes = await readBoundedBytes(response);
       const text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
@@ -1201,6 +1226,7 @@ function makeControlSurface(handle, context, fetchDependency) {
         method: 'POST',
         path: '/tablesdb/transactions',
         expectedStatus: 201,
+        classifyTransactionHttpStatus: true,
         bodyText: canonicalJson({ ttl: fields.ttl }),
         project(value) {
           const projected = transactionProjection(value);
@@ -1313,6 +1339,7 @@ function makeControlSurface(handle, context, fetchDependency) {
         method: 'POST',
         path: `/tablesdb/transactions/${encodePath(fields.transactionId)}/operations`,
         expectedStatus: 201,
+        classifyTransactionHttpStatus: true,
         bodyText: canonicalJson({ operations: wire }),
         project(value) {
           const projected = transactionProjection(value, fields.transactionId);
@@ -1333,6 +1360,7 @@ function makeControlSurface(handle, context, fetchDependency) {
         method: 'PATCH',
         path: `/tablesdb/transactions/${encodePath(fields.transactionId)}`,
         expectedStatus: 200,
+        classifyTransactionHttpStatus: true,
         bodyText: canonicalJson({ [fields.action]: true }),
         unknownCommit: fields.action === 'commit',
         project: (value) => transactionProjection(value, fields.transactionId),

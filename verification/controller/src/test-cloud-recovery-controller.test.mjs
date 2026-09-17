@@ -113,7 +113,11 @@ function providerJson(value, status = 200) {
   });
 }
 
-function inMemoryRecoveryProvider({ lease, rows: initialRows = [] }) {
+function inMemoryRecoveryProvider({
+  lease,
+  rows: initialRows = [],
+  transactionRejections = {},
+}) {
   const rowKey = (tableId, rowId) => `${tableId}\0${rowId}`;
   const rows = new Map(initialRows.map(({ tableId, rowId, data }) => [
     rowKey(tableId, rowId),
@@ -166,6 +170,12 @@ function inMemoryRecoveryProvider({ lease, rows: initialRows = [] }) {
         : providerJson({ $id: rowId, ...structuredClone(data) });
     }
     if (options.method === 'POST' && requestPath === '/tablesdb/transactions') {
+      if (transactionRejections.open !== undefined) {
+        return providerJson(
+          { message: 'provider-body-secret-sentinel' },
+          transactionRejections.open,
+        );
+      }
       const transactionId = `transaction-${nextTransaction}`;
       nextTransaction += 1;
       transactions.set(transactionId, { operations: [], status: 'pending' });
@@ -174,6 +184,12 @@ function inMemoryRecoveryProvider({ lease, rows: initialRows = [] }) {
     const transactionMatch = /^\/tablesdb\/transactions\/([^/]+)$/u.exec(requestPath);
     const operationMatch = /^\/tablesdb\/transactions\/([^/]+)\/operations$/u.exec(requestPath);
     if (options.method === 'POST' && operationMatch !== null) {
+      if (transactionRejections.operations !== undefined) {
+        return providerJson(
+          { message: 'provider-body-secret-sentinel' },
+          transactionRejections.operations,
+        );
+      }
       const transactionId = decodeURIComponent(operationMatch[1]);
       const transaction = transactions.get(transactionId);
       assert.ok(transaction);
@@ -181,6 +197,12 @@ function inMemoryRecoveryProvider({ lease, rows: initialRows = [] }) {
       return providerJson({ $id: transactionId, status: 'pending' }, 201);
     }
     if (options.method === 'PATCH' && transactionMatch !== null) {
+      if (transactionRejections.commit !== undefined) {
+        return providerJson(
+          { message: 'provider-body-secret-sentinel' },
+          transactionRejections.commit,
+        );
+      }
       const transactionId = decodeURIComponent(transactionMatch[1]);
       const transaction = transactions.get(transactionId);
       assert.ok(transaction);
@@ -329,9 +351,9 @@ function authenticSafeEmptyHarness() {
   return Object.freeze({ ...fixture, ...recoveryContextAndClients(fetch), fetch });
 }
 
-function authenticExpiredSafeEmptyActiveHarness() {
+function authenticExpiredSafeEmptyActiveHarness(transactionRejections = {}) {
   const fixture = safeEmptyFixture({ cleanupDebt: false, observePrimary: false });
-  const fetch = inMemoryRecoveryProvider(fixture);
+  const fetch = inMemoryRecoveryProvider({ ...fixture, transactionRejections });
   return Object.freeze({ ...fixture, ...recoveryContextAndClients(fetch), fetch });
 }
 
@@ -744,6 +766,23 @@ test('unexpired active safe-empty source remains blocked without a transaction',
   assert.equal(fetch.calls.some(({ method, path: requestPath }) => (
     method === 'POST' && /\/tablesdb\/transactions(?:\/|$)/u.test(requestPath)
   )), false);
+});
+
+test('expired active adoption reports only closed transaction-stage diagnostics', async () => {
+  const cases = [
+    ['open', 403, 'RECOVERY_ADOPTION_TRANSACTION_OPEN_HTTP_403'],
+    ['operations', 422, 'RECOVERY_ADOPTION_TRANSACTION_OPERATIONS_HTTP_422'],
+    ['commit', 409, 'RECOVERY_ADOPTION_TRANSACTION_COMMIT_HTTP_409'],
+    ['open', 418, 'RECOVERY_ADOPTION_TRANSACTION_OPEN_REJECTED'],
+  ];
+  for (const [stage, status, expectedCode] of cases) {
+    const harness = authenticExpiredSafeEmptyActiveHarness({ [stage]: status });
+    const outcome = await runTestCloudRecoveryStateMachine(recoveryArguments(harness));
+    assert.equal(outcome.status, 'BLOCKED', stage);
+    assert.equal(outcome.diagnostics[0].code, expectedCode, stage);
+    assert.equal(JSON.stringify(outcome).includes('provider-body-secret-sentinel'), false, stage);
+    assert.equal(JSON.stringify(outcome).includes('recovery-secret'), false, stage);
+  }
 });
 
 test('source transport failure is distinct from a malformed recovery lease', async () => {
