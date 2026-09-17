@@ -189,20 +189,25 @@ function snapshotRecoveryAuthority(value) {
     : null;
 }
 
-function exactSourceLease(value, authority) {
+function sourceLeaseKind(value, authority, { allowActive = false } = {}) {
+  if (!exactObject(value, LEASE_KEYS)) return null;
+  const fields = Object.fromEntries(LEASE_KEYS.map((key) => [key, dataValue(value, key)]));
   const expectedRunId = `verify-${authority.sourceRevision.slice(0, 12)}`
     + `-${authority.sourceRunId}-${authority.sourceRunAttempt}`;
-  return exactObject(value, LEASE_KEYS)
-    && value.leaseRowId === inventory.control.leaseRowId
-    && Number.isSafeInteger(value.leaseVersion)
-    && value.leaseVersion >= 0
-    && value.ownerRunId === expectedRunId
-    && value.ownerWorkflowRunId === authority.sourceRunId
-    && value.cleanupDebt === true
-    && ['cleanup-debt', 'recovering'].includes(value.state)
-    && DIGEST.test(value.environmentDigest ?? '')
-    && DIGEST.test(value.ledgerDigest ?? '')
-    && DIGEST.test(value.leaseTokenDigest ?? '');
+  if (fields.leaseRowId !== inventory.control.leaseRowId
+    || !Number.isSafeInteger(fields.leaseVersion)
+    || fields.leaseVersion < 0
+    || fields.ownerRunId !== expectedRunId
+    || fields.ownerWorkflowRunId !== authority.sourceRunId
+    || !DIGEST.test(fields.environmentDigest ?? '')
+    || !DIGEST.test(fields.ledgerDigest ?? '')
+    || !DIGEST.test(fields.leaseTokenDigest ?? '')) return null;
+  if (fields.cleanupDebt === true && ['cleanup-debt', 'recovering'].includes(fields.state)) {
+    return fields.state;
+  }
+  return allowActive && fields.cleanupDebt === false && fields.state === 'active'
+    ? 'active'
+    : null;
 }
 
 function exactEmptyAccountStage(outcome) {
@@ -496,16 +501,35 @@ export async function runTestCloudRecoveryStateMachine(args) {
       && readValue.rowId === inventory.control.leaseRowId
       ? readValue.data
       : null;
-    if (!exactSourceLease(lease, recoveryAuthority)) {
+    const initialLeaseKind = sourceLeaseKind(lease, recoveryAuthority, { allowActive: true });
+    if (initialLeaseKind === null) {
       return blocked('RECOVERY_SOURCE_BINDING_INVALID');
     }
     const createStore = () => createProviderRecoveryControlStore(Object.freeze({
       context,
       recoveryControlClient: controlClient,
     }));
-    const createdValue = resultValue(createStore());
+    let createdValue = resultValue(createStore());
     if (!exactObject(createdValue, ['request', 'store'])) {
       return blocked('RECOVERY_CONTROL_STORE_INVALID');
+    }
+    if (initialLeaseKind === 'active') {
+      const adoptedValue = resultValue(await createdValue.store.adoptExpiredSafeEmptyLease({
+        nowEpochSeconds,
+        request: createdValue.request,
+      }));
+      const adoptedSnapshot = exactObject(adoptedValue, ['nextRequest', 'snapshot'])
+        && exactObject(dataValue(adoptedValue, 'snapshot'), ['auditTrail', 'intentProjections', 'lease'])
+        ? dataValue(adoptedValue, 'snapshot')
+        : null;
+      if (adoptedSnapshot === null
+        || sourceLeaseKind(dataValue(adoptedSnapshot, 'lease'), recoveryAuthority) === null) {
+        return blocked('RECOVERY_SOURCE_BINDING_INVALID');
+      }
+      createdValue = resultValue(createStore());
+      if (!exactObject(createdValue, ['request', 'store'])) {
+        return blocked('RECOVERY_CONTROL_STORE_INVALID');
+      }
     }
     const accountStage = exactEmptyAccountStage(await openRecoveryAccountSessionStage({
       clock,

@@ -508,6 +508,38 @@ async function poison(fields) {
   return blocked();
 }
 
+function exactPreFixtureIntentSet(intents, context) {
+  return intents.length <= 1 && intents.every((snapshot) => (
+    snapshot.schemaVersion === 'verification-intent-snapshot.v1'
+    && snapshot.runId === context.runId
+    && snapshot.environmentDigest === context.environmentDigest
+    && snapshot.resourceType === 'primary-execution'
+    && snapshot.lifecycleClass === 'provider-retained-observation'
+    && ['planned', 'created'].includes(snapshot.state)
+  ));
+}
+
+async function closeCurrentLease(fields) {
+  const closePredecessor = fields.lease;
+  const closed = await closeLease({
+    context: fields.context,
+    store: fields.store,
+    lease: closePredecessor,
+    capability: fields.capability,
+    clock: fields.clock,
+  });
+  if (
+    exactDataObject(closed, ['status', 'value', 'diagnostics']) === null
+    || closed.status !== 'PASS'
+    || !Array.isArray(closed.diagnostics)
+    || closed.diagnostics.length !== 0
+  ) return blocked();
+  const closeEvent = await validateClosedGeneration(fields, closePredecessor, closed.value);
+  return closeEvent === null
+    ? blocked()
+    : passed(closed.value, closePredecessor, closeEvent);
+}
+
 async function driveResource(fields, root) {
   let snapshot = root;
   const catalog = getCleanupResourceCatalog(root.resourceType);
@@ -630,14 +662,25 @@ export async function runTrustedTestCloudCleanup(args) {
       snapshot.schemaVersion === 'verification-intent-snapshot.v2'
       && snapshot.lifecycleClass === 'fixture'
     ));
-    if (fixtures.length !== QUALIFIED_CLEANUP_PROTOCOL.resourceOrder.length) return blocked();
+
+    // A runner can fail after it records the retained primary execution but
+    // before fixture production starts. With the original live capability
+    // still valid, that exact state has no product resource to recover and can
+    // close normally. Any other incomplete set is durable cleanup debt.
+    if (values.capability === null) return blocked();
+    if (fixtures.length === 0) {
+      return exactPreFixtureIntentSet(reconstructed.value, values.context)
+        ? closeCurrentLease(values)
+        : poison(values);
+    }
+    if (fixtures.length !== QUALIFIED_CLEANUP_PROTOCOL.resourceOrder.length) {
+      return poison(values);
+    }
     const byResource = new Map(fixtures.map((snapshot) => [snapshot.resourceType, snapshot]));
     if (byResource.size !== QUALIFIED_CLEANUP_PROTOCOL.resourceOrder.length
-      || QUALIFIED_CLEANUP_PROTOCOL.resourceOrder.some((resource) => !byResource.has(resource))) return blocked();
-
-    // Durable cleanup debt is reconstructed here, but ordinary active-run cleanup
-    // must never manufacture replacement authority for a null-capability handoff.
-    if (values.capability === null) return blocked();
+      || QUALIFIED_CLEANUP_PROTOCOL.resourceOrder.some((resource) => !byResource.has(resource))) {
+      return poison(values);
+    }
 
     const retainedExecutionIds = new Set();
     let priorRetentionExpiresAt = null;
@@ -668,23 +711,7 @@ export async function runTrustedTestCloudCleanup(args) {
       const driven = await driveResource(fields, root);
       if (driven?.state !== 'absent') return blocked();
     }
-    const closePredecessor = fields.lease;
-    const closed = await closeLease({
-      context: fields.context,
-      store: fields.store,
-      lease: closePredecessor,
-      capability: fields.capability,
-      clock: fields.clock,
-    });
-    if (
-      exactDataObject(closed, ['status', 'value', 'diagnostics']) === null
-      || closed.status !== 'PASS'
-      || !Array.isArray(closed.diagnostics)
-      || closed.diagnostics.length !== 0
-    ) return blocked();
-    const closeEvent = await validateClosedGeneration(fields, closePredecessor, closed.value);
-    if (closeEvent === null) return blocked();
-    return passed(closed.value, closePredecessor, closeEvent);
+    return closeCurrentLease(fields);
   } catch {
     return blocked();
   }
