@@ -317,6 +317,12 @@ edit the lease row directly. An unexpired active lease, any fixture or
 account-session intent, duplicate primary observation, owner mismatch, or audit
 chain mismatch remains blocked without a transaction.
 
+The recovery controller reports source transport failure, source binding
+rejection, blocked active-lease adoption, and post-adoption readback rejection
+as distinct safe diagnostic codes. These codes expose no credential, provider
+payload, row value, or resource identifier; they only locate the failed closed
+boundary so an operator does not attempt a manual lease-row repair.
+
 ## Controller prerequisites
 
 Before setup can become eligible, read back:
