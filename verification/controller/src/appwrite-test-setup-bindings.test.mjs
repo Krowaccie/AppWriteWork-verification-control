@@ -36,6 +36,8 @@ function browserProfile(index) {
   const profileIds = [
     'cors-preflight-owner-session-post',
     'owner-session-create',
+    'cors-preflight-appwrite-account-get',
+    'authenticated-appwrite-account-read',
     'cors-preflight-appwrite-prefs-get',
     'authenticated-appwrite-read',
     'cors-preflight-appwrite-multipart-post',
@@ -66,14 +68,14 @@ function browserProfile(index) {
     'authenticated-appwrite-function-json-mutation',
     'authenticated-appwrite-function-json-mutation',
   ];
-  const preflight = [25, 27, 29, 30, 31, 32, 33, 34, 35, 36].includes(index);
+  const preflight = [25, 27, 29, 31, 32, 33, 34, 35, 36, 37, 38].includes(index);
   if (preflight) {
     return {
       profileId: profileIds[index - 25],
       requestClass: 'cors-preflight',
       credentialCarrier: 'none',
       method: 'OPTIONS',
-      lifecyclePhase: index <= 27 ? 'OWNER_LOGIN' : 'APPLICATION_MUTATION',
+      lifecyclePhase: index <= 29 ? 'OWNER_LOGIN' : 'APPLICATION_MUTATION',
       resourceType: 'other',
     };
   }
@@ -87,7 +89,7 @@ function browserProfile(index) {
       resourceType: 'fetch',
     };
   }
-  if (index === 28) {
+  if ([28, 30].includes(index)) {
     return {
       profileId: profileIds[index - 25],
       requestClass: 'appwrite-read',
@@ -97,8 +99,8 @@ function browserProfile(index) {
       resourceType: 'fetch',
     };
   }
-  const multipart = [37, 38, 44, 47, 51].includes(index);
-  const patch = [46, 49, 50].includes(index);
+  const multipart = [39, 40, 46, 49, 53].includes(index);
+  const patch = [48, 51, 52].includes(index);
   return {
     profileId: profileIds[index - 25],
     requestClass: multipart ? 'appwrite-multipart-mutation' : 'appwrite-json-mutation',
@@ -110,7 +112,7 @@ function browserProfile(index) {
 }
 
 function buildBrowserRequestPolicy() {
-  const rows = Array.from({ length: 56 }, (_, ordinal) => ({
+  const rows = Array.from({ length: 58 }, (_, ordinal) => ({
     ...browserProfile(ordinal),
     exactCount: 1,
     expectedResponseStatus: 200,

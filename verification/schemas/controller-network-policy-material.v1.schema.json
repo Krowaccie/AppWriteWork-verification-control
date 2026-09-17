@@ -9,7 +9,7 @@
     "environmentDigest": { "$ref": "#/$defs/digest" },
     "browserRequestPolicyDigest": { "$ref": "#/$defs/digest" },
     "timeoutMilliseconds": { "const": 5000 },
-    "rows": { "type": "array", "minItems": 56, "maxItems": 56, "items": { "$ref": "#/$defs/row" } },
+    "rows": { "type": "array", "minItems": 58, "maxItems": 58, "items": { "$ref": "#/$defs/row" } },
     "contractDigest": { "$ref": "#/$defs/digest" }
   },
   "$defs": {

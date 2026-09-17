@@ -169,7 +169,7 @@ function validateBrowserPolicy(policy) {
     || record.timeoutMilliseconds !== 5000
     || !DIGEST.test(record.digest)
     || !Array.isArray(record.rows)
-    || record.rows.length !== 56
+    || record.rows.length !== 58
   ) throw new TypeError('browser policy');
   const withoutDigest = {
     schemaVersion: record.schemaVersion,
