@@ -380,7 +380,7 @@ function networkPolicyMaterial(readback) {
     || policy.timeoutMilliseconds !== 5000
     || !DIGEST.test(policy.digest ?? '')
     || !Array.isArray(policy.rows)
-    || policy.rows.length !== 56
+    || policy.rows.length !== 58
   ) return null;
   const rows = [];
   for (let index = 0; index < policy.rows.length; index += 1) {
@@ -596,7 +596,7 @@ export function validatePublishedControllerTrustArtifacts(args) {
     const policyRows = networkRows === null ? null : networkRows.map(({ rowDigest, ...row }) => row);
     if (
       canonicalJson(materials.evidenceValidator) !== canonicalJson(evidenceExpected)
-      || network === null || networkRows === null || networkRows.length !== 56 || networkRows.some((row) => row === null)
+      || network === null || networkRows === null || networkRows.length !== 58 || networkRows.some((row) => row === null)
       || network.schemaVersion !== 'controller-network-policy-material.v1'
       || !DIGEST.test(network.environmentDigest ?? '')
       || !DIGEST.test(network.browserRequestPolicyDigest ?? '')

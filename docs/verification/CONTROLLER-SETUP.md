@@ -2,7 +2,7 @@
 
 Status: Appwrite Test controller bootstrap is implemented and the public
 controller is protected at
-`1abb6e2ff87d8585296adfb4164627bb01111f37`. The remaining test-only sequence is
+`1a336033645b0bd99f70bdb439400ed6b2de1f13`. The remaining test-only sequence is
 source-`main` artifact publication, protected readback collection, controller
 bundle publication, ordinary readback collection, and `Verify Test Cloud`.
 Recovery and every production operation remain outside this procedure.
@@ -17,7 +17,7 @@ release, or rollback execution.
 - Controller test workflows: `collect-appwrite-test-readback.yml`,
   `publish-controller-bundle.yml`, and `verify-test-cloud.yml`. Production
   templates remain separate and inactive.
-- `Verify Main` remains credential-free. Pull requests run only local verification; `push` to `main` and `workflow_dispatch` may publish only `verification-artifacts-<40-character-revision>` through the protected action at `1abb6e2ff87d8585296adfb4164627bb01111f37` and still receive no controller, Appwrite, release, or browser credential.
+- `Verify Main` remains credential-free. Pull requests run only local verification; `push` to `main` and `workflow_dispatch` may publish only `verification-artifacts-<40-character-revision>` through the protected action at `1a336033645b0bd99f70bdb439400ed6b2de1f13` and still receive no controller, Appwrite, release, or browser credential.
 
 The source workflow is also materialized in the controller seed so the
 controller can validate its reviewed bytes. Its `verify` job is admitted only
@@ -91,7 +91,7 @@ exactly. See [REPOSITORY-BOUNDARIES.md](REPOSITORY-BOUNDARIES.md).
 
 The A1 foundation is implemented and locally contract-tested. The trusted hosted artifact launcher
 is installed as a protected controller action at full SHA
-`1abb6e2ff87d8585296adfb4164627bb01111f37` and pins the public OCI image by
+`1a336033645b0bd99f70bdb439400ed6b2de1f13` and pins the public OCI image by
 immutable digest. The source workflow remains credential-free; hosted
 eligibility is limited to the canonical main-bound request, and operational
 proof requires an exact successful workflow/artifact readback.
@@ -495,7 +495,7 @@ it against its schema. Only a separately reviewed `COMPLETE_B1` instance is
 eligible for A2; the checked-in `PENDING_B1` template is intentionally
 ineligible.
 
-The source workflow contract now pins the protected hosted launcher action at full SHA `1abb6e2ff87d8585296adfb4164627bb01111f37`; that action pins `ghcr.io/krowaccie/appwritework-verification-a1@sha256:592ab4fcf24f7cddcf13dde4cc08e1c29accf02ecf32a2442df17a5a6fcdb4b6`. `Verify Main` pins Node `24.11.1`, asserts npm `11.6.2`, and invokes the launcher only on `push` to `main` or `workflow_dispatch`, after local verification. Do not claim final Appwrite Test readiness until the exact source artifact, binding artifact, controller bundle, and hosted verification readbacks succeed.
+The source workflow contract now pins the protected hosted launcher action at full SHA `1a336033645b0bd99f70bdb439400ed6b2de1f13`; that action pins `ghcr.io/krowaccie/appwritework-verification-a1@sha256:592ab4fcf24f7cddcf13dde4cc08e1c29accf02ecf32a2442df17a5a6fcdb4b6`. `Verify Main` pins Node `24.11.1`, asserts npm `11.6.2`, and invokes the launcher only on `push` to `main` or `workflow_dispatch`, after local verification. Do not claim final Appwrite Test readiness until the exact source artifact, binding artifact, controller bundle, and hosted verification readbacks succeed.
 
 The launcher protocol remains closed to exactly five candidate command IDs: `root-npm-ci`, `web-npm-ci`, `bundle-catalog`, `typecheck`, and `vite-build`. Candidate code cannot choose executable paths, argv, cwd, inherited environment, network mode, timeout, registry, output path, or upload path.
 

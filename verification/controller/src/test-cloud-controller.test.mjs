@@ -205,7 +205,7 @@ const pins = Object.freeze({
   node: 'actions/setup-node@820762786026740c76f36085b0efc47a31fe5020',
   python: 'actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1',
   upload: 'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a',
-  trustedA1: 'Krowaccie/AppWriteWork-verification-control/.github/actions/a1-source-artifact-launcher@1abb6e2ff87d8585296adfb4164627bb01111f37',
+  trustedA1: 'Krowaccie/AppWriteWork-verification-control/.github/actions/a1-source-artifact-launcher@1a336033645b0bd99f70bdb439400ed6b2de1f13',
 });
 const PLAYWRIGHT_IMAGE =
   'mcr.microsoft.com/playwright:v1.61.1-noble@sha256:5b8f294aff9041b7191c34a4bab3ac270157a28774d4b0660e9743297b697e48';
