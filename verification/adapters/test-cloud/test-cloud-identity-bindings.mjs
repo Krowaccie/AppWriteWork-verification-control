@@ -263,7 +263,7 @@ const USER_REQUIRED_KEYS = OBJECT_FREEZE([
 const USER_OPTIONAL_KEYS = OBJECT_FREEZE([
   'password', 'hash', 'hashOptions', 'emailCanonical', 'impersonator',
   'impersonatorUserId', 'emailIsFree', 'emailIsDisposable',
-  'emailIsCorporate', 'emailIsCanonical',
+  'emailIsCorporate', 'emailIsCanonical', 'passwordPwned',
 ]);
 const TARGET_KEYS = OBJECT_FREEZE([
   '$id', '$createdAt', '$updatedAt', 'name', 'userId', 'providerId',
@@ -1142,7 +1142,10 @@ function validateUser(value, role, expectedEmail) {
   if (OBJECT_HAS_OWN(value, 'impersonator') && typeof value.impersonator !== 'boolean') {
     invalid('TEST_IDENTITY_USER_OPTIONALS_INVALID');
   }
-  for (const key of ['emailIsFree', 'emailIsDisposable', 'emailIsCorporate', 'emailIsCanonical']) {
+  for (const key of [
+    'emailIsFree', 'emailIsDisposable', 'emailIsCorporate', 'emailIsCanonical',
+    'passwordPwned',
+  ]) {
     if (OBJECT_HAS_OWN(value, key) && value[key] !== null && typeof value[key] !== 'boolean') {
       invalid('TEST_IDENTITY_USER_OPTIONALS_INVALID');
     }
