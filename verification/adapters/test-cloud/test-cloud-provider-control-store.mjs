@@ -1344,6 +1344,32 @@ function recoverySourceIntentSet(latest) {
   return matches.map(([intent]) => intent);
 }
 
+function validRecoverySafeEmptyCloseEvidence(
+  latest,
+  accountSessionObserved,
+  accountSessionIntent,
+) {
+  let sourceIntents;
+  try {
+    sourceIntents = recoverySourceIntentSet(latest);
+  } catch {
+    return false;
+  }
+  const primaryExecutionIntents = [...latest.values()].filter((intent) => (
+    intent.schemaVersion === 'verification-intent-snapshot.v1'
+      && intent.resourceType === 'primary-execution'
+  ));
+  const accountSessionIntentCount = accountSessionIntent === null ? 0 : 1;
+  return sourceIntents.length === 0
+    && accountSessionObserved === false
+    && (accountSessionIntent === null || accountSessionIntent.state === 'absent')
+    && primaryExecutionIntents.length <= 1
+    && (primaryExecutionIntents.length === 0
+      || (validRecoveryPrimaryExecutionSnapshot(primaryExecutionIntents[0])
+        && ['planned', 'created'].includes(primaryExecutionIntents[0].state)))
+    && latest.size === primaryExecutionIntents.length + accountSessionIntentCount;
+}
+
 function reconstructProviderRecoveryProof(
   snapshot,
   recoveryContext,
@@ -1394,7 +1420,16 @@ function reconstructProviderRecoveryProof(
           if (ordinaryLeaseState !== 'cleanup-debt') throw new TypeError('Recovery source lease recovery is invalid.');
           ordinaryLeaseState = 'recovering';
         } else if (event.transition === 'lease.close') {
-          if (!['active', 'recovering'].includes(ordinaryLeaseState)) throw new TypeError('Recovery source lease close is invalid.');
+          const safeEmptyCleanupDebtClose = ordinaryLeaseState === 'cleanup-debt'
+            && validRecoverySafeEmptyCloseEvidence(
+              latest,
+              accountSessionObserved,
+              accountSessionIntent,
+            );
+          if (!['active', 'recovering'].includes(ordinaryLeaseState)
+            && !safeEmptyCleanupDebtClose) {
+            throw new TypeError('Recovery source lease close is invalid.');
+          }
           ordinaryLeaseState = 'idle';
           activeRun = null;
         }
