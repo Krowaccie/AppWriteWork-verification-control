@@ -103,14 +103,20 @@ jobs:
         shell: bash
         run: node verification/core/run-tests.mjs
 
+      - name: Admit bounded source artifact publication
+        if: "!cancelled() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && (steps.local-verification.outcome == 'success' || steps.local-verification.outcome == 'failure')"
+        id: source-artifact-publication-admission
+        shell: bash
+        run: node verification/core/source-artifact-publication-admission.mjs --revision "$GITHUB_SHA"
+
       - name: Bind hosted source artifact request
-        if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && steps.local-verification.outcome == 'success'
+        if: "!cancelled() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && steps.source-artifact-publication-admission.outcome == 'success'"
         id: source-artifact-request
         shell: bash
         run: node verification/core/hosted-source-artifact-request.mjs
 
       - name: Publish validated hosted source artifact
-        if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && steps.local-verification.outcome == 'success'
+        if: "!cancelled() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && steps.source-artifact-request.outcome == 'success'"
         uses: Krowaccie/AppWriteWork-verification-control/.github/actions/a1-source-artifact-launcher@1a336033645b0bd99f70bdb439400ed6b2de1f13
         with:
           request: ${{ steps.source-artifact-request.outputs.request }}
