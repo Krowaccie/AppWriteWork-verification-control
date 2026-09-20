@@ -19,6 +19,7 @@ import {
   adoptionStoreDiagnostic,
   createRecoveryTargetEnvironment,
   main,
+  recoveryExecutionDiagnostic,
   runTestCloudRecoveryStateMachine,
 } from './test-cloud-recovery-controller.mjs';
 import { readExactBindingDirectory } from './test-cloud-controller.mjs';
@@ -910,6 +911,69 @@ test('adoption projects every closed audit condition and rejects unknown or host
   }
   assert.equal(adoptionStoreDiagnostic(outcome('UNKNOWN_PRIVATE_PROVIDER_CODE')), null);
   assert.equal(adoptionStoreDiagnostic(new Proxy({}, {
+    ownKeys() {
+      throw new Error('private trap');
+    },
+  })), null);
+});
+
+test('recovery execution projects only closed diagnostics without reflecting hostile values', () => {
+  const pairs = [
+    ['AUDIT_CHAIN_MISMATCH', 'RECOVERY_EXECUTION_AUDIT_CHAIN_MISMATCH'],
+    ['CLEANUP_AMBIGUOUS', 'RECOVERY_EXECUTION_CLEANUP_AMBIGUOUS'],
+    ['LEASE_READBACK_MISMATCH', 'RECOVERY_EXECUTION_LEASE_READBACK_MISMATCH'],
+    ['LEASE_VERSION_MISMATCH', 'RECOVERY_EXECUTION_LEASE_VERSION_MISMATCH'],
+    ['RECOVERY_APPROVAL_INVALID', 'RECOVERY_EXECUTION_APPROVAL_INVALID'],
+    ['RECOVERY_SCOPE_INVALID', 'RECOVERY_EXECUTION_SCOPE_INVALID'],
+    ['RECOVERY_STEP_BLOCKED', 'RECOVERY_EXECUTION_STEP_BLOCKED'],
+    ['TEST_CLIENT_OPERATION_FORBIDDEN', 'RECOVERY_EXECUTION_CLIENT_OPERATION_FORBIDDEN'],
+    ['TEST_COMMIT_UNKNOWN', 'RECOVERY_EXECUTION_COMMIT_UNKNOWN'],
+    ['TEST_CREDENTIAL_CLASS_INVALID', 'RECOVERY_EXECUTION_CREDENTIAL_CLASS_INVALID'],
+    ['TEST_RESPONSE_INVALID', 'RECOVERY_EXECUTION_RESPONSE_INVALID'],
+    ['TEST_SETUP_READBACK_MISMATCH', 'RECOVERY_EXECUTION_SETUP_READBACK_MISMATCH'],
+    ...['400', '401', '403', '404', '409', '422', '429', '5XX'].map((status) => [
+      `TEST_RESPONSE_HTTP_${status}`,
+      `RECOVERY_EXECUTION_RESPONSE_HTTP_${status}`,
+    ]),
+  ];
+  const outcome = (code) => Object.freeze({
+    diagnostics: Object.freeze([Object.freeze({
+      code,
+      retryable: false,
+      safeMessage: 'Verification is blocked.',
+    })]),
+    status: 'BLOCKED',
+    value: null,
+  });
+  for (const [providerCode, controllerCode] of pairs) {
+    assert.equal(recoveryExecutionDiagnostic(outcome(providerCode)), controllerCode, providerCode);
+  }
+  assert.equal(recoveryExecutionDiagnostic(outcome('UNKNOWN_PRIVATE_PROVIDER_CODE')), null);
+  assert.equal(recoveryExecutionDiagnostic(Object.freeze({
+    diagnostics: Object.freeze([]),
+    status: 'PASS',
+    value: Object.freeze({}),
+  })), null);
+  let getterCalls = 0;
+  const hostileDiagnostic = {};
+  Object.defineProperty(hostileDiagnostic, 'code', {
+    enumerable: true,
+    get() {
+      getterCalls += 1;
+      return 'RECOVERY_SCOPE_INVALID';
+    },
+  });
+  Object.defineProperties(hostileDiagnostic, {
+    retryable: { enumerable: true, value: false },
+    safeMessage: { enumerable: true, value: 'private' },
+  });
+  assert.equal(recoveryExecutionDiagnostic(Object.freeze({
+    diagnostics: Object.freeze([hostileDiagnostic]),
+    status: 'BLOCKED',
+    value: null,
+  })), null);
+  assert.equal(getterCalls, 0);
+  assert.equal(recoveryExecutionDiagnostic(new Proxy({}, {
     ownKeys() {
       throw new Error('private trap');
     },
