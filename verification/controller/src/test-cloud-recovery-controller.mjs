@@ -63,6 +63,24 @@ const ADOPTION_STORE_DIAGNOSTIC_MAP = Object.freeze(new Map([
     ])
   )),
 ]));
+const RECOVERY_EXECUTION_DIAGNOSTIC_MAP = Object.freeze(new Map([
+  ['AUDIT_CHAIN_MISMATCH', 'RECOVERY_EXECUTION_AUDIT_CHAIN_MISMATCH'],
+  ['CLEANUP_AMBIGUOUS', 'RECOVERY_EXECUTION_CLEANUP_AMBIGUOUS'],
+  ['LEASE_READBACK_MISMATCH', 'RECOVERY_EXECUTION_LEASE_READBACK_MISMATCH'],
+  ['LEASE_VERSION_MISMATCH', 'RECOVERY_EXECUTION_LEASE_VERSION_MISMATCH'],
+  ['RECOVERY_APPROVAL_INVALID', 'RECOVERY_EXECUTION_APPROVAL_INVALID'],
+  ['RECOVERY_SCOPE_INVALID', 'RECOVERY_EXECUTION_SCOPE_INVALID'],
+  ['RECOVERY_STEP_BLOCKED', 'RECOVERY_EXECUTION_STEP_BLOCKED'],
+  ['TEST_CLIENT_OPERATION_FORBIDDEN', 'RECOVERY_EXECUTION_CLIENT_OPERATION_FORBIDDEN'],
+  ['TEST_COMMIT_UNKNOWN', 'RECOVERY_EXECUTION_COMMIT_UNKNOWN'],
+  ['TEST_CREDENTIAL_CLASS_INVALID', 'RECOVERY_EXECUTION_CREDENTIAL_CLASS_INVALID'],
+  ['TEST_RESPONSE_INVALID', 'RECOVERY_EXECUTION_RESPONSE_INVALID'],
+  ['TEST_SETUP_READBACK_MISMATCH', 'RECOVERY_EXECUTION_SETUP_READBACK_MISMATCH'],
+  ...['400', '401', '403', '404', '409', '422', '429', '5XX'].map((status) => [
+    `TEST_RESPONSE_HTTP_${status}`,
+    `RECOVERY_EXECUTION_RESPONSE_HTTP_${status}`,
+  ]),
+]));
 const RECOVERY_AUTHORITY_KEYS = Object.freeze([
   'failedWorkflowRunId',
   'sourceRunAttempt',
@@ -207,7 +225,7 @@ function resultValue(outcome) {
     : null;
 }
 
-export function adoptionStoreDiagnostic(outcome) {
+function closedDiagnostic(outcome, diagnosticMap) {
   try {
     if (!exactObject(outcome, RECOVERY_RESULT_KEYS)
       || dataValue(outcome, 'status') !== 'BLOCKED'
@@ -218,10 +236,18 @@ export function adoptionStoreDiagnostic(outcome) {
       || typeof dataValue(diagnostic, 'code') !== 'string'
       || typeof dataValue(diagnostic, 'safeMessage') !== 'string'
       || typeof dataValue(diagnostic, 'retryable') !== 'boolean') return null;
-    return ADOPTION_STORE_DIAGNOSTIC_MAP.get(dataValue(diagnostic, 'code')) ?? null;
+    return diagnosticMap.get(dataValue(diagnostic, 'code')) ?? null;
   } catch {
     return null;
   }
+}
+
+export function adoptionStoreDiagnostic(outcome) {
+  return closedDiagnostic(outcome, ADOPTION_STORE_DIAGNOSTIC_MAP);
+}
+
+export function recoveryExecutionDiagnostic(outcome) {
+  return closedDiagnostic(outcome, RECOVERY_EXECUTION_DIAGNOSTIC_MAP);
 }
 
 function snapshotRecoveryAuthority(value) {
@@ -647,7 +673,7 @@ export async function runTestCloudRecoveryStateMachine(args) {
     const outcome = await recoverTestCloud({ executor });
     return exactTerminalRecovery(outcome)
       ? outcome
-      : blocked('RECOVERY_TERMINAL_PROOF_INVALID');
+      : blocked(recoveryExecutionDiagnostic(outcome) ?? 'RECOVERY_TERMINAL_PROOF_INVALID');
   } catch {
     return blocked('RECOVERY_SCOPE_INVALID');
   }
