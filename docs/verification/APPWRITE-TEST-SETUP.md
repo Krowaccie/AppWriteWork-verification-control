@@ -327,6 +327,13 @@ edit the lease row directly. An unexpired active lease, any fixture or
 account-session intent, duplicate primary observation, owner mismatch, or audit
 chain mismatch remains blocked without a transaction.
 
+Later recovery reads must also reconstruct that completed historical
+`lease.cleanup_debt` to `lease.close` pair. The close is valid only when the
+closed run was safe-empty under the same rules: no fixture resource intent, no
+live account-session intent, and at most one valid planned or created retained
+primary-execution observation. A resource-bearing or otherwise malformed
+cleanup-debt close remains an audit-chain mismatch.
+
 The recovery controller reports source transport failure, source binding
 rejection, blocked active-lease adoption, and post-adoption readback rejection
 as distinct safe diagnostic codes. These codes expose no credential, provider

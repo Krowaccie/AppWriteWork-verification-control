@@ -963,6 +963,22 @@ function exactRecoverySourceBindings(checkpoint,reconstruction,currentIntents){
       checkpoint.prefixLength,checkpoint.intentDispositionCursor);
 }
 
+function validRecoverySafeEmptyCloseSnapshot(resourceMap,ordinaryLatest,accountSessionIntent){
+  const primaryExecutionIntents=[...ordinaryLatest.values()].filter((intent)=>(
+    intent.schemaVersion==='verification-intent-snapshot.v1'
+      &&intent.resourceType==='primary-execution'
+  ));
+  const accountSessionIntentCount=accountSessionIntent===null?0:1;
+  return resourceMap.size===0
+    &&(accountSessionIntent===null||accountSessionIntent.state==='absent')
+    &&primaryExecutionIntents.length<=1
+    &&(primaryExecutionIntents.length===0
+      ||(validPrimaryExecutionSnapshot(
+        primaryExecutionIntents[0],PRIMARY_EXECUTION_RETENTION_MAX_SECONDS,
+      )&&['planned','created'].includes(primaryExecutionIntents[0].state)))
+    &&ordinaryLatest.size===primaryExecutionIntents.length+accountSessionIntentCount;
+}
+
 function reconstructRecoverySnapshot(snapshot){
   try{
     const root=recoveryFields(snapshot,RECOVERY_SNAPSHOT_KEYS);
@@ -1016,7 +1032,12 @@ function reconstructRecoverySnapshot(snapshot){
           if(ordinaryLeaseState!=='cleanup-debt')return null;
           ordinaryLeaseState='recovering';
         }else if(event.transition==='lease.close'){
-          if(!['active','recovering'].includes(ordinaryLeaseState))return null;
+          const safeEmptyCleanupDebtClose=ordinaryLeaseState==='cleanup-debt'
+            &&validRecoverySafeEmptyCloseSnapshot(
+              resourceMap,ordinaryLatest,accountSessionIntent,
+            );
+          if(!['active','recovering'].includes(ordinaryLeaseState)
+            &&!safeEmptyCleanupDebtClose)return null;
           ordinaryLeaseState='idle';activeRun=null;
         }
       }
