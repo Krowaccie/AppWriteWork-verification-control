@@ -16,6 +16,7 @@ import {
 } from '../../../verification/adapters/test-cloud/test-cloud-row-id.mjs';
 import { qualifyExecutionObservationReadback } from '../../../verification/adapters/test-cloud/test-cloud-setup-check.mjs';
 import {
+  adoptionStoreDiagnostic,
   createRecoveryTargetEnvironment,
   main,
   runTestCloudRecoveryStateMachine,
@@ -878,6 +879,43 @@ test('expired active adoption reports a closed post-commit readback diagnostic',
   assert.equal(outcome.diagnostics[0].code, 'RECOVERY_ADOPTION_AUDIT_CHAIN_MISMATCH');
 });
 
+test('adoption projects every closed audit condition and rejects unknown or hostile outcomes', () => {
+  const pairs = [
+    ['RECOVERY_SOURCE_AUDIT_ORDER_INVALID', 'RECOVERY_ADOPTION_SOURCE_AUDIT_ORDER_INVALID'],
+    ['RECOVERY_SOURCE_LEASE_ACQUISITION_INVALID', 'RECOVERY_ADOPTION_SOURCE_LEASE_ACQUISITION_INVALID'],
+    ['RECOVERY_SOURCE_RUN_CHAIN_INVALID', 'RECOVERY_ADOPTION_SOURCE_RUN_CHAIN_INVALID'],
+    ['RECOVERY_SOURCE_LEASE_RENEWAL_INVALID', 'RECOVERY_ADOPTION_SOURCE_LEASE_RENEWAL_INVALID'],
+    ['RECOVERY_SOURCE_CLEANUP_DEBT_INVALID', 'RECOVERY_ADOPTION_SOURCE_CLEANUP_DEBT_INVALID'],
+    ['RECOVERY_SOURCE_LEASE_RECOVERY_INVALID', 'RECOVERY_ADOPTION_SOURCE_LEASE_RECOVERY_INVALID'],
+    ['RECOVERY_SOURCE_LEASE_CLOSE_INVALID', 'RECOVERY_ADOPTION_SOURCE_LEASE_CLOSE_INVALID'],
+    ['RECOVERY_EVENT_RUN_INVALID', 'RECOVERY_ADOPTION_EVENT_RUN_INVALID'],
+    ['RECOVERY_SOURCE_LEASE_STATE_INVALID', 'RECOVERY_ADOPTION_SOURCE_LEASE_STATE_INVALID'],
+    ['RECOVERY_GENESIS_PROOF_INVALID', 'RECOVERY_ADOPTION_GENESIS_PROOF_INVALID'],
+    ['RECOVERY_TERMINAL_INTENT_PROOF_INVALID', 'RECOVERY_ADOPTION_TERMINAL_INTENT_PROOF_INVALID'],
+    ['RECOVERY_EVENT_SNAPSHOT_INVALID', 'RECOVERY_ADOPTION_EVENT_SNAPSHOT_INVALID'],
+    ['RECOVERY_SUCCESSOR_SOURCE_PROOF_INVALID', 'RECOVERY_ADOPTION_SUCCESSOR_SOURCE_PROOF_INVALID'],
+    ['RECOVERY_LEASE_STATE_INVALID', 'RECOVERY_ADOPTION_LEASE_STATE_INVALID'],
+  ];
+  const outcome = (code) => Object.freeze({
+    diagnostics: Object.freeze([Object.freeze({
+      code,
+      retryable: false,
+      safeMessage: 'Verification is blocked.',
+    })]),
+    status: 'BLOCKED',
+    value: null,
+  });
+  for (const [providerCode, controllerCode] of pairs) {
+    assert.equal(adoptionStoreDiagnostic(outcome(providerCode)), controllerCode, providerCode);
+  }
+  assert.equal(adoptionStoreDiagnostic(outcome('UNKNOWN_PRIVATE_PROVIDER_CODE')), null);
+  assert.equal(adoptionStoreDiagnostic(new Proxy({}, {
+    ownKeys() {
+      throw new Error('private trap');
+    },
+  })), null);
+});
+
 test('expired active adoption projects every closed proof category without mutation or reflection', async () => {
   const cases = [
     ['owner', () => rehashRecoveryFixture(
@@ -895,7 +933,7 @@ test('expired active adoption projects every closed proof category without mutat
           snapshot: null,
         };
       },
-    ), 'RECOVERY_ADOPTION_SOURCE_AUDIT_PROOF_INVALID'],
+    ), 'RECOVERY_ADOPTION_SOURCE_LEASE_ACQUISITION_INVALID'],
     ['intent-proof', () => {
       const fixture = safeEmptyFixture({ cleanupDebt: false, observePrimary: false });
       return Object.freeze({
@@ -945,7 +983,7 @@ test('expired active adoption projects every closed proof category without mutat
   ];
   const providerCodeByControllerCode = new Map([
     ['RECOVERY_ADOPTION_SOURCE_OWNER_INVALID', 'RECOVERY_SOURCE_OWNER_INVALID'],
-    ['RECOVERY_ADOPTION_SOURCE_AUDIT_PROOF_INVALID', 'RECOVERY_SOURCE_AUDIT_PROOF_INVALID'],
+    ['RECOVERY_ADOPTION_SOURCE_LEASE_ACQUISITION_INVALID', 'RECOVERY_SOURCE_LEASE_ACQUISITION_INVALID'],
     ['RECOVERY_ADOPTION_SOURCE_INTENT_PROOF_INVALID', 'RECOVERY_SOURCE_INTENT_PROOF_INVALID'],
     ['RECOVERY_ADOPTION_SOURCE_NOT_SAFE_EMPTY', 'RECOVERY_SOURCE_NOT_SAFE_EMPTY'],
   ]);
