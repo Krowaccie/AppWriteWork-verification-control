@@ -342,13 +342,16 @@ resource identifiers remain non-observable. An ambiguous commit still uses the
 existing readback-and-single-retry path instead of being relabelled as a
 definite HTTP rejection.
 
-Before that transaction, recovery may report only four fixed categories for an
+Before that transaction, recovery may report only fixed categories for an
 internally generated expired-orphan source-proof rejection: owner mismatch,
-audit-proof invalid, intent-proof invalid, or not safe-empty. These categories
-are selected only from exact controller-authored error messages. Unknown,
-hostile, provider-supplied, or otherwise unrecognized errors remain the generic
-setup-incomplete diagnostic; no provider payload, row value, identifier, or
-credential is reflected.
+intent-proof invalid, not safe-empty, or one exact audit reconstruction
+condition. The audit conditions distinguish order, acquisition, run chain,
+renewal, cleanup-debt, recovery, close, recovery-event run, source-lease state,
+genesis, terminal intent, event snapshot, successor-source proof, and final
+recovery-lease state. These categories are selected only from exact
+controller-authored error messages. Unknown, hostile, provider-supplied, or
+otherwise unrecognized errors remain the generic setup-incomplete diagnostic;
+no provider payload, row value, identifier, or credential is reflected.
 
 ## Controller prerequisites
 
