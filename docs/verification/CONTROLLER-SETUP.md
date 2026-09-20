@@ -17,7 +17,18 @@ release, or rollback execution.
 - Controller test workflows: `collect-appwrite-test-readback.yml`,
   `publish-controller-bundle.yml`, and `verify-test-cloud.yml`. Production
   templates remain separate and inactive.
-- `Verify Main` remains credential-free. Pull requests run only local verification; `push` to `main` and `workflow_dispatch` may publish only `verification-artifacts-<40-character-revision>` through the protected action at `1a336033645b0bd99f70bdb439400ed6b2de1f13` and still receive no controller, Appwrite, release, or browser credential.
+- `Verify Main` remains credential-free. Pull requests run only local
+  verification. On `push` to `main` or `workflow_dispatch`, publication may
+  proceed after the local verifier has actually completed with either a
+  `success` or `failure` outcome, its exact canonical result reports `PASS` for
+  every selected non-routine check, and `verifier-self-test` reports exactly
+  `PASS` or `FAIL`. Blocked checks, another failed check, skipped execution,
+  and global cancellation remain ineligible, and the exact source-artifact
+  request must bind successfully before the protected action runs. The
+  workflow may publish only
+  `verification-artifacts-<40-character-revision>` through the protected
+  action at `1a336033645b0bd99f70bdb439400ed6b2de1f13` and still receives no
+  controller, Appwrite, release, or browser credential.
 
 The source workflow is also materialized in the controller seed so the
 controller can validate its reviewed bytes. Its `verify` job is admitted only
@@ -495,7 +506,17 @@ it against its schema. Only a separately reviewed `COMPLETE_B1` instance is
 eligible for A2; the checked-in `PENDING_B1` template is intentionally
 ineligible.
 
-The source workflow contract now pins the protected hosted launcher action at full SHA `1a336033645b0bd99f70bdb439400ed6b2de1f13`; that action pins `ghcr.io/krowaccie/appwritework-verification-a1@sha256:592ab4fcf24f7cddcf13dde4cc08e1c29accf02ecf32a2442df17a5a6fcdb4b6`. `Verify Main` pins Node `24.11.1`, asserts npm `11.6.2`, and invokes the launcher only on `push` to `main` or `workflow_dispatch`, after local verification. Do not claim final Appwrite Test readiness until the exact source artifact, binding artifact, controller bundle, and hosted verification readbacks succeed.
+The source workflow contract now pins the protected hosted launcher action at
+full SHA `1a336033645b0bd99f70bdb439400ed6b2de1f13`; that action pins
+`ghcr.io/krowaccie/appwritework-verification-a1@sha256:592ab4fcf24f7cddcf13dde4cc08e1c29accf02ecf32a2442df17a5a6fcdb4b6`.
+`Verify Main` pins Node `24.11.1`, asserts npm `11.6.2`, and invokes the
+launcher only on `push` to `main` or `workflow_dispatch`, after the local
+verifier reaches an explicit terminal outcome, every non-routine check passes,
+the routine `verifier-self-test` reports exactly `PASS` or `FAIL`, and the exact
+request binding succeeds. The routine verdict is recorded but does not by
+itself authorize or prohibit source-artifact publication. Do not claim final Appwrite Test
+readiness until the exact source artifact, binding artifact, controller bundle,
+and hosted verification readbacks succeed.
 
 The launcher protocol remains closed to exactly five candidate command IDs: `root-npm-ci`, `web-npm-ci`, `bundle-catalog`, `typecheck`, and `vite-build`. Candidate code cannot choose executable paths, argv, cwd, inherited environment, network mode, timeout, registry, output path, or upload path.
 
