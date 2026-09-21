@@ -21,6 +21,17 @@ const SAFE_PATH = /^(?!\/)(?![A-Za-z]:\/)(?!.*\/{2})(?!.*(?:^|\/)\.{1,2}(?:\/|$)
 const PRODUCT_FUNCTION_IDS = Object.freeze(
   inventory.productFunctions.map(({ logicalId }) => logicalId).sort(),
 );
+const FUNCTION_TARGETS = new Set([...PRODUCT_FUNCTION_IDS, 'verification-runner-py']);
+const FUNCTION_OPERATION_PHASES = Object.freeze({
+  DEPLOYMENT_CREATE_FAILED: 'create',
+  DEPLOYMENT_TIMEOUT: 'build-timeout',
+  DEPLOYMENT_TERMINAL_FAILURE: 'build-terminal',
+  DEPLOYMENT_ACTIVATION_MISMATCH: 'activate',
+});
+const FUNCTION_PHASES = new Set([
+  ...Object.values(FUNCTION_OPERATION_PHASES),
+  'observation-invalid',
+]);
 const TYPED_ARRAY_PROTOTYPE = Object.getPrototypeOf(Uint8Array.prototype);
 const TYPED_ARRAY_BUFFER = Object.getOwnPropertyDescriptor(
   TYPED_ARRAY_PROTOTYPE,
@@ -104,6 +115,11 @@ const HANDOFF_KEYS = Object.freeze([
 ]);
 const CONTROLLER_RESULT_KEYS = Object.freeze(['diagnostics', 'status', 'value']);
 const DIAGNOSTIC_KEYS = Object.freeze(['code', 'retryable', 'safeMessage']);
+const FUNCTION_DIAGNOSTIC_KEYS = Object.freeze([
+  ...DIAGNOSTIC_KEYS,
+  'logicalTarget',
+  'phase',
+]);
 const SAFE_OPERATION_DIAGNOSTIC_CODES = new Set([
   'TEST_CLOUD_PREFLIGHT_AUTHORIZATION_INVALID',
   'TEST_CLOUD_PREFLIGHT_ATTESTATION_STALE',
@@ -207,6 +223,23 @@ function result(status, value, code = null, retryable = false) {
     diagnostics: code === null
       ? []
       : [{ code, safeMessage: safeMessage(code), retryable }],
+  });
+}
+
+function functionDeploymentResult(status, logicalTarget, phase) {
+  if (!FUNCTION_TARGETS.has(logicalTarget) || !FUNCTION_PHASES.has(phase)) {
+    return result(status, null, 'FUNCTION_DEPLOYMENT_FAILED');
+  }
+  return deepFreeze({
+    status,
+    value: null,
+    diagnostics: [{
+      code: 'FUNCTION_DEPLOYMENT_FAILED',
+      safeMessage: safeMessage('FUNCTION_DEPLOYMENT_FAILED'),
+      retryable: false,
+      logicalTarget,
+      phase,
+    }],
   });
 }
 
@@ -600,12 +633,16 @@ function expectedFunctionArtifacts(artifactSet) {
 }
 
 function functionDeploymentObservations(value, artifactSet) {
-  if (!denseDataArray(value)) return null;
   const expectedArtifacts = expectedFunctionArtifacts(artifactSet);
-  if (value.length !== expectedArtifacts.length) return null;
+  const invalid = (index) => deepFreeze({
+    observations: null,
+    invalidTarget: expectedArtifacts[Math.min(index, expectedArtifacts.length - 1)].logicalTarget,
+  });
+  if (!denseDataArray(value)) return invalid(0);
   const observations = [];
   const deploymentIds = new Set();
-  for (let index = 0; index < value.length; index += 1) {
+  for (let index = 0; index < expectedArtifacts.length; index += 1) {
+    if (index >= value.length) return invalid(index);
     const observation = deploymentObservation(value[index], 'function');
     const expectedArtifact = expectedArtifacts[index];
     if (
@@ -613,11 +650,12 @@ function functionDeploymentObservations(value, artifactSet) {
       || observation.logicalTarget !== expectedArtifact.logicalTarget
       || observation.artifactTransportDigest !== expectedArtifact.transportDigest
       || deploymentIds.has(observation.deploymentId)
-    ) return null;
+    ) return invalid(index);
     deploymentIds.add(observation.deploymentId);
     observations.push(observation);
   }
-  return deepFreeze(observations);
+  if (value.length !== expectedArtifacts.length) return invalid(expectedArtifacts.length);
+  return deepFreeze({ observations: deepFreeze(observations), invalidTarget: null });
 }
 
 function siteDeploymentObservation(value, artifactSet) {
@@ -647,14 +685,34 @@ function isPlainObject(value) {
 }
 
 function validDiagnostic(value) {
-  return exactDataObject(value, DIAGNOSTIC_KEYS)
-    && typeof value.code === 'string'
+  const generic = exactDataObject(value, DIAGNOSTIC_KEYS);
+  const functionSpecific = generic ? false : exactDataObject(value, FUNCTION_DIAGNOSTIC_KEYS);
+  if (!generic && !functionSpecific) return false;
+  const common = typeof value.code === 'string'
     && /^[A-Z][A-Z0-9_]{0,127}$/.test(value.code)
     && typeof value.safeMessage === 'string'
     && value.safeMessage.length > 0
     && value.safeMessage.length <= 512
     && !/[\u0000-\u001f\u007f]/u.test(value.safeMessage)
     && typeof value.retryable === 'boolean';
+  if (!common) return false;
+  if (generic) return true;
+  if (value.retryable !== false) return false;
+  if (!FUNCTION_TARGETS.has(value.logicalTarget) || !FUNCTION_PHASES.has(value.phase)) return false;
+  return value.code === 'FUNCTION_DEPLOYMENT_FAILED'
+    ? value.safeMessage === safeMessage('FUNCTION_DEPLOYMENT_FAILED')
+    : FUNCTION_OPERATION_PHASES[value.code] === value.phase;
+}
+
+function functionDeploymentDiagnostic(outcome) {
+  const diagnostic = outcome?.diagnostics?.length === 1 ? outcome.diagnostics[0] : null;
+  if (!validDiagnostic(diagnostic) || !exactDataObject(diagnostic, FUNCTION_DIAGNOSTIC_KEYS)) {
+    return null;
+  }
+  if (diagnostic.code === 'FUNCTION_DEPLOYMENT_FAILED') {
+    return diagnostic;
+  }
+  return FUNCTION_OPERATION_PHASES[diagnostic.code] === diagnostic.phase ? diagnostic : null;
 }
 
 function exactCleanupDebtFailureLease(candidate, prior) {
@@ -747,6 +805,22 @@ async function invoke(method, request, validateValue = null) {
     );
   } catch {
     return result('BLOCKED', null, 'TEST_CLOUD_PREFLIGHT_BLOCKED');
+  }
+}
+
+async function invokeFunctionDeployment(method, request) {
+  try {
+    const outcome = await method(deepFreeze(request));
+    if (!validControllerResult(outcome)) {
+      return result('BLOCKED', null, 'FUNCTION_DEPLOYMENT_FAILED');
+    }
+    if (outcome.status === 'PASS') return result('PASS', outcome.value);
+    const diagnostic = functionDeploymentDiagnostic(outcome);
+    return diagnostic === null
+      ? result(outcome.status, null, 'FUNCTION_DEPLOYMENT_FAILED')
+      : functionDeploymentResult(outcome.status, diagnostic.logicalTarget, diagnostic.phase);
+  } catch {
+    return result('BLOCKED', null, 'FUNCTION_DEPLOYMENT_FAILED');
   }
 }
 
@@ -896,6 +970,18 @@ function stageFailure(outcome, code, blockedOnly = false) {
   );
 }
 
+function functionDeploymentStageFailure(outcome) {
+  if (outcome.status === 'PASS') return null;
+  const diagnostic = functionDeploymentDiagnostic(outcome);
+  return diagnostic === null
+    ? result(outcome.status === 'BLOCKED' ? 'BLOCKED' : 'FAIL', null, 'FUNCTION_DEPLOYMENT_FAILED')
+    : functionDeploymentResult(
+      outcome.status === 'BLOCKED' ? 'BLOCKED' : 'FAIL',
+      diagnostic.logicalTarget,
+      diagnostic.phase,
+    );
+}
+
 function now(clock) {
   const value = clock.now();
   return typeof value === 'string' && Number.isFinite(Date.parse(value)) ? value : null;
@@ -986,15 +1072,19 @@ export async function runTestCloudLane(args) {
   };
 
   try {
-    const functions = await invoke(args.clients.deployFunctionArtifacts, {
+    const functions = await invokeFunctionDeployment(args.clients.deployFunctionArtifacts, {
       ...common,
       ...leaseState,
     });
-    primaryFailure = stageFailure(functions, 'FUNCTION_DEPLOYMENT_FAILED');
+    primaryFailure = functionDeploymentStageFailure(functions);
     if (primaryFailure === null) {
-      functionDeployments = functionDeploymentObservations(functions.value, artifactSet);
-      if (functionDeployments === null) {
-        primaryFailure = result('FAIL', null, 'FUNCTION_DEPLOYMENT_FAILED');
+      const observedFunctions = functionDeploymentObservations(functions.value, artifactSet);
+      if (observedFunctions.invalidTarget !== null) {
+        primaryFailure = functionDeploymentResult(
+          'FAIL', observedFunctions.invalidTarget, 'observation-invalid',
+        );
+      } else {
+        functionDeployments = observedFunctions.observations;
       }
     }
 

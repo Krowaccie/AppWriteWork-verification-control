@@ -25,6 +25,12 @@ const FUNCTION_IDS = new Map(inventory.productFunctions.map((entry) => [
   entry.logicalId, entry.functionId,
 ]));
 FUNCTION_IDS.set('verification-runner-py', 'verification-runner-py');
+const FUNCTION_FAILURE_PHASES = Object.freeze({
+  DEPLOYMENT_CREATE_FAILED: 'create',
+  DEPLOYMENT_TIMEOUT: 'build-timeout',
+  DEPLOYMENT_TERMINAL_FAILURE: 'build-terminal',
+  DEPLOYMENT_ACTIVATION_MISMATCH: 'activate',
+});
 const PRODUCT_IDS = Object.freeze([...FUNCTION_IDS.keys()]
   .filter((id) => id !== 'verification-runner-py')
   .sort((left, right) => left < right ? -1 : left > right ? 1 : 0));
@@ -60,6 +66,21 @@ function operation(status, value, code = null) {
 
 function blocked(code) { return operation('BLOCKED', null, code); }
 function failed(code) { return operation('FAIL', null, code); }
+function functionFailed(code, logicalTarget) {
+  const phase = FUNCTION_FAILURE_PHASES[code];
+  if (!FUNCTION_IDS.has(logicalTarget) || phase === undefined) return failed(code);
+  return Object.freeze({
+    status: 'FAIL',
+    value: null,
+    diagnostics: Object.freeze([Object.freeze({
+      code,
+      safeMessage: MESSAGES[code],
+      retryable: false,
+      logicalTarget,
+      phase,
+    })]),
+  });
+}
 function pass(value) { return operation('PASS', Object.freeze(value)); }
 
 function validArtifact(artifact, kind = null) {
@@ -225,7 +246,7 @@ export function createTestSiteIdentityReader(args) {
   }
 }
 
-async function pollDeployment(getDeployment, deploymentId, clock) {
+async function pollDeployment(getDeployment, deploymentId, logicalTarget, clock) {
   let lastExactStatus = null;
   for (let attempt = 0; attempt < DEPLOYMENT_MAX_POLLS; attempt += 1) {
     const observed = await getDeployment(deploymentId);
@@ -238,19 +259,21 @@ async function pollDeployment(getDeployment, deploymentId, clock) {
     if (attempt < DEPLOYMENT_MAX_POLLS - 1) await clock.sleep(POLL_INTERVAL_MS);
   }
   if (['failed', 'canceled', 'cancelled'].includes(lastExactStatus)) {
-    return failed('DEPLOYMENT_TERMINAL_FAILURE');
+    return functionFailed('DEPLOYMENT_TERMINAL_FAILURE', logicalTarget);
   }
-  return failed('DEPLOYMENT_TIMEOUT');
+  return functionFailed('DEPLOYMENT_TIMEOUT', logicalTarget);
 }
 
-async function pollActiveDeployment(getParent, deploymentId, clock) {
+async function pollActiveDeployment(getParent, deploymentId, logicalTarget, clock) {
   for (let attempt = 0; attempt < ACTIVATION_MAX_POLLS; attempt += 1) {
     const observed = await getParent();
-    if (observed?.status !== 'PASS') return failed('DEPLOYMENT_ACTIVATION_MISMATCH');
+    if (observed?.status !== 'PASS') {
+      return functionFailed('DEPLOYMENT_ACTIVATION_MISMATCH', logicalTarget);
+    }
     if (observed.value?.activeDeploymentId === deploymentId) return pass(observed.value);
     if (attempt < ACTIVATION_MAX_POLLS - 1) await clock.sleep(POLL_INTERVAL_MS);
   }
-  return failed('DEPLOYMENT_ACTIVATION_MISMATCH');
+  return functionFailed('DEPLOYMENT_ACTIVATION_MISMATCH', logicalTarget);
 }
 
 function observation(kind, logicalTarget, deploymentId, transportDigest) {
@@ -388,22 +411,24 @@ export async function deployTestFunctionArtifacts({ context, artifactSet, client
       activate: false,
     });
     if (created?.status !== 'PASS' || typeof created.value?.deploymentId !== 'string') {
-      return failed('DEPLOYMENT_CREATE_FAILED');
+      return functionFailed('DEPLOYMENT_CREATE_FAILED', artifact.logicalTarget);
     }
     const deploymentId = created.value.deploymentId;
     const polled = await pollDeployment(
       (id) => operator.getFunctionDeployment({ functionId, deploymentId: id }),
       deploymentId,
+      artifact.logicalTarget,
       clock,
     );
     if (polled.status !== 'PASS') return polled;
     const activated = await operator.activateFunctionDeployment({ functionId, deploymentId });
     if (activated?.status !== 'PASS' || activated.value?.activeDeploymentId !== deploymentId) {
-      return failed('DEPLOYMENT_ACTIVATION_MISMATCH');
+      return functionFailed('DEPLOYMENT_ACTIVATION_MISMATCH', artifact.logicalTarget);
     }
     const parent = await pollActiveDeployment(
       () => operator.getFunction({ functionId }),
       deploymentId,
+      artifact.logicalTarget,
       clock,
     );
     if (parent.status !== 'PASS') return parent;
