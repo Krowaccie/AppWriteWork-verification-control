@@ -20,6 +20,16 @@ import { QUALIFIED_CLEANUP_PROTOCOL } from '../../../verification/adapters/test-
 const FULL_SHA = /^[0-9a-f]{40}$/;
 const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 const DIGEST = /^sha256:[0-9a-f]{64}$/;
+const FUNCTION_DIAGNOSTIC_KEYS = Object.freeze([
+  'code', 'logicalTarget', 'phase', 'retryable', 'safeMessage',
+]);
+const FUNCTION_TARGETS = new Set([
+  ...configuredInventory.productFunctions.map(({ logicalId }) => logicalId),
+  'verification-runner-py',
+]);
+const FUNCTION_PHASES = new Set([
+  'create', 'build-timeout', 'build-terminal', 'activate', 'observation-invalid',
+]);
 const TEST_CLOUD_ENVIRONMENT_DIGEST = digestBytes(
   new TextEncoder().encode(canonicalJson(configuredInventory)),
 );
@@ -458,6 +468,19 @@ function singleDataDiagnostic(outcome) {
   ) return null;
   const diagnostic = ownDataValue(diagnostics, '0');
   return diagnostic === undefined ? null : diagnostic;
+}
+
+function closedFunctionDeploymentProjection(outcome) {
+  const diagnostic = singleDataDiagnostic(outcome);
+  if (
+    !exactFrozenOrdinaryDataRecord(diagnostic, FUNCTION_DIAGNOSTIC_KEYS)
+    || diagnostic.code !== 'FUNCTION_DEPLOYMENT_FAILED'
+    || diagnostic.safeMessage !== 'A test Function deployment did not qualify.'
+    || diagnostic.retryable !== false
+    || !FUNCTION_TARGETS.has(diagnostic.logicalTarget)
+    || !FUNCTION_PHASES.has(diagnostic.phase)
+  ) return null;
+  return diagnostic;
 }
 
 function digestBytes(value) {
@@ -2682,7 +2705,13 @@ export async function main(argv = process.argv.slice(2), dependencies = {}) {
     const code = validControllerResult(outcome)
       ? outcome.diagnostics[0]?.code
       : 'TEST_CLOUD_SETUP_INCOMPLETE';
-    write(stderr, `BLOCKED ${code ?? 'TEST_CLOUD_SETUP_INCOMPLETE'}\n`);
+    const projection = validControllerResult(outcome)
+      ? closedFunctionDeploymentProjection(outcome)
+      : null;
+    const suffix = projection === null
+      ? ''
+      : ` target=${projection.logicalTarget} phase=${projection.phase}`;
+    write(stderr, `BLOCKED ${code ?? 'TEST_CLOUD_SETUP_INCOMPLETE'}${suffix}\n`);
     return 2;
   }
   write(stdout, 'PASS\n');

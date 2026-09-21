@@ -3496,6 +3496,61 @@ test('hosted CLI forwards one exact request to the production controller', async
   ]);
 });
 
+test('hosted CLI prints only the closed Function deployment projection', async (t) => {
+  const { main } = await import('./test-cloud-controller.mjs');
+  const environment = Object.freeze({ marker: true });
+  const productionDependencies = Object.freeze({ marker: 'dependencies' });
+  const diagnostic = (overrides = {}) => Object.freeze({
+    code: 'FUNCTION_DEPLOYMENT_FAILED',
+    safeMessage: 'A test Function deployment did not qualify.',
+    retryable: false,
+    logicalTarget: 'api-keys-py',
+    phase: 'build-timeout',
+    ...overrides,
+  });
+  const outcome = (entry) => Object.freeze({
+    status: 'FAIL',
+    value: null,
+    diagnostics: Object.freeze([entry]),
+  });
+  for (const [name, entry, expected] of [
+    [
+      'closed projection',
+      diagnostic(),
+      'BLOCKED FUNCTION_DEPLOYMENT_FAILED target=api-keys-py phase=build-timeout\n',
+    ],
+    [
+      'unknown target',
+      diagnostic({ logicalTarget: 'provider-target' }),
+      'BLOCKED FUNCTION_DEPLOYMENT_FAILED\n',
+    ],
+    [
+      'extra provider field',
+      diagnostic({ providerMessage: 'SECRET_PROVIDER_MESSAGE' }),
+      'BLOCKED FUNCTION_DEPLOYMENT_FAILED\n',
+    ],
+  ]) {
+    await t.test(name, async () => {
+      let stderr = '';
+      const exitCode = await main(HOSTED_CLI_ARGS, {
+        environment,
+        inventory,
+        createHostedDependencies() {
+          return productionDependencies;
+        },
+        async runHostedController() {
+          return outcome(entry);
+        },
+        stdout: { write() {} },
+        stderr: { write(value) { stderr += value; } },
+      });
+      assert.equal(exitCode, 2);
+      assert.equal(stderr, expected);
+      assert.equal(stderr.includes('SECRET'), false);
+    });
+  }
+});
+
 test('hosted CLI admits only an absolute data-property controller artifact directory', async () => {
   const { main } = await import('./test-cloud-controller.mjs');
   const artifactDirectory = path.resolve(root, 'controller-artifact-input');
