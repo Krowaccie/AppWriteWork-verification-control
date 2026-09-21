@@ -658,7 +658,10 @@ export async function runTrustedTestCloudCleanup(args) {
       primaryExecutionRetentionMaxSeconds: inventory.control.primaryExecutionRetentionMaxSeconds,
     });
     if (reconstructed.status !== 'PASS') return blocked();
-    const fixtures = reconstructed.value.filter((snapshot) => (
+    const currentRunIntents = reconstructed.value.filter(
+      (snapshot) => snapshot.runId === values.context.runId,
+    );
+    const fixtures = currentRunIntents.filter((snapshot) => (
       snapshot.schemaVersion === 'verification-intent-snapshot.v2'
       && snapshot.lifecycleClass === 'fixture'
     ));
@@ -666,10 +669,13 @@ export async function runTrustedTestCloudCleanup(args) {
     // A runner can fail after it records the retained primary execution but
     // before fixture production starts. With the original live capability
     // still valid, that exact state has no product resource to recover and can
-    // close normally. Any other incomplete set is durable cleanup debt.
+    // close normally. Historical retained observations and absent fixtures
+    // belong to closed generations and must not change the current run's
+    // cleanup classification. Any other incomplete current-run set is durable
+    // cleanup debt.
     if (values.capability === null) return blocked();
     if (fixtures.length === 0) {
-      return exactPreFixtureIntentSet(reconstructed.value, values.context)
+      return exactPreFixtureIntentSet(currentRunIntents, values.context)
         ? closeCurrentLease(values)
         : poison(values);
     }

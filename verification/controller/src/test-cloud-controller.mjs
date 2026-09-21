@@ -504,6 +504,7 @@ function validAtomicCleanupPass(outcome, context, cleanupEntryLease) {
     const candidate = outcome.value.lease;
     const prior = outcome.value.closeProof.predecessorLease;
     const suppliedEvent = outcome.value.closeProof.event;
+    const cleanupMutationCount = prior.leaseVersion - cleanupEntryLease.leaseVersion;
     if (
       !exactFrozenOrdinaryDataRecord(candidate, TASK8_LEASE_KEYS)
       || !exactFrozenOrdinaryDataRecord(prior, TASK8_LEASE_KEYS)
@@ -519,10 +520,9 @@ function validAtomicCleanupPass(outcome, context, cleanupEntryLease) {
       || cleanupEntryLease.state !== 'active'
       || cleanupEntryLease.cleanupDebt !== false
       || !Number.isSafeInteger(cleanupEntryLease.leaseVersion)
-      || prior.leaseVersion - cleanupEntryLease.leaseVersion
-        < QUALIFIED_CLEANUP_PROTOCOL.counts.knownRunnerCalls
-      || prior.leaseVersion - cleanupEntryLease.leaseVersion
-        > QUALIFIED_CLEANUP_PROTOCOL.counts.maximumRunnerCalls
+      || (cleanupMutationCount !== 0
+        && cleanupMutationCount < QUALIFIED_CLEANUP_PROTOCOL.counts.knownRunnerCalls)
+      || cleanupMutationCount > QUALIFIED_CLEANUP_PROTOCOL.counts.maximumRunnerCalls
       || TASK9_CLEANUP_STABLE_LEASE_KEYS.some(
         (key) => prior[key] !== cleanupEntryLease[key],
       )

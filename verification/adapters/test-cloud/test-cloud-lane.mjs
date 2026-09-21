@@ -788,6 +788,7 @@ function exactIdleCleanupSuccessor(candidate, closeProof, cleanupEntryLease) {
     if (!exactFrozenOrdinaryDataRecord(closeProof, CLOSE_PROOF_KEYS)) return false;
     const prior = closeProof.predecessorLease;
     const suppliedEvent = closeProof.event;
+    const cleanupMutationCount = prior.leaseVersion - cleanupEntryLease.leaseVersion;
     if (
       !exactFrozenOrdinaryDataRecord(prior, CLOSED_LEASE_KEYS)
       || !exactFrozenOrdinaryDataRecord(candidate, CLOSED_LEASE_KEYS)
@@ -801,10 +802,9 @@ function exactIdleCleanupSuccessor(candidate, closeProof, cleanupEntryLease) {
       || cleanupEntryLease.state !== 'active'
       || cleanupEntryLease.cleanupDebt !== false
       || !Number.isSafeInteger(cleanupEntryLease.leaseVersion)
-      || prior.leaseVersion - cleanupEntryLease.leaseVersion
-        < QUALIFIED_CLEANUP_PROTOCOL.counts.knownRunnerCalls
-      || prior.leaseVersion - cleanupEntryLease.leaseVersion
-        > QUALIFIED_CLEANUP_PROTOCOL.counts.maximumRunnerCalls
+      || (cleanupMutationCount !== 0
+        && cleanupMutationCount < QUALIFIED_CLEANUP_PROTOCOL.counts.knownRunnerCalls)
+      || cleanupMutationCount > QUALIFIED_CLEANUP_PROTOCOL.counts.maximumRunnerCalls
       || CLEANUP_STABLE_LEASE_KEYS.some(
         (key) => prior[key] !== cleanupEntryLease[key],
       )
