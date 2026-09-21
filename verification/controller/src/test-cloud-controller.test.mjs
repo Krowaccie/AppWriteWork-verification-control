@@ -1059,7 +1059,9 @@ function controllerPreflightHandoff() {
   });
 }
 
-function controllerHarness() {
+function controllerHarness({
+  cleanupMutationCount = QUALIFIED_CLEANUP_PROTOCOL.counts.knownRunnerCalls,
+} = {}) {
   const calls = [];
   const downstreamArgs = { createClients: null };
   const artifactSet = artifactSetOutput();
@@ -1111,8 +1113,7 @@ function controllerHarness() {
     calls.push('cleanup');
     const predecessorLease = Object.freeze({
       ...request.lease,
-      leaseVersion: request.lease.leaseVersion
-        + QUALIFIED_CLEANUP_PROTOCOL.counts.knownRunnerCalls,
+      leaseVersion: request.lease.leaseVersion + cleanupMutationCount,
       ledgerDigest: `sha256:${'f'.repeat(64)}`,
     });
     const event = {
@@ -4651,6 +4652,38 @@ test('controller resolves trusted source data before constructing clients and de
     'cleanup',
     'evidence',
   ]);
+});
+
+test('controller accepts an exact pre-fixture close with zero cleanup-runner mutations', async () => {
+  configureControllerBootstrapHarness(controllerBootstrapPass());
+  const { runTestCloudController } = await loadControllerHarnessModule();
+  const harness = controllerHarness({ cleanupMutationCount: 0 });
+
+  const result = await runTestCloudController({
+    controller: trustedController(),
+    requestedRevision: SHA,
+    dependencies: harness.dependencies,
+  });
+
+  assert.equal(result.status, 'PASS', JSON.stringify({ result, calls: harness.calls }));
+  assert.equal(harness.calls.includes('cleanup'), true);
+  assert.equal(harness.calls.at(-1), 'evidence');
+});
+
+test('controller rejects a partial cleanup-runner mutation count before evidence', async () => {
+  configureControllerBootstrapHarness(controllerBootstrapPass());
+  const { runTestCloudController } = await loadControllerHarnessModule();
+  const harness = controllerHarness({ cleanupMutationCount: 1 });
+
+  const result = await runTestCloudController({
+    controller: trustedController(),
+    requestedRevision: SHA,
+    dependencies: harness.dependencies,
+  });
+
+  assert.equal(result.status, 'BLOCKED');
+  assert.equal(harness.calls.includes('cleanup'), true);
+  assert.equal(harness.calls.includes('evidence'), false);
 });
 
 test('source selection and artifact failures leave client construction at zero', async (t) => {

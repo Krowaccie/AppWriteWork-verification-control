@@ -35,6 +35,7 @@ const {
   createInMemoryControlStore,
   createRunnerRequest,
   createTestCloudPreflightHandoff,
+  reconstructAuthoritativeIntents,
 } = await loadSyntheticControlModule();
 
 const dataModule = (source) =>
@@ -56,7 +57,12 @@ const syntheticControlFacade = dataModule(`
   export const consumeRunnerRequest = control.consumeRunnerRequest;
   export const createRunnerRequest = control.createRunnerRequest;
   export const markCleanupDebt = control.markCleanupDebt;
-  export const reconstructAuthoritativeIntents = control.reconstructAuthoritativeIntents;
+  export async function reconstructAuthoritativeIntents(args) {
+    const override = globalThis[Symbol.for('appwritework.test-cloud.cleanup-reconstruct-override.v1')];
+    return typeof override === 'function'
+      ? override(args)
+      : control.reconstructAuthoritativeIntents(args);
+  }
 `);
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
@@ -745,6 +751,52 @@ test('cleanup driver closes the exact pre-fixture retained-observation state', a
   assert.equal(outcome.value.lease.state, 'idle');
   assert.equal(harness.calls.length, 0);
   assert.equal(harness.store.peekLease().state, 'idle');
+});
+
+test('cleanup driver ignores valid historical generations when classifying pre-fixture state', async () => {
+  const harness = await createDriverHarness({ primaryExecutionCount: 1, resources: [] });
+  const authoritative = await reconstructAuthoritativeIntents({
+    store: harness.args.store,
+    lease: harness.args.lease,
+    primaryExecutionRetentionMaxSeconds:
+      inventory.control.primaryExecutionRetentionMaxSeconds,
+  });
+  assert.equal(authoritative.status, 'PASS');
+  const current = authoritative.value[0];
+  const overrideKey = Symbol.for('appwritework.test-cloud.cleanup-reconstruct-override.v1');
+  globalThis[overrideKey] = async () => Object.freeze({
+    status: 'PASS',
+    value: Object.freeze([
+      Object.freeze({
+        ...current,
+        intentId: 'a'.repeat(64),
+        runId: 'verify-historical-1000-1',
+        environmentDigest: `sha256:${'a'.repeat(64)}`,
+      }),
+      Object.freeze({
+        ...current,
+        schemaVersion: 'verification-intent-snapshot.v2',
+        intentId: 'b'.repeat(64),
+        runId: 'verify-historical-2000-1',
+        environmentDigest: `sha256:${'b'.repeat(64)}`,
+        resourceType: 'primary-project',
+        lifecycleClass: 'fixture',
+        state: 'absent',
+      }),
+      current,
+    ]),
+    diagnostics: Object.freeze([]),
+  });
+
+  try {
+    const outcome = await cleanupDriverModule.runTrustedTestCloudCleanup(harness.args);
+    assert.equal(outcome.status, 'PASS', JSON.stringify(outcome));
+    assert.equal(outcome.value.closed, true);
+    assert.equal(outcome.value.lease.state, 'idle');
+    assert.equal(harness.calls.length, 0);
+  } finally {
+    delete globalThis[overrideKey];
+  }
 });
 
 test('cleanup driver persists debt for a non-exact pre-fixture intent set', async () => {
