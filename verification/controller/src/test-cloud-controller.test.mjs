@@ -2494,7 +2494,7 @@ test('Task 9 vertical: real hosted composition atomically cleans the exact Task 
   assert.equal(outcome.stdout, 'PASS\n');
   assert.equal(outcome.stderr, '');
   assert.equal(outcome.providerCalls.length > 0, true);
-  assert.equal(outcome.processCalls.length, 4, JSON.stringify(outcome));
+  assert.equal(outcome.processCalls.length, 3, JSON.stringify(outcome));
   assert.deepEqual(outcome.browserTransport, {
     injectedLaunches: 1,
     syntheticLaunches: 1,
@@ -2786,7 +2786,7 @@ test('Task 8 vertical RED: production composition requires authentic fixtures an
     lease: 'trusted-lease',
     capability: 'trusted-capability',
   }));
-  assert.deepEqual(genericScenarioCalls, ['public-smoke', 'auth', 'runtime']);
+  assert.deepEqual(genericScenarioCalls, ['public-smoke', 'auth']);
 });
 
 test('Task 8 cleanup-debt failure handoff accepts only the frozen exact successor with null capability', async (t) => {

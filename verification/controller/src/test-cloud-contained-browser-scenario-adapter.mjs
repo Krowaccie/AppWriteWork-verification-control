@@ -147,7 +147,7 @@ async function runAuthScenario(page, identities) {
 }
 
 async function runScenario(page, request) {
-  const response = await page.goto(request.origin, {
+  const response = await page.goto(new URL('/app', request.origin).href, {
     waitUntil: 'load',
     timeout: 5_000,
   });

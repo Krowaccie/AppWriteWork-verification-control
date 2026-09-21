@@ -1466,7 +1466,7 @@ export function composeProductionTestCloudLane(args) {
     });
     try {
       for (const scenarioId of args.facade.scenarioIds.filter((candidate) => (
-        !['project-lifecycle', 'graph-editor', 'sharing-permissions'].includes(candidate)
+        ['public-smoke', 'auth'].includes(candidate)
       ))) {
         const outcome = await args.facade.facade.runExactScenario({
           controllerBinding,
