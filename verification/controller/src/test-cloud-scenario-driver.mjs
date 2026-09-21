@@ -303,10 +303,10 @@ export async function runTrustedTestCloudScenario(args) {
       clock: fields.clock,
     });
   } catch {
-    return blocked();
+    return blocked(stateAfterPlan);
   }
   const observedState = cleanupState(observed?.value);
-  if (observedState === null) return blocked();
+  if (observedState === null) return blocked(stateAfterPlan);
 
   let mapped;
   try {
