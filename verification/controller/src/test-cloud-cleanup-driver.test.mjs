@@ -749,6 +749,9 @@ test('cleanup driver closes the exact pre-fixture retained-observation state', a
   assert.equal(outcome.status, 'PASS', JSON.stringify(outcome));
   assert.equal(outcome.value.closed, true);
   assert.equal(outcome.value.lease.state, 'idle');
+  assert.notEqual(outcome.value.closeProof.predecessorLease, harness.args.lease);
+  assert.deepEqual(outcome.value.closeProof.predecessorLease, harness.args.lease);
+  assert.equal(Object.isFrozen(outcome.value.closeProof.predecessorLease), true);
   assert.equal(harness.calls.length, 0);
   assert.equal(harness.store.peekLease().state, 'idle');
 });
