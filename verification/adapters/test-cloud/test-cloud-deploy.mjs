@@ -9,7 +9,8 @@ import { isAuthenticTestEnvironmentContext } from './test-cloud-environment.mjs'
 
 const MAX_IDENTITY_BYTES = 16_384;
 const POLL_INTERVAL_MS = 1_000;
-const MAX_POLLS = 60;
+const DEPLOYMENT_MAX_POLLS = 300;
+const ACTIVATION_MAX_POLLS = 60;
 const FULL_REVISION = /^[0-9a-f]{40}$/;
 const DIGEST = /^sha256:[0-9a-f]{64}$/;
 const VCS_IDENTITY_KEYS = Object.freeze([
@@ -226,15 +227,15 @@ export function createTestSiteIdentityReader(args) {
 
 async function pollDeployment(getDeployment, deploymentId, clock) {
   let lastExactStatus = null;
-  for (let attempt = 0; attempt < MAX_POLLS; attempt += 1) {
+  for (let attempt = 0; attempt < DEPLOYMENT_MAX_POLLS; attempt += 1) {
     const observed = await getDeployment(deploymentId);
     if (observed?.status !== 'PASS' || observed.value?.deploymentId !== deploymentId) {
-      if (attempt < MAX_POLLS - 1) await clock.sleep(POLL_INTERVAL_MS);
+      if (attempt < DEPLOYMENT_MAX_POLLS - 1) await clock.sleep(POLL_INTERVAL_MS);
       continue;
     }
     lastExactStatus = observed.value.status;
     if (lastExactStatus === 'ready') return pass(observed.value);
-    if (attempt < MAX_POLLS - 1) await clock.sleep(POLL_INTERVAL_MS);
+    if (attempt < DEPLOYMENT_MAX_POLLS - 1) await clock.sleep(POLL_INTERVAL_MS);
   }
   if (['failed', 'canceled', 'cancelled'].includes(lastExactStatus)) {
     return failed('DEPLOYMENT_TERMINAL_FAILURE');
@@ -243,11 +244,11 @@ async function pollDeployment(getDeployment, deploymentId, clock) {
 }
 
 async function pollActiveDeployment(getParent, deploymentId, clock) {
-  for (let attempt = 0; attempt < MAX_POLLS; attempt += 1) {
+  for (let attempt = 0; attempt < ACTIVATION_MAX_POLLS; attempt += 1) {
     const observed = await getParent();
     if (observed?.status !== 'PASS') return failed('DEPLOYMENT_ACTIVATION_MISMATCH');
     if (observed.value?.activeDeploymentId === deploymentId) return pass(observed.value);
-    if (attempt < MAX_POLLS - 1) await clock.sleep(POLL_INTERVAL_MS);
+    if (attempt < ACTIVATION_MAX_POLLS - 1) await clock.sleep(POLL_INTERVAL_MS);
   }
   return failed('DEPLOYMENT_ACTIVATION_MISMATCH');
 }
