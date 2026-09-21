@@ -98,7 +98,11 @@ test('trusted contained browser adapter requires real Playwright calls before PA
     status: 'PASS',
   });
   assert.deepEqual(state.calls[0], ['launch', { headless: true }]);
-  assert.ok(state.calls.some((call) => Array.isArray(call) && call[0] === 'goto'));
+  assert.ok(state.calls.some((call) => (
+    Array.isArray(call)
+    && call[0] === 'goto'
+    && call[1] === 'https://appwritework.appwrite.network/app'
+  )));
   assert.ok(state.calls.some((call) => call[0] === 'locator.count'));
   assert.deepEqual(state.calls.slice(-2), ['context.close', 'browser.close']);
 });
