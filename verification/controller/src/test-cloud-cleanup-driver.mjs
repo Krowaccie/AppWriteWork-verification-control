@@ -106,7 +106,7 @@ const blocked = () => result('BLOCKED', null, 'TRUSTED_CLEANUP_DRIVER_BLOCKED');
 const passed = (lease, predecessorLease, event) => result('PASS', {
   closed: true,
   lease,
-  closeProof: { predecessorLease, event },
+  closeProof: { predecessorLease: { ...predecessorLease }, event },
 });
 const digest = (value) => sha256Bytes(encoder.encode(canonicalJson(value)));
 const iso = (clock) => new Date(clock.nowEpochSeconds() * 1000).toISOString();
