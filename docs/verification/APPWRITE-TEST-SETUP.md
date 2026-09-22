@@ -252,6 +252,35 @@ Provision and read back only these named keys and exact scopes:
 
 No generic `APPWRITE_API_KEY`, production key, project-admin key, session key, or broader scope is allowed. The private runner receives only its separately documented least-privilege runtime variables and permissions. Its execute permission must be private to the trusted controller path.
 
+## Worker verification-probe variables
+
+The existing Appwrite Test `worker-cron` Function must receive these four
+nonsecret variables before the private runner can execute the reserved
+`/__verification/no-cost` probe:
+
+| key | exact Appwrite Test value |
+| --- | --- |
+| `VERIFICATION_ENVIRONMENT_CLASS` | `appwrite-cloud-test` |
+| `VERIFICATION_ENVIRONMENT_DIGEST` | `sha256:babf9ff6a402a03b28705655c7597bcd135eb1be38f97605df8b68d02f76535f` |
+| `VERIFICATION_ENDPOINT_ORIGIN` | `https://fra.cloud.appwrite.io/v1` |
+| `VERIFICATION_PROJECT_ID` | `69137c5d003952a36d4c` |
+
+This is a Test-only configuration correction, not a production template. An
+authorized operator must first read back the target Function and prove the four
+keys are absent or differ, then create or update only those exact nonsecret
+variables on Function `695bc0c2002989714e4e` in Appwrite project
+`69137c5d003952a36d4c`. No existing variable, secret, scope, execute permission,
+schedule, or deployment may be changed by this procedure. The next candidate
+deployment must become active before verification. Read back the four exact
+values afterward, then require both the reserved no-cost probe and the complete
+protected `Verify Test Cloud` lane to pass. A missing value, a different
+project/environment binding, or any production target remains blocking.
+
+The private verification runner accepts the current TablesDB row response only
+as the exact physical metadata envelope plus its closed `data` projection. It
+rejects missing metadata, envelope extensions, nested metadata, and projection
+extensions before using lease, intent, or audit state.
+
 ## Protected setup binding artifact
 
 The canonical provider setup contract and the hosted setup contract are
