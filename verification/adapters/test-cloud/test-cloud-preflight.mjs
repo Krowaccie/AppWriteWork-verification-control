@@ -61,7 +61,7 @@ const EXPECTED_RUNNER_CONFIGURATION = Object.freeze({
   enabled: false,
   logging: false,
   scopes: Object.freeze([
-    'execution.write', 'rows.read', 'rows.write', 'files.read', 'files.write',
+    'executions.write', 'rows.read', 'rows.write', 'files.read', 'files.write',
   ]),
 });
 

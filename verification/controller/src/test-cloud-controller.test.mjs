@@ -695,7 +695,7 @@ function productionFunctionProjections() {
       runtime: record.runtime,
       schedule: '',
       scopes: runner
-        ? ['execution.write', 'rows.read', 'rows.write', 'files.read', 'files.write']
+        ? ['executions.write', 'rows.read', 'rows.write', 'files.read', 'files.write']
         : [],
       timeout: runner ? 30 : 15,
     };
@@ -3909,7 +3909,7 @@ function hostedSetupReadback({ retentionMaxSeconds = 3600 } = {}) {
       runtime: 'python-3.12',
       privateExecute: true,
       publicExecute: false,
-      scopes: ['execution.write', 'rows.read', 'rows.write', 'files.read', 'files.write'],
+      scopes: ['executions.write', 'rows.read', 'rows.write', 'files.read', 'files.write'],
     },
     controller: {
       repository: 'Krowaccie/AppWriteWork-verification-control',
@@ -5083,7 +5083,7 @@ test('Appwrite test setup is fail-closed until separately authorized exact schem
     'verification_intents',
     'verification_audit_events',
     'verification-runner-py',
-    'execution.write',
+    'executions.write',
     'rows.read',
     'rows.write',
     'users.read',

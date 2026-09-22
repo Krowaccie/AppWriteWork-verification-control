@@ -126,6 +126,8 @@ Under separate authority, create or read back exactly:
 - intent projection table `verification_intents`;
 - append-only audit table `verification_audit_events`;
 - private test-only Function `verification-runner-py`, runtime Python 3.12, entrypoint `main.py`;
+- exact private runner scopes: `executions.write`, `rows.read`, `rows.write`,
+  `files.read`, and `files.write`;
 - three preprovisioned identities: owner, editor, and viewer, all with empty session sets;
 - the fixed product Function and Site targets already declared in the inventory.
 
@@ -261,7 +263,7 @@ nonsecret variables before the private runner can execute the reserved
 | key | exact Appwrite Test value |
 | --- | --- |
 | `VERIFICATION_ENVIRONMENT_CLASS` | `appwrite-cloud-test` |
-| `VERIFICATION_ENVIRONMENT_DIGEST` | `sha256:babf9ff6a402a03b28705655c7597bcd135eb1be38f97605df8b68d02f76535f` |
+| `VERIFICATION_ENVIRONMENT_DIGEST` | `sha256:ae3b02dfe325bf19cfd81fb6199bdd145dd389c4191fbfd6af7f0d1f3c1bc76e` |
 | `VERIFICATION_ENDPOINT_ORIGIN` | `https://fra.cloud.appwrite.io/v1` |
 | `VERIFICATION_PROJECT_ID` | `69137c5d003952a36d4c` |
 

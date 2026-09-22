@@ -102,7 +102,7 @@
         "privateExecute": { "const": true },
         "publicExecute": { "const": false },
         "scopes": {
-          "const": ["execution.write", "rows.read", "rows.write", "files.read", "files.write"]
+          "const": ["executions.write", "rows.read", "rows.write", "files.read", "files.write"]
         }
       }
     },
