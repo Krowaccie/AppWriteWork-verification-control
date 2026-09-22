@@ -12,9 +12,9 @@ const SHA_A = '1'.repeat(40);
 const SHA_B = '2'.repeat(40);
 const SHA_C = '3'.repeat(40);
 const ENVIRONMENT_DIGEST =
-  'sha256:babf9ff6a402a03b28705655c7597bcd135eb1be38f97605df8b68d02f76535f';
+  'sha256:ae3b02dfe325bf19cfd81fb6199bdd145dd389c4191fbfd6af7f0d1f3c1bc76e';
 const PROVIDER_CONTRACT_DIGEST =
-  'sha256:47a1d778ca8b8cea333b10574ffbc2db488fd711c12a1c40faf9da5235e27184';
+  'sha256:1fa7cb0d3c960aee40d286b0b35bdb8e1798b891c232db7ec4b429b34477c7a7';
 
 function digest(value) {
   return `sha256:${createHash('sha256').update(value, 'utf8').digest('hex')}`;

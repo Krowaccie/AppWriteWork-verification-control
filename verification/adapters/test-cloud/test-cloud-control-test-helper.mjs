@@ -17,7 +17,7 @@ const { createTestEnvironmentContext } = await import(scriptUrl('test-cloud-envi
 const { qualifyExecutionObservationReadback } = await import(scriptUrl('test-cloud-setup-check.mjs'));
 
 const PREFLIGHT_SOURCE_DIGEST =
-  'sha256:458e2684b5475bc6d99950a42fd3725cda749a27deca30f7affcba5189686710';
+  'sha256:179418c94fe3563c822967c4f27a2d383d0aa445ec4950409ec5c24e5c32411a';
 const AUTHORITY_KEY = Symbol.for('appwritework.a2.5c.control-helper-authorities.v1');
 const authority = {
   active: new WeakSet(),
@@ -295,7 +295,7 @@ function functionProjection(record) {
       timeout: 30,
       enabled: false,
       logging: false,
-      scopes: ['execution.write', 'rows.read', 'rows.write', 'files.read', 'files.write'],
+      scopes: ['executions.write', 'rows.read', 'rows.write', 'files.read', 'files.write'],
     };
   }
   return {

@@ -446,9 +446,9 @@ export async function collectAppwriteTestReadback(args) {
     }
     const policy = dependencies.createPolicyImpl({
       browserArtifactProjection: projected.value,
-      environmentDigest: 'sha256:babf9ff6a402a03b28705655c7597bcd135eb1be38f97605df8b68d02f76535f',
+      environmentDigest: 'sha256:ae3b02dfe325bf19cfd81fb6199bdd145dd389c4191fbfd6af7f0d1f3c1bc76e',
       providerContractDigest:
-        'sha256:47a1d778ca8b8cea333b10574ffbc2db488fd711c12a1c40faf9da5235e27184',
+        'sha256:1fa7cb0d3c960aee40d286b0b35bdb8e1798b891c232db7ec4b429b34477c7a7',
     });
     if (policy?.status !== 'PASS') return blocked('APPWRITE_TEST_BROWSER_POLICY_INVALID');
     const bindings = dependencies.createBindingsImpl({

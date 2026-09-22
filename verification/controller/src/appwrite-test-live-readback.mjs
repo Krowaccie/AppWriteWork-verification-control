@@ -37,9 +37,9 @@ const RESPONSE_FAILURE_CLASSES = Object.freeze([
   'STATUS_INVALID',
 ]);
 const ENVIRONMENT_DIGEST =
-  'sha256:babf9ff6a402a03b28705655c7597bcd135eb1be38f97605df8b68d02f76535f';
+  'sha256:ae3b02dfe325bf19cfd81fb6199bdd145dd389c4191fbfd6af7f0d1f3c1bc76e';
 const PROVIDER_CONTRACT_DIGEST =
-  'sha256:47a1d778ca8b8cea333b10574ffbc2db488fd711c12a1c40faf9da5235e27184';
+  'sha256:1fa7cb0d3c960aee40d286b0b35bdb8e1798b891c232db7ec4b429b34477c7a7';
 const FIXTURE_PREFERENCES = Object.freeze({
   onboardingCompletedAt: '2026-08-01T00:00:00.000Z',
   onboardingHintsEnabled: false,
@@ -60,7 +60,7 @@ const EXPECTED_RUNNER = Object.freeze({
   enabled: false,
   logging: false,
   scopes: Object.freeze([
-    'execution.write', 'rows.read', 'rows.write', 'files.read', 'files.write',
+    'executions.write', 'rows.read', 'rows.write', 'files.read', 'files.write',
   ]),
 });
 const RUNNER_FIELD_CODES = Object.freeze({

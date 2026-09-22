@@ -12,7 +12,7 @@ const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 const SAFE_REPOSITORY_JSON_SEGMENT = /^[A-Za-z0-9._-]+$/;
 const TEST_CLOUD_INVENTORY_PATH = 'verification/fixtures/environments/test-cloud.inventory.v1.json';
 const CLOSED_INVENTORY_DIGEST =
-  'sha256:babf9ff6a402a03b28705655c7597bcd135eb1be38f97605df8b68d02f76535f';
+  'sha256:ae3b02dfe325bf19cfd81fb6199bdd145dd389c4191fbfd6af7f0d1f3c1bc76e';
 
 const INVENTORY_KEYS = Object.freeze([
   'schemaVersion',
@@ -167,7 +167,7 @@ function validInventory(inventory) {
     !exactDataObject(inventory, INVENTORY_KEYS)
     || inventory.schemaVersion !== 'test-cloud-inventory.v1'
     || inventory.environmentClass !== 'appwrite-cloud-test'
-    || inventory.providerContractDigest !== 'sha256:47a1d778ca8b8cea333b10574ffbc2db488fd711c12a1c40faf9da5235e27184'
+    || inventory.providerContractDigest !== 'sha256:1fa7cb0d3c960aee40d286b0b35bdb8e1798b891c232db7ec4b429b34477c7a7'
     || inventory.sourceBranch !== 'main'
     || !exactDataObject(inventory.environment, ['endpoint', 'projectId', 'publicOrigin', 'siteId'])
     || inventory.environment.endpoint !== 'https://fra.cloud.appwrite.io/v1'
@@ -359,7 +359,7 @@ function validRunner(value, inventory) {
     && value.privateExecute === true
     && value.publicExecute === false
     && exactArray(value.scopes, [
-      'execution.write', 'rows.read', 'rows.write', 'files.read', 'files.write',
+      'executions.write', 'rows.read', 'rows.write', 'files.read', 'files.write',
     ]);
 }
 

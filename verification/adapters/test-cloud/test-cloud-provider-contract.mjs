@@ -4467,7 +4467,7 @@ export async function performViewerShare(args) {
 
 const MAX_CONTRACT_BYTES = 262_144;
 const APPROVED_CONTRACT_DIGEST =
-  'sha256:47a1d778ca8b8cea333b10574ffbc2db488fd711c12a1c40faf9da5235e27184';
+  'sha256:1fa7cb0d3c960aee40d286b0b35bdb8e1798b891c232db7ec4b429b34477c7a7';
 const DIGEST_PATTERN = /^sha256:[0-9a-f]{64}$/;
 const ROOT_KEYS = Object.freeze([
   'aggregateContracts',

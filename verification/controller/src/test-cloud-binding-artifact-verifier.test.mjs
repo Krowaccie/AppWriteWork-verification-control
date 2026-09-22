@@ -26,9 +26,9 @@ const ARTIFACT_ID = '123456';
 const NOW_SECONDS = 1_800_000_000;
 const SIGNED_URL = 'https://productionresultssa0.blob.core.windows.net/actions-results/bindings.zip?sig=test';
 const ENVIRONMENT_DIGEST =
-  'sha256:babf9ff6a402a03b28705655c7597bcd135eb1be38f97605df8b68d02f76535f';
+  'sha256:ae3b02dfe325bf19cfd81fb6199bdd145dd389c4191fbfd6af7f0d1f3c1bc76e';
 const PROVIDER_CONTRACT_DIGEST =
-  'sha256:47a1d778ca8b8cea333b10574ffbc2db488fd711c12a1c40faf9da5235e27184';
+  'sha256:1fa7cb0d3c960aee40d286b0b35bdb8e1798b891c232db7ec4b429b34477c7a7';
 const BINDING_NAMES = [
   'TEST_CLOUD_SETUP_READBACK_JSON',
   'TEST_CLOUD_SETUP_READBACK_DIGEST',

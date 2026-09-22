@@ -24,9 +24,9 @@ const ORIGIN_ROW_KEYS = Object.freeze([
 const DIGEST = /^sha256:[0-9a-f]{64}$/u;
 const SAFE_PATH = /^(?!\/)(?!.*(?:^|\/)\.\.(?:\/|$))(?!.*\\)(?!.*[?#])[\x20-\x7e]+$/u;
 const ENVIRONMENT_DIGEST =
-  'sha256:babf9ff6a402a03b28705655c7597bcd135eb1be38f97605df8b68d02f76535f';
+  'sha256:ae3b02dfe325bf19cfd81fb6199bdd145dd389c4191fbfd6af7f0d1f3c1bc76e';
 const PROVIDER_CONTRACT_DIGEST =
-  'sha256:47a1d778ca8b8cea333b10574ffbc2db488fd711c12a1c40faf9da5235e27184';
+  'sha256:1fa7cb0d3c960aee40d286b0b35bdb8e1798b891c232db7ec4b429b34477c7a7';
 
 const STATIC_HEADER_DIGESTS = Object.freeze({
   preflightJsonHeaders:
