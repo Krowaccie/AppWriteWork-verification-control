@@ -362,11 +362,12 @@ For the single historical failure mode in which the immutable audit tail
 contains a valid planned `primary-execution` version 2 while its deterministic
 mutable projection remains the exact planned version 1 predecessor, expired
 safe-empty adoption may authenticate that one-step predecessor. This exception
-applies only before recovery starts, only with no fixture or session intent,
-and only when the ordinary successor validator proves the exact v1-to-v2
-transition. Any other projection drift remains blocked. New runner transitions
-must update the existing deterministic projection row; they may not create or
-upsert a replacement row.
+applies only before recovery starts, across the atomic adoption readback and
+the immediately resulting cleanup-debt recovery, only with no fixture or
+session intent, and only when the ordinary successor validator proves the
+exact v1-to-v2 transition. Any other projection drift remains blocked. New
+runner transitions must update the existing deterministic projection row; they
+may not create or upsert a replacement row.
 
 Later recovery reads must also reconstruct that completed historical
 `lease.cleanup_debt` to `lease.close` pair. The close is valid only when the

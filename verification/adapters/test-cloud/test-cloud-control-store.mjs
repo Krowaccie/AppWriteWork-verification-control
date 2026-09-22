@@ -1156,8 +1156,18 @@ function reconstructRecoverySnapshot(snapshot){
       const ordinaryProjection=semanticIntent?.schemaVersion==='verification-intent-snapshot.v1'
         &&semanticIntent.resourceType==='primary-execution'?semanticIntent:null;
       const expectedOrdinary=ordinaryProjection===null?null:ordinaryLatest.get(item.intentId);
+      const safeEmptyPrimaryPredecessor=!recoveryStarted
+        &&ordinaryLeaseState==='cleanup-debt'&&lease.state==='cleanup-debt'
+        &&sourceIntents.length===0&&resourceMap.size===0&&accountSessionIntent===null
+        &&ordinaryLatest.size===1&&ordinaryProjection!==null&&expectedOrdinary!==undefined
+        &&ordinaryProjection.state==='planned'&&ordinaryProjection.intentVersion===1
+        &&expectedOrdinary.state==='planned'&&expectedOrdinary.intentVersion===2
+        &&validPrimaryExecutionSuccessor(
+          ordinaryProjection,expectedOrdinary,PRIMARY_EXECUTION_RETENTION_MAX_SECONDS,
+        );
       if(ordinaryProjection===null||expectedOrdinary===undefined
-        ||canonicalJson(ordinaryProjection)!==canonicalJson(expectedOrdinary))return null;
+        ||(canonicalJson(ordinaryProjection)!==canonicalJson(expectedOrdinary)
+          &&!safeEmptyPrimaryPredecessor))return null;
     }
     if(projectionMap.size!==currentIntents.length||currentIntents.some((intent)=>{
       const projection=projectionMap.get(intent.intentId);

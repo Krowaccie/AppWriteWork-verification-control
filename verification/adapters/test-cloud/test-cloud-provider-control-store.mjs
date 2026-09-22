@@ -1561,10 +1561,19 @@ function reconstructProviderRecoveryProof(
   } else if (snapshot.lease.state !== 'recovering') {
     throw new TypeError('Recovery lease state is invalid.');
   }
+  const safeEmptyPrimaryPredecessorState = !recoveryStarted
+    && sourceIntents.length === 0
+    && currentIntents.length === 0
+    && !accountSessionObserved
+    && accountSessionIntent === null
+    && (expiredSafeEmptyActive
+      || (ordinaryLeaseState === 'cleanup-debt'
+        && snapshot.lease.state === 'cleanup-debt'
+        && snapshot.lease.cleanupDebt === true));
   for (const { intentId, projection } of snapshot.intentProjections) {
     const expected = latest.get(intentId);
     const recoveryIntent = currentIntents.find((intent) => intent.intentId === intentId);
-    const expiredSafeEmptyPrimaryPredecessor = expiredSafeEmptyActive
+    const safeEmptyPrimaryPredecessor = safeEmptyPrimaryPredecessorState
       && recoveryIntent === undefined
       && expected !== undefined
       && projection.resourceType === 'primary-execution'
@@ -1575,7 +1584,7 @@ function reconstructProviderRecoveryProof(
       && validRecoveryPrimaryExecutionSuccessor(projection, expected);
     if ((recoveryIntent === undefined || !same(recoveryIntent, projection))
       && (expected === undefined || !same(expected, projection))
-      && !expiredSafeEmptyPrimaryPredecessor) {
+      && !safeEmptyPrimaryPredecessor) {
       throw new TypeError('Recovery projection evidence is invalid.');
     }
   }
