@@ -109,7 +109,7 @@ async function exactLocator(locator, needs = []) {
 async function proveLoginSurface(page) {
   const email = page.locator('#appwritework-login-email');
   const password = page.locator('#appwritework-login-password');
-  const submit = page.getByRole('button', { name: 'Login', exact: true });
+  const submit = page.locator('button[type="submit"]');
   return await exactLocator(email, ['enabled', 'editable'])
     && await exactLocator(password, ['enabled', 'editable'])
     && await exactLocator(submit, ['enabled']);
@@ -119,7 +119,7 @@ async function loginOwner(page, identities) {
   if (!await proveLoginSurface(page)) return false;
   const email = page.locator('#appwritework-login-email');
   const password = page.locator('#appwritework-login-password');
-  const submit = page.getByRole('button', { name: 'Login', exact: true });
+  const submit = page.locator('button[type="submit"]');
   await email.fill(identities.ownerEmail);
   await password.fill(identities.ownerPassword);
   await submit.click();
