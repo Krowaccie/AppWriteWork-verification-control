@@ -28,8 +28,8 @@ registerHooks({
 
 function createPlaywrightState({ responseStatus = 200 } = {}) {
   const calls = [];
-  const locator = (name) => ({
-    async count() { calls.push(['locator.count', name]); return 1; },
+  const locator = (name, count = 1) => ({
+    async count() { calls.push(['locator.count', name]); return count; },
     async isVisible() { calls.push(['locator.isVisible', name]); return true; },
     async isEnabled() { calls.push(['locator.isEnabled', name]); return true; },
     async isEditable() { calls.push(['locator.isEditable', name]); return true; },
@@ -44,10 +44,14 @@ function createPlaywrightState({ responseStatus = 200 } = {}) {
         url: () => `${url}/`,
       });
     },
-    locator(selector) { calls.push(['locator', selector]); return locator(`locator:${selector}`); },
+    locator(selector) {
+      calls.push(['locator', selector]);
+      return locator(`locator:${selector}`);
+    },
     getByRole(role, options) {
       calls.push(['getByRole', role, options]);
-      return locator(`role:${role}:${options.name}`);
+      const count = role === 'button' && options.name === 'Login' ? 2 : 1;
+      return locator(`role:${role}:${options.name}`, count);
     },
   };
   const context = {
@@ -104,6 +108,15 @@ test('trusted contained browser adapter requires real Playwright calls before PA
     && call[1] === 'https://appwritework.appwrite.network/app'
   )));
   assert.ok(state.calls.some((call) => call[0] === 'locator.count'));
+  assert.equal(
+    state.calls.some((call) => (
+      Array.isArray(call)
+      && call[0] === 'getByRole'
+      && call[1] === 'button'
+      && call[2]?.name === 'Login'
+    )),
+    false,
+  );
   assert.deepEqual(state.calls.slice(-2), ['context.close', 'browser.close']);
 });
 
@@ -122,7 +135,10 @@ test('trusted contained browser adapter completes the exact owner login logout f
     status: 'PASS',
   });
   assert.equal(
-    state.calls.filter((call) => call[0] === 'locator.click' && call[1] === 'role:button:Login').length,
+    state.calls.filter((call) => (
+      call[0] === 'locator.click'
+      && call[1] === 'locator:button[type="submit"]'
+    )).length,
     2,
   );
   assert.equal(
