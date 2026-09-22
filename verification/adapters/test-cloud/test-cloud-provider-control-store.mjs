@@ -1564,8 +1564,18 @@ function reconstructProviderRecoveryProof(
   for (const { intentId, projection } of snapshot.intentProjections) {
     const expected = latest.get(intentId);
     const recoveryIntent = currentIntents.find((intent) => intent.intentId === intentId);
+    const expiredSafeEmptyPrimaryPredecessor = expiredSafeEmptyActive
+      && recoveryIntent === undefined
+      && expected !== undefined
+      && projection.resourceType === 'primary-execution'
+      && projection.state === 'planned'
+      && projection.intentVersion === 1
+      && expected.state === 'planned'
+      && expected.intentVersion === 2
+      && validRecoveryPrimaryExecutionSuccessor(projection, expected);
     if ((recoveryIntent === undefined || !same(recoveryIntent, projection))
-      && (expected === undefined || !same(expected, projection))) {
+      && (expected === undefined || !same(expected, projection))
+      && !expiredSafeEmptyPrimaryPredecessor) {
       throw new TypeError('Recovery projection evidence is invalid.');
     }
   }
