@@ -1052,11 +1052,7 @@ function makeOperator(handle, context, fetchDependency) {
         expectedStatus: 200,
         bodyText: canonicalJson({ deploymentId: fields.deploymentId }),
         project(value) {
-          const projected = exactFunctionProjection(value, fields.functionId);
-          if (projected.activeDeploymentId !== fields.deploymentId) {
-            throw new TypeError('invalid active deployment');
-          }
-          return projected;
+          return exactFunctionProjection(value, fields.functionId);
         },
       });
     }),
