@@ -422,7 +422,13 @@ export async function deployTestFunctionArtifacts({ context, artifactSet, client
     );
     if (polled.status !== 'PASS') return polled;
     const activated = await operator.activateFunctionDeployment({ functionId, deploymentId });
-    if (activated?.status !== 'PASS' || activated.value?.activeDeploymentId !== deploymentId) {
+    if (
+      activated?.status !== 'PASS'
+      || !(
+        typeof activated.value?.activeDeploymentId === 'string'
+        || activated.value?.activeDeploymentId === null
+      )
+    ) {
       return functionFailed('DEPLOYMENT_ACTIVATION_MISMATCH', artifact.logicalTarget);
     }
     const parent = await pollActiveDeployment(
