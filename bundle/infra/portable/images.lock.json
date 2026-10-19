@@ -1,0 +1,82 @@
+{
+  "appwrite": {
+    "tag": "appwrite/appwrite:2.4.0",
+    "reference": "appwrite/appwrite@sha256:d08f5974e63467b525074a8b7b22752fd8c55b8536d8a97ff937603346423af3",
+    "platform": "linux/amd64"
+  },
+  "postgresql": {
+    "tag": "appwrite/postgres:0.1.0",
+    "reference": "appwrite/postgres@sha256:77156232a16d80f5830d914edb44f52a0853058939f2365cc3301d08db9d05e9",
+    "platform": "linux/amd64"
+  },
+  "redis": {
+    "tag": "redis:7.4.7-alpine",
+    "reference": "redis@sha256:02f2cc4882f8bf87c79a220ac958f58c700bdec0dfb9b9ea61b62fb0e8f1bfcf",
+    "platform": "linux/amd64"
+  },
+  "clickhouse": {
+    "tag": "clickhouse/clickhouse-server:26.4.3-alpine",
+    "reference": "clickhouse/clickhouse-server@sha256:128168041226ef603588377b42e07ab4afd7d8f87f59ea46558a69655ff5ad4b",
+    "platform": "linux/amd64"
+  },
+  "executor": {
+    "tag": "openruntimes/executor:0.29.0",
+    "reference": "openruntimes/executor@sha256:d9b4aea3d2de0179b41617c5d6ba6d0b35b13da6fd68641c287ce346961dafe8",
+    "platform": "linux/amd64"
+  },
+  "orchestrator": {
+    "tag": "ghcr.io/open-runtimes/orchestrator/orchestrator:2.2.2",
+    "reference": "ghcr.io/open-runtimes/orchestrator/orchestrator@sha256:b6bd08b2c01b3e10dc4181ffc80f22663b919a19dda6637efb5382f7a08971fb",
+    "platform": "linux/amd64"
+  },
+  "jobSidecar": {
+    "tag": "ghcr.io/open-runtimes/orchestrator/job-sidecar:2.2.2",
+    "reference": "ghcr.io/open-runtimes/orchestrator/job-sidecar@sha256:ac9170670e4db74c2828710a409911cc0b15c4a26e6611eb62c84687abef5150",
+    "platform": "linux/amd64"
+  },
+  "geo": {
+    "tag": "appwrite/geo:0.3.2",
+    "reference": "appwrite/geo@sha256:a6323c5e56e19685fb4550f7f5272b021f56d383fe55075a93f8d6242a02dbcb",
+    "platform": "linux/amd64"
+  },
+  "python": {
+    "tag": "openruntimes/python:v5-3.12",
+    "reference": "openruntimes/python@sha256:da963017c5fd16188733359eadb01ad844f255f056dbf975008ed3220c2aa437",
+    "platform": "linux/amd64"
+  },
+  "app-postgres": {
+    "tag": "postgres:18-bookworm",
+    "reference": "postgres@sha256:afc7e2d441324c0388fa80c3d24f733b4194a4eb7f47dd8ee2b08eb1a24a647c",
+    "platform": "linux/amd64"
+  },
+  "temporal-postgres": {
+    "tag": "postgres:16-bookworm",
+    "reference": "postgres@sha256:ca0bd484cb98bf4b24eb1010e73fb3fcbd6714d240fbc1a10eea5b7dbecb641d",
+    "platform": "linux/amd64"
+  },
+  "temporal": {
+    "tag": "temporalio/server:1.31.0",
+    "reference": "temporalio/server@sha256:b021b3b58c3f169634cdbb0451fcc0e69e8190b40454323362c7c52bbd4ff7b9",
+    "platform": "linux/amd64"
+  },
+  "admin": {
+    "tag": "temporalio/admin-tools:1.31.0",
+    "reference": "temporalio/admin-tools@sha256:3e68adcd54195a7c1222e99f2dbc32a4fdbf44ad69e3bb48e21e85c4bf417c2e",
+    "platform": "linux/amd64"
+  },
+  "worker-base": {
+    "tag": "python:3.12.14-slim-bookworm",
+    "reference": "python@sha256:782412e85d0f0984994c290652577d4018aff08145c85b262bb63dc0c7522254",
+    "platform": "linux/amd64"
+  },
+  "node": {
+    "tag": "node:24.11.1-bookworm",
+    "reference": "node@sha256:9a2ed90cd91b1f3412affe080b62e69b057ba8661d9844e143a6bbd76a23260f",
+    "platform": "linux/amd64"
+  },
+  "caddy": {
+    "tag": "caddy:2.10.2-alpine",
+    "reference": "caddy@sha256:4c6e91c6ed0e2fa03efd5b44747b625fec79bc9cd06ac5235a779726618e530d",
+    "platform": "linux/amd64"
+  }
+}

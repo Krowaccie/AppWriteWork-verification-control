@@ -1,0 +1,1766 @@
+{
+  "schemaVersion": 2,
+  "kind": "portable-verification-registry",
+  "groups": [
+    "web",
+    "python",
+    "mcp",
+    "quick",
+    "portable",
+    "windows"
+  ],
+  "globalPaths": [
+    "AGENTS.md",
+    "**/AGENTS.md",
+    "SECURITY.md",
+    "**/SECURITY.md",
+    ".github/**",
+    ".agents/**",
+    ".codex/**",
+    ".claude/**",
+    "package.json",
+    "package-lock.json",
+    ".npmrc",
+    ".nvmrc",
+    ".env*",
+    "appwrite.config.json*",
+    "environments/**",
+    "platform/**"
+  ],
+  "prosePatterns": [
+    "**/*.md",
+    "*.md"
+  ],
+  "ignoredPaths": [
+    ".gitignore",
+    ".gitattributes",
+    ".cursorignore"
+  ],
+  "suites": [
+    {
+      "id": "web-eslint",
+      "group": "web",
+      "owner": "web-and-catalog",
+      "paths": [
+        "apps/web/**",
+        "packages/catalog/**",
+        "tools/build/**",
+        "packages/contracts/**"
+      ],
+      "consumers": [],
+      "command": {
+        "executable": "{node}",
+        "args": [
+          "node_modules/eslint/bin/eslint.js",
+          "src/"
+        ],
+        "cwd": "apps/web"
+      },
+      "capabilities": [
+        "node-24"
+      ],
+      "collection": {
+        "format": "exit-code",
+        "minimumTests": 0,
+        "required": true
+      },
+      "expectedSkips": [],
+      "timeoutMs": 900000,
+      "ci": true,
+      "profiles": [
+        "changes",
+        "repository"
+      ],
+      "reason": "Maintained web-eslint assertions"
+    },
+    {
+      "id": "web-typecheck",
+      "group": "web",
+      "owner": "web-and-catalog",
+      "paths": [
+        "apps/web/**",
+        "packages/catalog/**",
+        "tools/build/**",
+        "packages/contracts/**"
+      ],
+      "consumers": [],
+      "command": {
+        "executable": "{node}",
+        "args": [
+          "apps/web/node_modules/typescript/bin/tsc",
+          "-b",
+          "apps/web/tsconfig.json"
+        ]
+      },
+      "capabilities": [
+        "node-24"
+      ],
+      "collection": {
+        "format": "exit-code",
+        "minimumTests": 0,
+        "required": true
+      },
+      "expectedSkips": [],
+      "timeoutMs": 900000,
+      "ci": true,
+      "profiles": [
+        "changes",
+        "repository"
+      ],
+      "reason": "Maintained web-typecheck assertions"
+    },
+    {
+      "id": "web-build",
+      "group": "web",
+      "owner": "web-and-catalog",
+      "paths": [
+        "apps/web/**",
+        "packages/catalog/**",
+        "tools/build/**",
+        "packages/contracts/**"
+      ],
+      "consumers": [],
+      "command": {
+        "executable": "{node}",
+        "args": [
+          "verification/core/build-check.mjs"
+        ]
+      },
+      "capabilities": [
+        "node-24"
+      ],
+      "collection": {
+        "format": "exit-code",
+        "minimumTests": 0,
+        "required": true
+      },
+      "expectedSkips": [],
+      "timeoutMs": 900000,
+      "ci": true,
+      "profiles": [
+        "changes",
+        "repository"
+      ],
+      "reason": "Maintained web-build assertions"
+    },
+    {
+      "id": "web-unit",
+      "group": "web",
+      "owner": "web-and-catalog",
+      "paths": [
+        "apps/web/**",
+        "packages/catalog/**",
+        "tools/build/**",
+        "packages/contracts/**",
+        "docs/features/feature-manifest.json"
+      ],
+      "consumers": [],
+      "command": {
+        "executable": "{node}",
+        "args": [
+          "node_modules/vitest/vitest.mjs",
+          "run",
+          "--reporter=junit",
+          "--outputFile={output}/junit.xml"
+        ],
+        "cwd": "apps/web"
+      },
+      "capabilities": [
+        "node-24",
+        "python-3.12"
+      ],
+      "collection": {
+        "format": "pytest-junit",
+        "minimumTests": 1,
+        "required": true,
+        "reportPath": "{output}/junit.xml"
+      },
+      "expectedSkips": [],
+      "timeoutMs": 900000,
+      "ci": true,
+      "profiles": [
+        "changes",
+        "repository"
+      ],
+      "reason": "Maintained web-unit assertions"
+    },
+    {
+      "id": "catalog-check",
+      "group": "web",
+      "owner": "web-and-catalog",
+      "paths": [
+        "packages/catalog/**",
+        "tools/build/bundle-catalog*"
+      ],
+      "consumers": [
+        "web-unit",
+        "web-build",
+        "python-product-contracts",
+        "native-sql"
+      ],
+      "command": {
+        "executable": "{node}",
+        "args": [
+          "tools/build/bundle-catalog.mjs",
+          "--check"
+        ]
+      },
+      "capabilities": [
+        "node-24"
+      ],
+      "collection": {
+        "format": "exit-code",
+        "minimumTests": 0,
+        "required": true
+      },
+      "expectedSkips": [],
+      "timeoutMs": 900000,
+      "ci": true,
+      "profiles": [
+        "changes",
+        "repository"
+      ],
+      "reason": "Maintained catalog-check assertions"
+    },
+    {
+      "id": "python-product-contracts",
+      "group": "python",
+      "owner": "python",
+      "paths": [
+        "dev/tests/**",
+        "services/appwrite-functions/**",
+        "packages/backend-core-py/**"
+      ],
+      "consumers": [],
+      "command": {
+        "executable": "{python}",
+        "args": [
+          "-m",
+          "pytest",
+          "-p",
+          "verification.portable.pytest_reporter",
+          "dev/tests",
+          "--ignore=dev/tests/scenarios",
+          "-q",
+          "--tb=short",
+          "-p",
+          "no:cacheprovider",
+          "--junitxml={output}/junit.xml"
+        ],
+        "env": {
+          "PYTHONPATH": "{root}{pathsep}{root}/packages/backend-core-py/src{pathsep}{root}/services/execution-worker-py",
+          "PIP_NO_INDEX": "1",
+          "PIP_DISABLE_PIP_VERSION_CHECK": "1"
+        }
+      },
+      "capabilities": [
+        "python-3.12"
+      ],
+      "collection": {
+        "format": "pytest-junit",
+        "minimumTests": 1,
+        "required": true,
+        "reportPath": "{output}/junit.xml"
+      },
+      "expectedSkips": [],
+      "timeoutMs": 900000,
+      "ci": true,
+      "profiles": [
+        "changes",
+        "repository"
+      ],
+      "reason": "Maintained python-product-contracts assertions"
+    },
+    {
+      "id": "backend-core-unit",
+      "group": "python",
+      "owner": "backend-core",
+      "paths": [
+        "packages/backend-core-py/**",
+        "packages/contracts/**"
+      ],
+      "consumers": [],
+      "command": {
+        "executable": "{python}",
+        "args": [
+          "-m",
+          "pytest",
+          "-p",
+          "verification.portable.pytest_reporter",
+          "packages/backend-core-py/tests",
+          "--ignore=packages/backend-core-py/tests/sql",
+          "-q",
+          "--tb=short",
+          "-p",
+          "no:cacheprovider",
+          "--junitxml={output}/junit.xml"
+        ],
+        "env": {
+          "PYTHONPATH": "{root}{pathsep}{root}/packages/backend-core-py/src{pathsep}{root}/services/execution-worker-py",
+          "PIP_NO_INDEX": "1",
+          "PIP_DISABLE_PIP_VERSION_CHECK": "1"
+        }
+      },
+      "capabilities": [
+        "python-3.12"
+      ],
+      "collection": {
+        "format": "pytest-junit",
+        "minimumTests": 1,
+        "required": true,
+        "reportPath": "{output}/junit.xml"
+      },
+      "expectedSkips": [],
+      "timeoutMs": 900000,
+      "ci": true,
+      "profiles": [
+        "changes",
+        "repository"
+      ],
+      "reason": "Maintained backend-core-unit assertions"
+    },
+    {
+      "id": "sql-offline",
+      "group": "python",
+      "owner": "backend-core",
+      "paths": [
+        "packages/backend-core-py/**"
+      ],
+      "consumers": [],
+      "command": {
+        "executable": "{python}",
+        "args": [
+          "-m",
+          "pytest",
+          "-p",
+          "verification.portable.pytest_reporter",
+          "packages/backend-core-py/tests/sql/test_codec_boundary.py",
+          "packages/backend-core-py/tests/sql/test_store_unit.py",
+          "packages/backend-core-py/tests/sql/test_m1_pool_unit.py",
+          "packages/backend-core-py/tests/sql/test_m1_runtime.py",
+          "packages/backend-core-py/tests/sql/test_m1_driver_packaging.py",
+          "packages/backend-core-py/tests/sql/test_m2_admission_types.py",
+          "-q",
+          "--tb=short",
+          "-p",
+          "no:cacheprovider",
+          "--junitxml={output}/junit.xml"
+        ],
+        "env": {
+          "PYTHONPATH": "{root}{pathsep}{root}/packages/backend-core-py/src{pathsep}{root}/services/execution-worker-py",
+          "PIP_NO_INDEX": "1",
+          "PIP_DISABLE_PIP_VERSION_CHECK": "1"
+        }
+      },
+      "capabilities": [
+        "python-3.12"
+      ],
+      "collection": {
+        "format": "pytest-junit",
+        "minimumTests": 1,
+        "required": true,
+        "reportPath": "{output}/junit.xml"
+      },
+      "expectedSkips": [],
+      "timeoutMs": 900000,
+      "ci": true,
+      "profiles": [
+        "changes",
+        "repository"
+      ],
+      "reason": "Maintained sql-offline assertions"
+    },
+    {
+      "id": "python-functions",
+      "group": "python",
+      "owner": "appwrite-function-adapters",
+      "paths": [
+        "services/appwrite-functions/**",
+        "packages/backend-core-py/**"
+      ],
+      "consumers": [],
+      "command": {
+        "executable": "{python}",
+        "args": [
+          "-m",
+          "pytest",
+          "-p",
+          "verification.portable.pytest_reporter",
+          "services/appwrite-functions/worker-cron-py/tests",
+          "services/appwrite-functions/verification-email-py/tests",
+          "services/appwrite-functions/connections-py/tests",
+          "services/appwrite-functions/api-keys-py/tests",
+          "services/appwrite-functions/telemetry-py/tests",
+          "services/appwrite-functions/api-router-py/tests",
+          "services/appwrite-functions/sec-cache-builder-py/tests",
+          "services/appwrite-functions/legacy-project-writer-py/tests",
+          "services/appwrite-functions/salmora-access-py/tests",
+          "services/appwrite-functions/salmora-authoring-py/tests",
+          "services/appwrite-functions/salmora-content-py/tests",
+          "-q",
+          "--tb=short",
+          "-p",
+          "no:cacheprovider",
+          "--junitxml={output}/junit.xml"
+        ],
+        "env": {
+          "PYTHONPATH": "{root}{pathsep}{root}/packages/backend-core-py/src{pathsep}{root}/services/execution-worker-py",
+          "PIP_NO_INDEX": "1",
+          "PIP_DISABLE_PIP_VERSION_CHECK": "1"
+        }
+      },
+      "capabilities": [
+        "python-3.12"
+      ],
+      "collection": {
+        "format": "pytest-junit",
+        "minimumTests": 1,
+        "required": true,
+        "reportPath": "{output}/junit.xml"
+      },
+      "expectedSkips": [],
+      "timeoutMs": 900000,
+      "ci": true,
+      "profiles": [
+        "changes",
+        "repository"
+      ],
+      "reason": "Maintained python-functions assertions"
+    },
+    {
+      "id": "native-function-build",
+      "group": "python",
+      "owner": "python",
+      "paths": [
+        "tools/build/**",
+        "services/appwrite-functions/**",
+        "packages/backend-core-py/**"
+      ],
+      "consumers": [],
+      "command": {
+        "executable": "{python}",
+        "args": [
+          "-m",
+          "pytest",
+          "-p",
+          "verification.portable.pytest_reporter",
+          "tools/build/test_native_function.py",
+          "tools/build/test_salmora_native_import.py",
+          "-q",
+          "--tb=short",
+          "-p",
+          "no:cacheprovider",
+          "--junitxml={output}/junit.xml"
+        ],
+        "env": {
+          "PYTHONPATH": "{root}{pathsep}{root}/packages/backend-core-py/src{pathsep}{root}/services/execution-worker-py",
+          "PIP_NO_INDEX": "1",
+          "PIP_DISABLE_PIP_VERSION_CHECK": "1"
+        }
+      },
+      "capabilities": [
+        "python-3.12"
+      ],
+      "collection": {
+        "format": "pytest-junit",
+        "minimumTests": 1,
+        "required": true,
+        "reportPath": "{output}/junit.xml"
+      },
+      "expectedSkips": [],
+      "timeoutMs": 900000,
+      "ci": true,
+      "profiles": [
+        "changes",
+        "repository"
+      ],
+      "reason": "Maintained native-function-build assertions"
+    },
+    {
+      "id": "worker-unit",
+      "group": "portable",
+      "owner": "execution-worker",
+      "paths": [
+        "services/execution-worker-py/**",
+        "packages/backend-core-py/src/appwritework_backend/execution/**",
+        "packages/backend-core-py/tests/sql/test_f11*"
+      ],
+      "consumers": [
+        "temporal-runtime"
+      ],
+      "command": {
+        "executable": "{python}",
+        "args": [
+          "tools/ci/portable_ci.py",
+          "run",
+          "--output",
+          "{output}",
+          "--suite",
+          "worker-unit"
+        ]
+      },
+      "capabilities": [
+        "python-3.12",
+        "docker-linux",
+        "temporal-sdk"
+      ],
+      "collection": {
+        "format": "operator-json",
+        "minimumTests": 1,
+        "required": true
+      },
+      "expectedSkips": [],
+      "timeoutMs": 900000,
+      "ci": true,
+      "profiles": [
+        "changes",
+        "repository"
+      ],
+      "reason": "Maintained worker-unit assertions",
+      "nativeTargets": [
+        "services/execution-worker-py/tests"
+      ],
+      "nativeExclude": []
+    },
+    {
+      "id": "local-device-api-unit",
+      "group": "python",
+      "owner": "python",
+      "paths": [
+        "services/local-device-api/**",
+        "packages/backend-core-py/src/appwritework_backend/devices/**"
+      ],
+      "consumers": [],
+      "command": {
+        "executable": "{python}",
+        "args": [
+          "-m",
+          "pytest",
+          "-p",
+          "verification.portable.pytest_reporter",
+          "services/local-device-api/tests",
+          "-q",
+          "--tb=short",
+          "-p",
+          "no:cacheprovider",
+          "--junitxml={output}/junit.xml"
+        ],
+        "env": {
+          "PYTHONPATH": "{root}{pathsep}{root}/packages/backend-core-py/src{pathsep}{root}/services/execution-worker-py",
+          "PIP_NO_INDEX": "1",
+          "PIP_DISABLE_PIP_VERSION_CHECK": "1"
+        }
+      },
+      "capabilities": [
+        "python-3.12"
+      ],
+      "collection": {
+        "format": "pytest-junit",
+        "minimumTests": 1,
+        "required": true,
+        "reportPath": "{output}/junit.xml"
+      },
+      "expectedSkips": [],
+      "timeoutMs": 900000,
+      "ci": true,
+      "profiles": [
+        "changes",
+        "repository"
+      ],
+      "reason": "Maintained local-device-api-unit assertions"
+    },
+    {
+      "id": "mcp-unit",
+      "group": "mcp",
+      "owner": "mcp",
+      "paths": [
+        "apps/mcp-bridge/**",
+        "packages/local-runtime-protocol/**",
+        "packages/contracts/**"
+      ],
+      "consumers": [
+        "native-sdk"
+      ],
+      "command": {
+        "executable": "{node}",
+        "args": [
+          "--test",
+          "apps/mcp-bridge/test/*.test.js"
+        ]
+      },
+      "capabilities": [
+        "node-24"
+      ],
+      "collection": {
+        "format": "node-tap",
+        "minimumTests": 1,
+        "required": true
+      },
+      "expectedSkips": [],
+      "timeoutMs": 900000,
+      "ci": true,
+      "profiles": [
+        "changes",
+        "repository"
+      ],
+      "reason": "Maintained mcp-unit assertions"
+    },
+    {
+      "id": "local-runtime-protocol",
+      "group": "mcp",
+      "owner": "local-runtime",
+      "paths": [
+        "packages/local-runtime-protocol/**",
+        "apps/local-runtime/**",
+        "apps/mcp-bridge/**"
+      ],
+      "consumers": [
+        "mcp-unit",
+        "local-runtime-unit",
+        "windows-native"
+      ],
+      "command": {
+        "executable": "{node}",
+        "args": [
+          "--test",
+          "packages/local-runtime-protocol/test/*.test.mjs"
+        ]
+      },
+      "capabilities": [
+        "node-24"
+      ],
+      "collection": {
+        "format": "node-tap",
+        "minimumTests": 1,
+        "required": true
+      },
+      "expectedSkips": [],
+      "timeoutMs": 900000,
+      "ci": true,
+      "profiles": [
+        "changes",
+        "repository"
+      ],
+      "reason": "Maintained local-runtime-protocol assertions"
+    },
+    {
+      "id": "local-runtime-unit",
+      "group": "mcp",
+      "owner": "local-runtime",
+      "paths": [
+        "apps/local-runtime/**",
+        "packages/local-runtime-protocol/**"
+      ],
+      "consumers": [],
+      "command": {
+        "executable": "{node}",
+        "args": [
+          "--test",
+          "apps/local-runtime/src/**/*.test.mjs"
+        ]
+      },
+      "capabilities": [
+        "node-24"
+      ],
+      "collection": {
+        "format": "node-tap",
+        "minimumTests": 1,
+        "required": true
+      },
+      "expectedSkips": [
+        {
+          "reason": "Native Windows assertions run in windows-native and are not native proof here",
+          "pattern": "explicit native Windows supervisor"
+        }
+      ],
+      "timeoutMs": 900000,
+      "ci": true,
+      "profiles": [
+        "changes",
+        "repository"
+      ],
+      "reason": "Maintained local-runtime-unit assertions"
+    },
+    {
+      "id": "quick-harness",
+      "group": "quick",
+      "owner": "quick",
+      "paths": [
+        "tests/e2e/quick/**",
+        "services/appwrite-functions/**",
+        "packages/backend-core-py/**"
+      ],
+      "consumers": [],
+      "command": {
+        "executable": "{node}",
+        "args": [
+          "--test",
+          "tests/e2e/quick/*.test.mjs"
+        ]
+      },
+      "capabilities": [
+        "node-24",
+        "python-3.12",
+        "appwrite-sdk"
+      ],
+      "collection": {
+        "format": "node-tap",
+        "minimumTests": 1,
+        "required": true
+      },
+      "expectedSkips": [
+        {
+          "reason": "The Windows ACK journal ACL assertion requires Windows and executes as a required zero-skip case in the selected windows-native stage; its Linux skip is not Windows security evidence",
+          "pattern": "^Windows ACK journal has protected ACLs limited to the current user and SYSTEM$"
+        }
+      ],
+      "timeoutMs": 900000,
+      "ci": true,
+      "profiles": [
+        "changes",
+        "repository"
+      ],
+      "reason": "Maintained quick-harness assertions"
+    },
+    {
+      "id": "portable-operator-node",
+      "group": "quick",
+      "owner": "portable-infrastructure",
+      "paths": [
+        "infra/portable/**",
+        "tools/ci/**",
+        "dev/labs/portable-verification/**"
+      ],
+      "consumers": [],
+      "command": {
+        "executable": "{node}",
+        "args": [
+          "--test",
+          "infra/portable/deploy.test.mjs",
+          "infra/portable/lifecycle.test.mjs",
+          "infra/portable/mcp-profile.test.mjs",
+          "infra/portable/portable.test.mjs",
+          "infra/portable/provider-snapshot.test.mjs",
+          "infra/portable/public-edge.test.mjs",
+          "infra/portable/upgrade.test.mjs",
+          "infra/portable/online/*.test.mjs",
+          "infra/portable/host/*.test.mjs"
+        ]
+      },
+      "capabilities": [
+        "node-24"
+      ],
+      "collection": {
+        "format": "node-tap",
+        "minimumTests": 1,
+        "required": true
+      },
+      "expectedSkips": [
+        {
+          "reason": "Linux filesystem secret permissions are checked on the Linux CI host; Windows diagnostic execution cannot qualify them",
+          "pattern": "^Linux secret file rejects readable-by-others, directories, symlinks and oversized input$"
+        }
+      ],
+      "timeoutMs": 900000,
+      "ci": true,
+      "profiles": [
+        "changes",
+        "repository"
+      ],
+      "reason": "Maintained portable-operator-node assertions"
+    },
+    {
+      "id": "repository-boundaries",
+      "group": "quick",
+      "owner": "quick",
+      "paths": [
+        "tools/repository/**",
+        "packages/**",
+        "services/**",
+        "apps/**"
+      ],
+      "consumers": [],
+      "command": {
+        "executable": "{node}",
+        "args": [
+          "--test",
+          "tools/repository/*.test.mjs"
+        ]
+      },
+      "capabilities": [
+        "node-24"
+      ],
+      "collection": {
+        "format": "node-tap",
+        "minimumTests": 1,
+        "required": true
+      },
+      "expectedSkips": [],
+      "timeoutMs": 900000,
+      "ci": true,
+      "profiles": [
+        "changes",
+        "repository"
+      ],
+      "reason": "Maintained repository-boundaries assertions"
+    },
+    {
+      "id": "build-tools-node",
+      "group": "quick",
+      "owner": "quick",
+      "paths": [
+        "tools/build/**",
+        "packages/catalog/**",
+        "scripts/write-build-identity*",
+        "scripts/write-hosted-site-build-identity*"
+      ],
+      "consumers": [],
+      "command": {
+        "executable": "{node}",
+        "args": [
+          "--test",
+          "tools/build/*.test.mjs",
+          "scripts/write-build-identity.test.mjs",
+          "scripts/write-hosted-site-build-identity.test.mjs"
+        ]
+      },
+      "capabilities": [
+        "node-24"
+      ],
+      "collection": {
+        "format": "node-tap",
+        "minimumTests": 1,
+        "required": true
+      },
+      "expectedSkips": [
+        {
+          "reason": "Windows does not expose portable executable mode semantics; the exact executable-mode assertion must execute in the Linux CI and Linux Docker qualification, and its Windows skip is not POSIX permission evidence",
+          "pattern": "^executable mode is bound when the platform exposes mode bits$"
+        }
+      ],
+      "timeoutMs": 900000,
+      "ci": true,
+      "profiles": [
+        "changes",
+        "repository"
+      ],
+      "reason": "Maintained build-tools-node assertions"
+    },
+    {
+      "id": "verifier-portable",
+      "group": "quick",
+      "owner": "verification",
+      "paths": [
+        "verification/**",
+        "scripts/verify.mjs",
+        "scripts/check-change-impact.mjs",
+        "tools/ci/**",
+        "docs/engineering/**",
+        "scripts/build-verification-artifacts.mjs",
+        "scripts/check-change-impact.test.mjs",
+        "scripts/test-cloud-recover.mjs",
+        "docs/verification/**",
+        "tests/e2e/verification/**",
+        "dev/labs/clean-install-m10/cleanup-trial.mjs",
+        "dev/labs/clean-install-m10/cleanup-trial.test.mjs",
+        "dev/labs/clean-install-m10/cleanup-builds.mjs",
+        "dev/labs/clean-install-m10/cleanup.test.mjs"
+      ],
+      "consumers": [],
+      "command": {
+        "executable": "{node}",
+        "args": [
+          "verification/core/run-tests.mjs"
+        ]
+      },
+      "capabilities": [
+        "node-24",
+        "python-3.12",
+        "pytest-9.0.2"
+      ],
+      "collection": {
+        "format": "node-tap",
+        "minimumTests": 1,
+        "required": true
+      },
+      "expectedSkips": [],
+      "timeoutMs": 300000,
+      "ci": true,
+      "profiles": [
+        "changes",
+        "repository"
+      ],
+      "reason": "Portable verifier and retained generic safety assertions, including actively reused M10 cleanup helpers"
+    },
+    {
+      "id": "mcp-packcheck",
+      "group": "mcp",
+      "owner": "mcp",
+      "paths": [
+        "apps/mcp-bridge/**",
+        "packages/local-runtime-protocol/**"
+      ],
+      "consumers": [],
+      "command": {
+        "executable": "{node}",
+        "args": [
+          "apps/mcp-bridge/scripts/packcheck.js"
+        ]
+      },
+      "capabilities": [
+        "node-24"
+      ],
+      "collection": {
+        "format": "exit-code",
+        "minimumTests": 0,
+        "required": true
+      },
+      "expectedSkips": [],
+      "timeoutMs": 900000,
+      "ci": true,
+      "profiles": [
+        "changes",
+        "repository"
+      ],
+      "reason": "Maintained mcp-packcheck assertions"
+    },
+    {
+      "id": "portable-operator-python",
+      "group": "python",
+      "owner": "portable-infrastructure",
+      "paths": [
+        "infra/portable/**",
+        "tools/ci/**"
+      ],
+      "consumers": [],
+      "command": {
+        "executable": "{python}",
+        "args": [
+          "-m",
+          "pytest",
+          "-p",
+          "verification.portable.pytest_reporter",
+          "infra/portable",
+          "tools/ci",
+          "-o",
+          "python_files=test_*.py",
+          "-q",
+          "--tb=short",
+          "-p",
+          "no:cacheprovider",
+          "--junitxml={output}/junit.xml"
+        ],
+        "env": {
+          "PYTHONPATH": "{root}{pathsep}{root}/packages/backend-core-py/src{pathsep}{root}/services/execution-worker-py",
+          "PIP_NO_INDEX": "1",
+          "PIP_DISABLE_PIP_VERSION_CHECK": "1"
+        }
+      },
+      "capabilities": [
+        "python-3.12"
+      ],
+      "collection": {
+        "format": "pytest-junit",
+        "minimumTests": 1,
+        "required": true,
+        "reportPath": "{output}/junit.xml"
+      },
+      "expectedSkips": [],
+      "timeoutMs": 900000,
+      "ci": true,
+      "profiles": [
+        "changes",
+        "repository"
+      ],
+      "reason": "Maintained portable-operator-python assertions"
+    },
+    {
+      "id": "native-sql",
+      "group": "portable",
+      "owner": "backend-core",
+      "paths": [
+        "packages/backend-core-py/**",
+        "services/appwrite-functions/**",
+        "infra/portable/**",
+        "packages/contracts/**",
+        "dev/labs/postgres-m1/**",
+        "dev/labs/postgres-m2/**",
+        "dev/labs/postgres-m4/**",
+        "dev/labs/postgres-s0/**",
+        "dev/labs/postgres-s1/**",
+        "dev/labs/postgres-s2/**"
+      ],
+      "consumers": [],
+      "command": {
+        "executable": "{python}",
+        "args": [
+          "tools/ci/portable_ci.py",
+          "run",
+          "--output",
+          "{output}",
+          "--suite",
+          "native-sql"
+        ]
+      },
+      "capabilities": [
+        "python-3.12",
+        "docker-linux",
+        "postgresql-18",
+        "linux-fork"
+      ],
+      "collection": {
+        "format": "operator-json",
+        "minimumTests": 1,
+        "required": true
+      },
+      "expectedSkips": [],
+      "timeoutMs": 3600000,
+      "ci": true,
+      "profiles": [
+        "changes",
+        "repository"
+      ],
+      "reason": "Maintained native-sql assertions",
+      "nativeTargets": [
+        "packages/backend-core-py/tests/sql/test_access_sql.py",
+        "packages/backend-core-py/tests/sql/test_authoring_draft_sql.py",
+        "packages/backend-core-py/tests/sql/test_authoring_sql.py",
+        "packages/backend-core-py/tests/sql/test_codec_boundary.py",
+        "packages/backend-core-py/tests/sql/test_content_integrity.py",
+        "packages/backend-core-py/tests/sql/test_content_repository.py",
+        "packages/backend-core-py/tests/sql/test_f08_catalog_validation.py",
+        "packages/backend-core-py/tests/sql/test_f08_mcp_publication.py",
+        "packages/backend-core-py/tests/sql/test_f08_mcp_workflows.py",
+        "packages/backend-core-py/tests/sql/test_f08_workflow_transfer.py",
+        "packages/backend-core-py/tests/sql/test_f09_mcp_oauth.py",
+        "packages/backend-core-py/tests/sql/test_f10_mcp_history.py",
+        "packages/backend-core-py/tests/sql/test_f11_public_contract.py",
+        "packages/backend-core-py/tests/sql/test_f11_time_bounds.py",
+        "packages/backend-core-py/tests/sql/test_foundation_native.py",
+        "packages/backend-core-py/tests/sql/test_integrations_sql.py",
+        "packages/backend-core-py/tests/sql/test_m1_authoring_edits.py",
+        "packages/backend-core-py/tests/sql/test_m1_byte_provider.py",
+        "packages/backend-core-py/tests/sql/test_m1_driver_packaging.py",
+        "packages/backend-core-py/tests/sql/test_m1_pool_native.py",
+        "packages/backend-core-py/tests/sql/test_m1_pool_unit.py",
+        "packages/backend-core-py/tests/sql/test_m1_runtime.py",
+        "packages/backend-core-py/tests/sql/test_m1_snapshot_api.py",
+        "packages/backend-core-py/tests/sql/test_m1_snapshot_presentations.py",
+        "packages/backend-core-py/tests/sql/test_m2_admission.py",
+        "packages/backend-core-py/tests/sql/test_m2_admission_ordering.py",
+        "packages/backend-core-py/tests/sql/test_m2_admission_types.py",
+        "packages/backend-core-py/tests/sql/test_m2_limits.py",
+        "packages/backend-core-py/tests/sql/test_m2_outbox.py",
+        "packages/backend-core-py/tests/sql/test_m2_sources.py",
+        "packages/backend-core-py/tests/sql/test_m3_runtime.py",
+        "packages/backend-core-py/tests/sql/test_m3_submission.py",
+        "packages/backend-core-py/tests/sql/test_m4_buffers.py",
+        "packages/backend-core-py/tests/sql/test_m4_snapshot.py",
+        "packages/backend-core-py/tests/sql/test_m5_public.py",
+        "packages/backend-core-py/tests/sql/test_m7_device_jobs.py",
+        "packages/backend-core-py/tests/sql/test_m7_device_pairings.py",
+        "packages/backend-core-py/tests/sql/test_m7_device_runs.py",
+        "packages/backend-core-py/tests/sql/test_m7_product_sql.py",
+        "packages/backend-core-py/tests/sql/test_public_access_composition.py",
+        "packages/backend-core-py/tests/sql/test_s2_capabilities.py",
+        "packages/backend-core-py/tests/sql/test_s2_composition.py",
+        "packages/backend-core-py/tests/sql/test_s2_content_chunks.py",
+        "packages/backend-core-py/tests/sql/test_s2_content_owner.py",
+        "packages/backend-core-py/tests/sql/test_s2_lifecycle.py",
+        "packages/backend-core-py/tests/sql/test_s2_publication.py",
+        "packages/backend-core-py/tests/sql/test_s2_snapshot.py",
+        "packages/backend-core-py/tests/sql/test_s2_snapshot_capture.py",
+        "packages/backend-core-py/tests/sql/test_s2_snapshot_material.py",
+        "packages/backend-core-py/tests/sql/test_store_unit.py",
+        "packages/backend-core-py/tests/sql/test_worker_backup_native.py"
+      ],
+      "nativeExclude": [
+        "packages/backend-core-py/tests/sql/test_f08_mcp_publication.py::test_stdio_validation_publication_restart_and_conflict_recovery",
+        "packages/backend-core-py/tests/sql/test_f08_mcp_workflows.py::test_stdio_bridge_process_restart_over_http_to_native_sql",
+        "packages/backend-core-py/tests/sql/test_f08_workflow_transfer.py::test_stdio_transfer_restart_reuses_the_same_import",
+        "packages/backend-core-py/tests/sql/test_f11_public_contract.py::test_actual_stdio_restart_after_lost_run_ack_with_selected_file",
+        "packages/backend-core-py/tests/sql/test_m1_pool_native.py::test_verified_tls_pool_connects_with_real_certificate",
+        "packages/backend-core-py/tests/sql/test_m1_pool_native.py::test_real_tls_rejects_untrusted_certificate_and_wrong_hostname",
+        "packages/backend-core-py/tests/sql/test_m7_device_jobs.py::test_native_windows_http_sql_lost_result_ack"
+      ]
+    },
+    {
+      "id": "native-sdk",
+      "group": "portable",
+      "owner": "backend-core",
+      "paths": [
+        "packages/backend-core-py/**",
+        "services/appwrite-functions/**",
+        "infra/portable/**",
+        "packages/contracts/**",
+        "apps/mcp-bridge/**",
+        "dev/labs/clients-m5/**",
+        "dev/labs/mcp-authoring-f08/**",
+        "dev/labs/mcp-history-f10/**",
+        "dev/labs/remote-mcp-f09/**"
+      ],
+      "consumers": [],
+      "command": {
+        "executable": "{python}",
+        "args": [
+          "tools/ci/portable_ci.py",
+          "run",
+          "--output",
+          "{output}",
+          "--suite",
+          "native-sdk"
+        ]
+      },
+      "capabilities": [
+        "python-3.12",
+        "docker-linux",
+        "postgresql-18",
+        "mcp-sdk"
+      ],
+      "collection": {
+        "format": "operator-json",
+        "minimumTests": 1,
+        "required": true
+      },
+      "expectedSkips": [],
+      "timeoutMs": 3600000,
+      "ci": true,
+      "profiles": [
+        "changes",
+        "repository"
+      ],
+      "reason": "Maintained native-sdk assertions",
+      "nativeTargets": [
+        "packages/backend-core-py/tests/sql/test_f08_mcp_publication.py::test_stdio_validation_publication_restart_and_conflict_recovery",
+        "packages/backend-core-py/tests/sql/test_f08_mcp_workflows.py::test_stdio_bridge_process_restart_over_http_to_native_sql",
+        "packages/backend-core-py/tests/sql/test_f08_workflow_transfer.py::test_stdio_transfer_restart_reuses_the_same_import",
+        "packages/backend-core-py/tests/sql/test_f11_public_contract.py::test_actual_stdio_restart_after_lost_run_ack_with_selected_file"
+      ],
+      "nativeExclude": []
+    },
+    {
+      "id": "native-browser",
+      "group": "portable",
+      "owner": "backend-core",
+      "paths": [
+        "packages/backend-core-py/**",
+        "services/appwrite-functions/**",
+        "infra/portable/**",
+        "packages/contracts/**",
+        "apps/web/**",
+        "dev/labs/workflow-visual-f08/**",
+        "dev/labs/migration-m9/**",
+        "dev/labs/portable-verification/**"
+      ],
+      "consumers": [],
+      "command": {
+        "executable": "{python}",
+        "args": [
+          "tools/ci/portable_ci.py",
+          "run",
+          "--output",
+          "{output}",
+          "--suite",
+          "native-browser"
+        ]
+      },
+      "capabilities": [
+        "python-3.12",
+        "docker-linux",
+        "postgresql-18",
+        "owned-browser-tls"
+      ],
+      "collection": {
+        "format": "operator-json",
+        "minimumTests": 1,
+        "required": true
+      },
+      "expectedSkips": [],
+      "timeoutMs": 3600000,
+      "ci": true,
+      "profiles": [
+        "changes",
+        "repository"
+      ],
+      "reason": "Maintained native-browser assertions",
+      "nativeTargets": [
+        "packages/backend-core-py/tests/sql/test_f08_visual_browser.py",
+        "packages/backend-core-py/tests/sql/test_f09_https_browser.py",
+        "packages/backend-core-py/tests/sql/test_f10_https_browser.py"
+      ],
+      "nativeExclude": []
+    },
+    {
+      "id": "native-tls",
+      "group": "portable",
+      "owner": "backend-core",
+      "paths": [
+        "packages/backend-core-py/**",
+        "services/appwrite-functions/**",
+        "infra/portable/**",
+        "packages/contracts/**"
+      ],
+      "consumers": [],
+      "command": {
+        "executable": "{python}",
+        "args": [
+          "tools/ci/portable_ci.py",
+          "run",
+          "--output",
+          "{output}",
+          "--suite",
+          "native-tls"
+        ]
+      },
+      "capabilities": [
+        "python-3.12",
+        "docker-linux",
+        "postgresql-18",
+        "owned-postgres-tls"
+      ],
+      "collection": {
+        "format": "operator-json",
+        "minimumTests": 1,
+        "required": true
+      },
+      "expectedSkips": [],
+      "timeoutMs": 3600000,
+      "ci": true,
+      "profiles": [
+        "changes",
+        "repository"
+      ],
+      "reason": "Maintained native-tls assertions",
+      "nativeTargets": [
+        "packages/backend-core-py/tests/sql/test_m1_pool_native.py::test_verified_tls_pool_connects_with_real_certificate",
+        "packages/backend-core-py/tests/sql/test_m1_pool_native.py::test_real_tls_rejects_untrusted_certificate_and_wrong_hostname"
+      ],
+      "nativeExclude": []
+    },
+    {
+      "id": "native-windows-sql",
+      "group": "windows",
+      "owner": "local-runtime",
+      "paths": [
+        "apps/local-runtime/**",
+        "packages/backend-core-py/src/appwritework_backend/devices/**",
+        "packages/backend-core-py/tests/sql/test_m7*",
+        "dev/labs/device-m7/**"
+      ],
+      "consumers": [],
+      "command": {
+        "executable": "{node}",
+        "args": [
+          "verification/adapters/portable/native-windows.mjs",
+          "--output",
+          "{output}"
+        ]
+      },
+      "capabilities": [
+        "node-24",
+        "python-3.12",
+        "windows-native",
+        "docker-linux",
+        "postgresql-18",
+        "windows-supervisor",
+        "m7-container-images"
+      ],
+      "collection": {
+        "format": "operator-json",
+        "minimumTests": 3,
+        "required": true
+      },
+      "expectedSkips": [],
+      "timeoutMs": 3600000,
+      "ci": false,
+      "profiles": [
+        "repository"
+      ],
+      "reason": "Full Windows plus SQL/device integration in the local audit; small helper CI is windows-native. Generic M7 SQL contracts remain native-sql.",
+      "nativeTargets": [
+        "packages/backend-core-py/tests/sql/test_m7_device_jobs.py::test_native_windows_http_sql_lost_result_ack"
+      ],
+      "nativeExclude": []
+    },
+    {
+      "id": "temporal-runtime",
+      "group": "portable",
+      "owner": "execution-worker",
+      "paths": [
+        "services/execution-worker-py/**",
+        "packages/backend-core-py/**",
+        "infra/portable/**",
+        "dev/labs/temporal-m3/**",
+        "dev/labs/agent-m6/**"
+      ],
+      "consumers": [],
+      "command": {
+        "executable": "{python}",
+        "args": [
+          "tools/ci/portable_ci.py",
+          "run",
+          "--output",
+          "{output}",
+          "--suite",
+          "temporal-runtime"
+        ]
+      },
+      "capabilities": [
+        "python-3.12",
+        "docker-linux",
+        "postgresql-18",
+        "temporal-server"
+      ],
+      "collection": {
+        "format": "operator-json",
+        "minimumTests": 1,
+        "required": true
+      },
+      "expectedSkips": [],
+      "timeoutMs": 3600000,
+      "ci": true,
+      "profiles": [
+        "changes",
+        "repository"
+      ],
+      "reason": "Maintained temporal-runtime assertions"
+    },
+    {
+      "id": "product-browser",
+      "group": "portable",
+      "owner": "portable-product",
+      "paths": [
+        "tests/e2e/local-appwrite/**"
+      ],
+      "consumers": [],
+      "command": {
+        "executable": "{node}",
+        "args": [
+          "verification/adapters/portable/run.mjs",
+          "--output",
+          "{output}"
+        ]
+      },
+      "capabilities": [
+        "node-24",
+        "docker-linux",
+        "portable-product-browser"
+      ],
+      "collection": {
+        "format": "operator-json",
+        "minimumTests": 1,
+        "required": true
+      },
+      "expectedSkips": [],
+      "timeoutMs": 3600000,
+      "ci": false,
+      "profiles": [
+        "repository"
+      ],
+      "reason": "Maintained product-browser assertions"
+    },
+    {
+      "id": "windows-native",
+      "group": "windows",
+      "owner": "local-runtime",
+      "paths": [
+        "apps/local-runtime/**",
+        "packages/local-runtime-protocol/**",
+        "tools/ci/windows-native.mjs",
+        "dev/labs/device-m7/**",
+        "tests/e2e/quick/salmoraCleanupJournal.mjs",
+        "tests/e2e/quick/salmoraCleanupJournal.test.mjs"
+      ],
+      "consumers": [],
+      "command": {
+        "executable": "{node}",
+        "args": [
+          "tools/ci/windows-native.mjs"
+        ]
+      },
+      "capabilities": [
+        "node-24",
+        "windows-native",
+        "windows-helper-compiler"
+      ],
+      "collection": {
+        "format": "node-tap",
+        "minimumTests": 1,
+        "required": true
+      },
+      "expectedSkips": [],
+      "timeoutMs": 300000,
+      "ci": true,
+      "profiles": [
+        "changes",
+        "repository"
+      ],
+      "reason": "Maintained windows-native assertions"
+    },
+    {
+      "id": "portable-archive-native",
+      "group": "portable",
+      "owner": "portable-operator",
+      "paths": [
+        "infra/portable/**",
+        "tools/ci/**"
+      ],
+      "consumers": [],
+      "command": {
+        "executable": "{node}",
+        "args": [
+          "--test",
+          "infra/portable/archive-helper.test.mjs"
+        ],
+        "env": {
+          "SALMORA_ARCHIVE_DOCKER_TEST": "1"
+        }
+      },
+      "capabilities": [
+        "node-24",
+        "docker-linux"
+      ],
+      "collection": {
+        "format": "node-tap",
+        "minimumTests": 1,
+        "required": true
+      },
+      "expectedSkips": [],
+      "timeoutMs": 120000,
+      "ci": true,
+      "profiles": [
+        "changes",
+        "repository"
+      ],
+      "reason": "Real Docker archive process timeout, cleanup, first failure and unrelated-container preservation"
+    },
+    {
+      "id": "local-appwrite-harness",
+      "group": "quick",
+      "owner": "self-hosted-appwrite-harness",
+      "paths": [
+        "tests/e2e/local-appwrite/**",
+        "environments/local-appwrite/**"
+      ],
+      "consumers": [],
+      "command": {
+        "executable": "{node}",
+        "args": [
+          "--test",
+          "tests/e2e/local-appwrite/*.test.mjs"
+        ]
+      },
+      "capabilities": [
+        "node-24",
+        "appwrite-sdk"
+      ],
+      "collection": {
+        "format": "node-tap",
+        "minimumTests": 1,
+        "required": true
+      },
+      "expectedSkips": [],
+      "timeoutMs": 300000,
+      "ci": true,
+      "profiles": [
+        "changes",
+        "repository"
+      ],
+      "reason": "Offline retained self-hosted scenario harness contracts; not browser user-journey proof"
+    },
+    {
+      "id": "repository-secret-scan",
+      "group": "quick",
+      "owner": "verification",
+      "paths": [
+        "verification/core/secret-scan*"
+      ],
+      "consumers": [],
+      "command": {
+        "executable": "{node}",
+        "args": [
+          "verification/core/secret-scan.mjs"
+        ]
+      },
+      "capabilities": [
+        "node-24"
+      ],
+      "collection": {
+        "format": "exit-code",
+        "minimumTests": 0,
+        "required": true
+      },
+      "expectedSkips": [],
+      "timeoutMs": 120000,
+      "ci": true,
+      "profiles": [
+        "changes",
+        "repository"
+      ],
+      "reason": "Retained generic secret scanner, once for every executable focused selection and full repository audit"
+    },
+    {
+      "id": "impact-checker",
+      "group": "quick",
+      "owner": "impact-analysis",
+      "paths": [
+        "scripts/check-change-impact.mjs",
+        "scripts/check-change-impact.test.mjs",
+        "docs/engineering/change-impact-manifest.json",
+        "docs/engineering/change-impact-report.template.json",
+        "docs/engineering/change-impact-reports/*.json"
+      ],
+      "consumers": [],
+      "command": {
+        "executable": "{node}",
+        "args": [
+          "--test",
+          "scripts/check-change-impact.test.mjs"
+        ]
+      },
+      "capabilities": [
+        "node-24"
+      ],
+      "collection": {
+        "format": "node-tap",
+        "minimumTests": 1,
+        "required": true
+      },
+      "expectedSkips": [],
+      "timeoutMs": 900000,
+      "ci": true,
+      "profiles": [
+        "changes",
+        "repository"
+      ],
+      "reason": "Complete maintained impact checker tests, including manifest and report validation; separate from curated verifier self-tests"
+    },
+    {
+      "id": "platform-current-config",
+      "group": "quick",
+      "owner": "platform-configuration",
+      "paths": [
+        "platform/appwrite/tools/inventory-active-state*",
+        "platform/appwrite/tools/python-environment-census.py",
+        "platform/appwrite/tools/validate-desired-state*",
+        "platform/appwrite/tools/normalize-readback*",
+        "platform/appwrite/tools/probe-self-hosted-version*",
+        "platform/appwrite/tools/appwrite-resource-identifier-limits.test.mjs",
+        "platform/appwrite/tools/canonical-json.mjs",
+        "platform/appwrite/tools/fixtures/**",
+        "platform/appwrite/desired-state/**",
+        "platform/appwrite/inventory/**",
+        "platform/appwrite/profiles/**",
+        "platform/appwrite/schemas/**",
+        "platform/appwrite/compatibility/**",
+        "appwrite.config.json*",
+        "verification/core/active-python-runtime-policy*",
+        "verification/core/function-inventory*",
+        "verification/core/manifest*",
+        "verification/core/command-ids.mjs",
+        "verification/core/verification-manifest.v1.json",
+        "verification/schemas/verification-manifest.v1.schema.json",
+        "services/appwrite-functions/**",
+        "packages/backend-core-py/src/**",
+        "apps/web/src/appwrite.ts"
+      ],
+      "consumers": [],
+      "command": {
+        "executable": "{node}",
+        "args": [
+          "--test",
+          "platform/appwrite/tools/inventory-active-state.test.mjs",
+          "platform/appwrite/tools/validate-desired-state.test.mjs",
+          "verification/core/active-python-runtime-policy.test.mjs",
+          "verification/core/function-inventory.test.mjs",
+          "verification/core/manifest.test.mjs",
+          "platform/appwrite/tools/normalize-readback.test.mjs",
+          "platform/appwrite/tools/probe-self-hosted-version.test.mjs",
+          "platform/appwrite/tools/appwrite-resource-identifier-limits.test.mjs"
+        ]
+      },
+      "capabilities": [
+        "node-24",
+        "python-3.12"
+      ],
+      "collection": {
+        "format": "node-tap",
+        "minimumTests": 1,
+        "required": true
+      },
+      "expectedSkips": [],
+      "timeoutMs": 900000,
+      "ci": true,
+      "profiles": [
+        "changes",
+        "repository"
+      ],
+      "reason": "Eight maintained offline current configuration, source census, normalization, runtime policy, manifest and operator-safety test files; exact list excludes historical Cloud/P04 execution"
+    }
+  ],
+  "sqlInventory": {
+    "root": "packages/backend-core-py/tests/sql",
+    "files": [
+      "test_access_sql.py",
+      "test_authoring_draft_sql.py",
+      "test_authoring_sql.py",
+      "test_codec_boundary.py",
+      "test_content_integrity.py",
+      "test_content_repository.py",
+      "test_f08_catalog_validation.py",
+      "test_f08_mcp_publication.py",
+      "test_f08_mcp_workflows.py",
+      "test_f08_visual_browser.py",
+      "test_f08_workflow_transfer.py",
+      "test_f09_https_browser.py",
+      "test_f09_mcp_oauth.py",
+      "test_f10_https_browser.py",
+      "test_f10_mcp_history.py",
+      "test_f11_public_contract.py",
+      "test_f11_time_bounds.py",
+      "test_foundation_native.py",
+      "test_integrations_sql.py",
+      "test_m1_authoring_edits.py",
+      "test_m1_byte_provider.py",
+      "test_m1_driver_packaging.py",
+      "test_m1_pool_native.py",
+      "test_m1_pool_unit.py",
+      "test_m1_runtime.py",
+      "test_m1_snapshot_api.py",
+      "test_m1_snapshot_presentations.py",
+      "test_m2_admission.py",
+      "test_m2_admission_ordering.py",
+      "test_m2_admission_types.py",
+      "test_m2_limits.py",
+      "test_m2_outbox.py",
+      "test_m2_sources.py",
+      "test_m3_runtime.py",
+      "test_m3_submission.py",
+      "test_m4_buffers.py",
+      "test_m4_snapshot.py",
+      "test_m5_public.py",
+      "test_m7_device_jobs.py",
+      "test_m7_device_pairings.py",
+      "test_m7_device_runs.py",
+      "test_m7_product_sql.py",
+      "test_public_access_composition.py",
+      "test_s2_capabilities.py",
+      "test_s2_composition.py",
+      "test_s2_content_chunks.py",
+      "test_s2_content_owner.py",
+      "test_s2_lifecycle.py",
+      "test_s2_publication.py",
+      "test_s2_snapshot.py",
+      "test_s2_snapshot_capture.py",
+      "test_s2_snapshot_material.py",
+      "test_store_unit.py",
+      "test_worker_backup_native.py"
+    ],
+    "offlineFiles": [
+      "test_codec_boundary.py",
+      "test_store_unit.py",
+      "test_m1_pool_unit.py",
+      "test_m1_runtime.py",
+      "test_m1_driver_packaging.py",
+      "test_m2_admission_types.py"
+    ],
+    "exceptionTargets": {
+      "native-sdk": [
+        "test_f08_mcp_publication.py::test_stdio_validation_publication_restart_and_conflict_recovery",
+        "test_f08_mcp_workflows.py::test_stdio_bridge_process_restart_over_http_to_native_sql",
+        "test_f08_workflow_transfer.py::test_stdio_transfer_restart_reuses_the_same_import",
+        "test_f11_public_contract.py::test_actual_stdio_restart_after_lost_run_ack_with_selected_file"
+      ],
+      "native-browser": [
+        "test_f08_visual_browser.py",
+        "test_f09_https_browser.py",
+        "test_f10_https_browser.py"
+      ],
+      "native-tls": [
+        "test_m1_pool_native.py::test_verified_tls_pool_connects_with_real_certificate",
+        "test_m1_pool_native.py::test_real_tls_rejects_untrusted_certificate_and_wrong_hostname"
+      ],
+      "native-windows-sql": [
+        "test_m7_device_jobs.py::test_native_windows_http_sql_lost_result_ack"
+      ]
+    },
+    "nativeDefaultSuite": "native-sql"
+  },
+  "exclusions": [
+    {
+      "pattern": "dev/flowise-env/**",
+      "reason": "Preserved Flowise recovery source; current portable frontend/backend does not execute it"
+    },
+    {
+      "pattern": "dev/prompts/**",
+      "reason": "Preserved historical prompt configuration; deterministic current product qualification uses maintained harness fixtures"
+    },
+    {
+      "pattern": "docs/audits/**",
+      "reason": "Historical audit evidence and support scripts; current suites own executable acceptance"
+    },
+    {
+      "pattern": "docs/plans/**",
+      "reason": "Historical/planning evidence and handoff fixtures, not production runtime configuration"
+    },
+    {
+      "pattern": "docs/refactor-runs/**",
+      "reason": "Archived review evidence and screenshots"
+    },
+    {
+      "pattern": "dev/labs/appwrite-r0/**",
+      "reason": "Historical deployment/provider/lifecycle qualification; real target operations are outside this credential-free local baseline"
+    },
+    {
+      "pattern": "dev/labs/backup-b2/**",
+      "reason": "Historical deployment/provider/lifecycle qualification; real target operations are outside this credential-free local baseline"
+    },
+    {
+      "pattern": "dev/labs/backup-provider/**",
+      "reason": "Historical deployment/provider/lifecycle qualification; real target operations are outside this credential-free local baseline"
+    },
+    {
+      "pattern": "dev/labs/capacity-vps3/**",
+      "reason": "Historical deployment/provider/lifecycle qualification; real target operations are outside this credential-free local baseline"
+    },
+    {
+      "pattern": "dev/labs/clean-install-m10/qualify.mjs",
+      "reason": "Historical M10 clean installation qualification; active cleanup helpers and their tests are maintained by verifier-portable"
+    },
+    {
+      "pattern": "dev/labs/clean-install-m10/smoke.mjs",
+      "reason": "Historical M10 clean installation qualification; active cleanup helpers and their tests are maintained by verifier-portable"
+    },
+    {
+      "pattern": "dev/labs/hosting-m8/**",
+      "reason": "Historical deployment/provider/lifecycle qualification; real target operations are outside this credential-free local baseline"
+    },
+    {
+      "pattern": "dev/labs/public-auth-m10/**",
+      "reason": "Historical deployment/provider/lifecycle qualification; real target operations are outside this credential-free local baseline"
+    },
+    {
+      "pattern": "dev/labs/public-lifecycle-m10/**",
+      "reason": "Historical deployment/provider/lifecycle qualification; real target operations are outside this credential-free local baseline"
+    },
+    {
+      "pattern": "dev/labs/public-upgrade-m10/**",
+      "reason": "Historical deployment/provider/lifecycle qualification; real target operations are outside this credential-free local baseline"
+    },
+    {
+      "pattern": "dev/labs/retirement-m10/**",
+      "reason": "Historical deployment/provider/lifecycle qualification; real target operations are outside this credential-free local baseline"
+    },
+    {
+      "pattern": "dev/labs/systemd-m10/**",
+      "reason": "Historical deployment/provider/lifecycle qualification; real target operations are outside this credential-free local baseline"
+    },
+    {
+      "pattern": "dev/labs/upgrade-m10/**",
+      "reason": "Historical deployment/provider/lifecycle qualification; real target operations are outside this credential-free local baseline"
+    }
+  ],
+  "alwaysSuiteIds": [
+    "repository-secret-scan"
+  ]
+}

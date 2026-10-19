@@ -1,0 +1,24 @@
+{
+  admin off
+  auto_https off
+}
+:443 {
+  tls /run/secrets/server.crt /run/secrets/server.key
+  # F09_MCP_ROUTES
+  handle /v1/* {
+    reverse_proxy appwrite:80
+  }
+  handle {
+    root * /srv
+    try_files {path} /index.html
+    file_server
+  }
+  header {
+    Referrer-Policy "same-origin"
+    X-Content-Type-Options "nosniff"
+    Content-Security-Policy "default-src 'self'; connect-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; worker-src 'self' blob:; frame-src 'self' blob:; object-src 'none'; base-uri 'self'"
+  }
+}
+:8080 {
+  respond /healthz "ok" 200
+}

@@ -1,0 +1,11 @@
+{
+  admin off
+  auto_https off
+}
+:443 {
+  tls /run/secrets/server.crt /run/secrets/server.key
+  reverse_proxy appwrite:80
+}
+:8080 {
+  respond /healthz "ok" 200
+}
